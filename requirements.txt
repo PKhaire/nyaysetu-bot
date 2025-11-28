@@ -5,4 +5,4 @@ openai==1.55.3
 gunicorn==21.2.0
 reportlab==4.2.2
 python-dotenv==1.0.1
-typing_extensions==4.10.0
+typing_extensions
