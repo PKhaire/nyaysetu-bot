@@ -1,7 +1,6 @@
 import os
 import time
 import uuid
-import random
 import logging
 import requests
 from datetime import datetime, timedelta
@@ -20,8 +19,9 @@ WHATSAPP_PHONE_ID = os.environ.get("WHATSAPP_PHONE_ID")
 WHATSAPP_ACCESS_TOKEN = os.environ.get("WHATSAPP_ACCESS_TOKEN")
 VERIFY_TOKEN = os.environ.get("WHATSAPP_VERIFY_TOKEN")
 PRIMARY_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+
 TYPING_DELAY = 1.1
-MAX_FREE_MESSAGES = 6
+MAX_FREE_ANSWERS = 6     # number of BOT legal answers allowed for free
 CONSULT_FEE_RS = 499
 
 client = OpenAI(api_key=OPENAI_API_KEY)
@@ -39,7 +39,7 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     whatsapp = Column(String, index=True, unique=True)
     case_id = Column(String)
-    language = Column(String)
+    language = Column(String)  # English / Hinglish / Marathi
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -66,52 +66,116 @@ Base.metadata.create_all(engine)
 # ---------------- WHATSAPP UTILITIES ----------------
 
 def w_headers():
-    return {"Authorization": f"Bearer {WHATSAPP_ACCESS_TOKEN}", "Content-Type": "application/json"}
+    return {
+        "Authorization": f"Bearer {WHATSAPP_ACCESS_TOKEN}",
+        "Content-Type": "application/json"
+    }
+
 
 def w_url():
     return f"https://graph.facebook.com/v19.0/{WHATSAPP_PHONE_ID}/messages"
 
+
 def send_text(to, body):
-    payload = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": body}}
-    try: requests.post(w_url(), headers=w_headers(), json=payload, timeout=10)
-    except: pass
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "text",
+        "text": {"body": body}
+    }
+    try:
+        requests.post(w_url(), headers=w_headers(), json=payload, timeout=10)
+    except Exception:
+        logging.exception("Error sending WhatsApp text")
+
 
 def send_buttons(to, body, buttons):
+    """
+    buttons: list of {"id": "value", "title": "Label"}
+    """
     payload = {
-        "messaging_product": "whatsapp", "to": to, "type": "interactive",
-        "interactive": {"type": "button", "body": {"text": body},
-                        "action": {"buttons": [{"type": "reply", "reply": b} for b in buttons]}}
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {"text": body},
+            "action": {
+                "buttons": [
+                    {"type": "reply", "reply": b} for b in buttons
+                ]
+            }
+        }
     }
-    try: requests.post(w_url(), headers=w_headers(), json=payload, timeout=10)
-    except: pass
+    try:
+        requests.post(w_url(), headers=w_headers(), json=payload, timeout=10)
+    except Exception:
+        logging.exception("Error sending WhatsApp buttons")
+
 
 def send_list_dates(to, days=7):
+    """
+    Send WhatsApp interactive list for next `days` days.
+    Each row id: DATE_YYYY-MM-DD
+    """
     today = datetime.now()
     rows = []
     for i in range(days):
         d = today + timedelta(days=i)
-        rows.append({"id": d.strftime("DATE_%Y-%m-%d"),
-                     "title": d.strftime("%a, %d %b"),
-                     "description": ""})
+        rows.append({
+            "id": d.strftime("DATE_%Y-%m-%d"),
+            "title": d.strftime("%a, %d %b"),
+            "description": ""
+        })
+
     payload = {
-        "messaging_product": "whatsapp", "to": to, "type": "interactive",
-        "interactive": {"type": "list",
-                        "body": {"text": "📅 कृपया दिनांक निवडा / Select your convenient date:"},
-                        "action": {"button": "Select Date", "sections": [{"title": "Available Dates", "rows": rows}]}}
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "interactive",
+        "interactive": {
+            "type": "list",
+            "body": {"text": "📅 कृपया दिनांक निवडा / Select your convenient date:"},
+            "action": {
+                "button": "Select Date",
+                "sections": [
+                    {"title": "Available Dates", "rows": rows}
+                ]
+            }
+        }
     }
-    try: requests.post(w_url(), headers=w_headers(), json=payload, timeout=10)
-    except: pass
+    try:
+        requests.post(w_url(), headers=w_headers(), json=payload, timeout=10)
+    except Exception:
+        logging.exception("Error sending dates list")
+
 
 def typing_on(to):
-    try: requests.post(w_url(), headers=w_headers(), json={"messaging_product": "whatsapp", "to": to, "type": "typing_on"}, timeout=5)
-    except: pass
+    try:
+        requests.post(
+            w_url(),
+            headers=w_headers(),
+            json={"messaging_product": "whatsapp", "to": to, "type": "typing_on"},
+            timeout=5,
+        )
+    except Exception:
+        pass
+
 
 def typing_off(to):
-    try: requests.post(w_url(), headers=w_headers(), json={"messaging_product": "whatsapp", "to": to, "type": "typing_off"}, timeout=5)
-    except: pass
+    try:
+        requests.post(
+            w_url(),
+            headers=w_headers(),
+            json={"messaging_product": "whatsapp", "to": to, "type": "typing_off"},
+            timeout=5,
+        )
+    except Exception:
+        pass
+
 
 # ---------------- BOOKING STATE ----------------
-pending_booking_state = {}  # {whatsapp: {"date": "YYYY-MM-DD", "step": "awaiting_time"}}
+# {whatsapp: {"date": "YYYY-MM-DD", "step": "awaiting_time"}}
+pending_booking_state = {}
 
 # ---------------- TIME SLOTS ----------------
 TIME_SLOTS = {
@@ -120,81 +184,81 @@ TIME_SLOTS = {
     "TIME_evening": ("Evening", "4 PM – 7 PM"),
 }
 
-# ---------------- MULTI-LANGUAGE WELCOME ----------------
+# ---------------- MULTI-LANGUAGE WELCOME & LIMIT TEXT ----------------
 WELCOME = {
     "English": (
         "👋 Welcome to NyaySetu — The Bridge To Justice.\n"
         "Your Case ID: {case}\n\n"
-        "Please describe your legal issue. I will guide you safely & confidentially."
+        "Please select your preferred language to continue."
     ),
     "Hinglish": (
         "👋 NyaySetu mein swagat hai — The Bridge To Justice.\n"
         "Aapka Case ID: {case}\n\n"
-        "Aap apni legal problem bataiye, main aapko safe aur confidential guidance dunga."
+        "Kripya apni pasand ki bhasha select karein."
     ),
     "Marathi": (
         "👋 न्यायसेतू मध्ये स्वागत — The Bridge To Justice.\n"
         "तुमचा केस आयडी: {case}\n\n"
-        "कृपया तुमची कायदेशीर अडचण सांगा, मी सुरक्षित व गोपनीय मार्गदर्शन करेन."
+        "कृपया तुमची पसंतीची भाषा निवडा."
     ),
 }
 
 FREE_LIMIT = {
     "English": (
-        "🛑 You have used your free legal answers.\n\n"
-        "To continue with personalised legal help, please book a consultation.\n"
-        "Reply *BOOK* to schedule a call with a legal expert."
+        "🛑 You have used your free legal replies.\n\n"
+        "To get detailed personalised guidance from a legal expert, "
+        "please choose one option below."
     ),
     "Hinglish": (
-        "🛑 Aapke free legal jawab complete ho gaye hain.\n\n"
-        "Personalised legal help ke liye consultation book karein.\n"
-        "Reply *BOOK* karein call schedule ke liye."
+        "🛑 Aapke free legal jawab complete ho chuke hain.\n\n"
+        "Ab personal legal guidance ke liye niche se ek option choose karein."
     ),
     "Marathi": (
         "🛑 तुमचे मोफत कायदेशीर उत्तर पूर्ण झाले आहेत.\n\n"
-        "वैयक्तिक कायदेशीर मदतीसाठी consultation बुक करा.\n"
-        "कॉल शेड्यूल करण्यासाठी *BOOK* लिहा."
+        "आता वैयक्तिक मार्गदर्शनासाठी खालील पैकी एक पर्याय निवडा."
     ),
 }
 
-INTRO_SUGGESTIONS = [
-    {"id": "police", "title": "🚨 Police / FIR"},
-    {"id": "family", "title": "👪 Family / Marriage"},
-    {"id": "property", "title": "🏠 Property / Land"},
-    {"id": "money", "title": "💰 Money / Recovery"},
-    {"id": "business", "title": "💼 Business / Work"},
+LANGUAGE_BUTTONS = [
+    {"id": "lang_en", "title": "English"},
+    {"id": "lang_hinglish", "title": "Hinglish"},
+    {"id": "lang_marathi", "title": "मराठी / Marathi"},
 ]
+
+LIMIT_ACTION_BUTTONS = [
+    {"id": "action_call", "title": "📞 Call NyaySetu"},
+    {"id": "action_book", "title": "📅 Book Consultation"},
+    {"id": "action_notice", "title": "📄 Send Legal Notice"},
+    {"id": "action_visit", "title": "🌐 Visit NyaySetu"},
+]
+
 # ---------------- MESSAGE CLASSIFICATION / HELPERS ----------------
 
 RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "xxxx")
 RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "yyyy")
 
-GREETING_KEYWORDS = {
-    "hi", "hello", "hey", "hola",
-    "namaste", "namaskar",
-    "good morning", "good evening", "good afternoon"
-}
 
-COMMAND_KEYWORDS = {
-    "book", "booking", "consult", "consultation", "appointment",
-    "📅 book consultation", "📞 speak to lawyer", "📄 get draft notice",
-    "call", "draft", "restart", "start"
-}
-
-TIME_COMMANDS = {"time_morning", "time_afternoon", "time_evening"}
+def normalize_language_name(name: str) -> str:
+    if not name:
+        return "English"
+    n = name.strip().lower()
+    if "marathi" in n:
+        return "Marathi"
+    if "hinglish" in n or "hindi" in n or "mix" in n:
+        return "Hinglish"
+    return "English"
 
 
 def parse_date_from_text(text: str):
     """
-    Try to convert a human-readable date like:
-    - 'DATE_2025-12-04'
-    - 'Thu, 04 Dec'
-    - 'Thu 04 Dec'
-    - '04 Dec'
-    - '04-12-2025'
-    - '2025-12-04'
-    into 'YYYY-MM-DD'.
-    Returns None if parsing fails.
+    Convert date-like text to 'YYYY-MM-DD' where possible.
+    Handles:
+      - 'DATE_2025-12-04'
+      - 'Thu, 04 Dec'
+      - 'Thu 04 Dec'
+      - '04 Dec'
+      - '04-12-2025'
+      - '2025-12-04'
     """
     if not text:
         return None
@@ -205,26 +269,24 @@ def parse_date_from_text(text: str):
     if text.upper().startswith("DATE_"):
         return text[5:]
 
-    from datetime import datetime
-    now = datetime.now()
+    from datetime import datetime as _dt
+    now = _dt.now()
 
-    # Try some common date patterns
     candidates = [text, text.replace(",", "")]
     formats = [
-        "%a %d %b",       # Thu 04 Dec
-        "%a %d %b %Y",    # Thu 04 Dec 2025
-        "%d %b",          # 04 Dec
-        "%d %b %Y",       # 04 Dec 2025
-        "%d-%m-%Y",       # 04-12-2025
-        "%d/%m/%Y",       # 04/12/2025
-        "%Y-%m-%d",       # 2025-12-04
+        "%a %d %b",
+        "%a %d %b %Y",
+        "%d %b",
+        "%d %b %Y",
+        "%d-%m-%Y",
+        "%d/%m/%Y",
+        "%Y-%m-%d",
     ]
 
     for cand in candidates:
         for fmt in formats:
             try:
-                dt = datetime.strptime(cand, fmt)
-                # If year not present in format, assume current year
+                dt = _dt.strptime(cand, fmt)
                 if "%Y" not in fmt:
                     dt = dt.replace(year=now.year)
                 return dt.strftime("%Y-%m-%d")
@@ -234,40 +296,6 @@ def parse_date_from_text(text: str):
     return None
 
 
-def count_legal_questions(wa_id: str) -> int:
-    """
-    Count only 'real' user legal questions:
-    - ignore greetings like 'hi', 'hello'
-    - ignore commands like BOOK, CONSULT, category buttons
-    - ignore DATE_..., TIME_... selections
-    """
-    msgs = (
-        db.query(Conversation)
-        .filter_by(whatsapp=wa_id, direction="user")
-        .order_by(Conversation.ts.asc())
-        .all()
-    )
-
-    total = 0
-    for m in msgs:
-        body = (m.text or "").strip().lower()
-        if not body:
-            continue
-
-        if body in GREETING_KEYWORDS:
-            continue
-        if body in COMMAND_KEYWORDS:
-            continue
-        if body.startswith("date_"):
-            continue
-        if body in TIME_COMMANDS:
-            continue
-
-        total += 1
-
-    return total
-
-
 # ---------------- USER & CONVERSATION HELPERS ----------------
 
 def register_user(wa_id: str) -> User:
@@ -275,7 +303,7 @@ def register_user(wa_id: str) -> User:
     if user:
         return user
     case_id = f"NS-{uuid.uuid4().hex[:8].upper()}"
-    user = User(whatsapp=wa_id, case_id=case_id, language="English")
+    user = User(whatsapp=wa_id, case_id=case_id, language=None)
     db.add(user)
     db.commit()
     logging.info(f"New user registered: {wa_id} → {case_id}")
@@ -311,6 +339,47 @@ def create_booking(wa_id: str, preferred_time_text: str) -> Booking:
     return b
 
 
+def count_legal_bot_answers(wa_id: str) -> int:
+    """
+    Count BOT replies that are likely legal answers (not welcome, not booking, not limit).
+    """
+    msgs = (
+        db.query(Conversation)
+        .filter_by(whatsapp=wa_id, direction="bot")
+        .order_by(Conversation.ts.asc())
+        .all()
+    )
+    total = 0
+    for m in msgs:
+        t = (m.text or "").strip()
+        if not t:
+            continue
+        low = t.lower()
+
+        # Skip system / non-legal messages
+        if "welcome to nyaysetu" in low:
+            continue
+        if "select your preferred language" in low or "bhasha" in low or "भाषा" in low:
+            continue
+        if "please select your preferred date" in low or "select your convenient date" in low:
+            continue
+        if "date selected" in low and "time slot" in low:
+            continue
+        if "we’ve scheduled your session" in low or "we've scheduled your session" in low:
+            continue
+        if "payment link" in low and "scheduled your session" in low:
+            continue
+        if "payment received successfully" in low or "consultation is confirmed" in low:
+            continue
+        if "you have used your free legal replies" in low or "free legal jawab" in low:
+            continue
+
+        # Everything else from bot is treated as a legal answer
+        total += 1
+
+    return total
+
+
 # ---------------- OPENAI UTILITIES ----------------
 
 def call_openai(messages, temperature=0.2, max_tokens=300):
@@ -321,7 +390,7 @@ def call_openai(messages, temperature=0.2, max_tokens=300):
                 model=PRIMARY_MODEL,
                 messages=messages,
                 temperature=temperature,
-                max_tokens=max_tokens
+                max_tokens=max_tokens,
             )
             return res.choices[0].message.content
         except RateLimitError as e:
@@ -336,28 +405,6 @@ def call_openai(messages, temperature=0.2, max_tokens=300):
             time.sleep(backoff)
             backoff *= 2
     return None
-
-
-def normalize_language_name(name: str) -> str:
-    if not name:
-        return "English"
-    n = name.strip().lower()
-    if "marathi" in n:
-        return "Marathi"
-    if "hinglish" in n or "hindi" in n or "mix" in n:
-        return "Hinglish"
-    # default
-    return "English"
-
-
-def detect_language(text: str) -> str:
-    prompt = (
-        "Detect the main language of this message. "
-        "Reply with exactly one word from: English, Hinglish, Marathi.\n\n"
-        f"Text: {text}"
-    )
-    res = call_openai([{"role": "user", "content": prompt}], max_tokens=10)
-    return normalize_language_name(res or "English")
 
 
 def detect_category(text: str) -> str:
@@ -383,7 +430,6 @@ def legal_reply(text: str, lang: str, category: str) -> str:
         "If the matter is serious, urgent, criminal, or complex, clearly advise the user "
         "to consult a qualified advocate and suggest that they can book a consultation call."
     )
-
     user_msg = f"[Language: {lang}] [Category: {category}] User message: {text}"
 
     res = call_openai(
@@ -405,9 +451,6 @@ def legal_reply(text: str, lang: str, category: str) -> str:
 # ---------------- RAZORPAY PAYMENT LINK ----------------
 
 def create_payment_link(case_id: str, whatsapp_number: str, amount_in_rupees: int = CONSULT_FEE_RS):
-    """
-    Create a Razorpay Payment Link and return its URL.
-    """
     try:
         amount_paise = amount_in_rupees * 100
         url = "https://api.razorpay.com/v1/payment_links"
@@ -433,16 +476,17 @@ def create_payment_link(case_id: str, whatsapp_number: str, amount_in_rupees: in
 
         if resp.status_code in (200, 201) and data.get("short_url"):
             return data["short_url"]
-
         return None
     except Exception as e:
         logging.error(f"Error creating Razorpay payment link: {e}")
         return None
+
+
 # ---------------- MAIN WEBHOOK ----------------
 
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
-    # --- Verification for WhatsApp Webhook Setup ---
+    # --- Verification ---
     if request.method == "GET":
         mode = request.args.get("hub.mode")
         token = request.args.get("hub.verify_token")
@@ -483,58 +527,111 @@ def webhook():
             send_text(wa_from, "Please type your legal question in text so I can guide you properly.")
             return jsonify({"status": "unsupported"}), 200
 
-        raw_text_body = text_body  # original text (for date parsing etc.)
-
         if not wa_from or not text_body.strip():
             return jsonify({"status": "empty"}), 200
 
-        # Register / fetch user and store incoming message
+        # Sanitize raw text for date parsing – take only last line if multi-line
+        if "\n" in text_body:
+            raw_text_body = text_body.split("\n")[-1].strip()
+        else:
+            raw_text_body = text_body.strip()
+
+        logging.info(f"Parsed text_body={text_body!r}, raw_text_body={raw_text_body!r}")
+
+        # Register user & store incoming message
         user = register_user(wa_from)
         store_message(wa_from, "user", text_body)
         conv_count = user_message_count(wa_from)
+        lang_for_user = normalize_language_name(user.language) if user.language else "English"
 
-        # ---------- FIRST MESSAGE → WELCOME FLOW ----------
-        if conv_count <= 1:
-            # Detect language only once and store
-            lang = detect_language(text_body)
-            user.language = lang
-            db.commit()
-
+        # ---------- FIRST MESSAGE → WELCOME + LANGUAGE SELECTION ----------
+        if conv_count == 1 and user.language is None:
+            # Send welcome in default English-style text
             typing_on(wa_from)
             time.sleep(TYPING_DELAY)
-            welcome_template = WELCOME.get(lang, WELCOME["English"])
-            welcome_text = welcome_template.format(case=user.case_id)
+            welcome_text = WELCOME["English"].format(case=user.case_id)
             send_text(wa_from, welcome_text)
             typing_off(wa_from)
 
-            # Initial suggestions (categories)
+            # Ask for preferred language
             send_buttons(
                 wa_from,
-                "You can also choose a category to start:",
-                INTRO_SUGGESTIONS,
+                "Please choose your preferred language:",
+                LANGUAGE_BUTTONS,
             )
-            return jsonify({"status": "welcome"}), 200
+            return jsonify({"status": "ask_language"}), 200
 
-        # For subsequent messages
         message = text_body.strip().lower()
-        lang_for_user = normalize_language_name(user.language or "English")
 
-        # ---------- BOOKING ENTRY POINT ----------
-        if message in {
-            "book", "booking", "consult", "consultation", "appointment",
-            "📅 book consultation"
-        }:
-            # Reset booking state for this user
+        # ---------- LANGUAGE SELECTION HANDLER ----------
+        if text_body in ("lang_en", "lang_hinglish", "lang_marathi"):
+            if text_body == "lang_en":
+                user.language = "English"
+            elif text_body == "lang_hinglish":
+                user.language = "Hinglish"
+            else:
+                user.language = "Marathi"
+            db.commit()
+
+            lang_for_user = normalize_language_name(user.language)
+
+            if lang_for_user == "Marathi":
+                msg_lang = "कृपया तुमचा कायदेशीर प्रश्न मराठीत लिहा."
+            elif lang_for_user == "Hinglish":
+                msg_lang = "Ab apna legal issue Hinglish (Hindi + English mix) me type karein."
+            else:
+                msg_lang = "Please type your legal issue in English."
+
+            send_text(wa_from, msg_lang)
+            return jsonify({"status": "language_set"}), 200
+
+        # ---------- LIMIT-ACTION BUTTON HANDLER (AFTER FREE REPLIES) ----------
+        if text_body == "action_call":
+            # WhatsApp understands tel: links
+            send_text(wa_from, "📞 Click to call NyaySetu: tel:7020030080")
+            return jsonify({"status": "action_call"}), 200
+
+        if text_body == "action_visit":
+            send_text(wa_from, "🌐 Visit NyaySetu: https://nyaysetu.in/")
+            return jsonify({"status": "action_visit"}), 200
+
+        if text_body == "action_notice":
+            if lang_for_user == "Marathi":
+                send_text(
+                    wa_from,
+                    "📄 लवकरच येथे थेट WhatsApp वरून कायदेशीर नोटीस ड्राफ्ट करण्याची सुविधा येत आहे."
+                )
+            elif lang_for_user == "Hinglish":
+                send_text(
+                    wa_from,
+                    "📄 Jaldi hi yahan se directly WhatsApp par legal notice draft karne ki facility available hogi."
+                )
+            else:
+                send_text(
+                    wa_from,
+                    "📄 Coming soon: You will be able to draft and send a legal notice directly from NyaySetu on WhatsApp."
+                )
+            return jsonify({"status": "action_notice"}), 200
+
+        if text_body == "action_book":
+            # Start booking flow same as BOOK
             pending_booking_state[wa_from] = {"date": None, "step": "awaiting_date"}
             send_list_dates(wa_from)
             return jsonify({"status": "ask_date"}), 200
 
-        # ---------- DATE SELECTION (list reply or manual text) ----------
+        # ---------- BOOKING ENTRY POINT (TEXT) ----------
+        if message in {
+            "book", "booking", "consult", "consultation", "appointment",
+            "📅 book consultation"
+        }:
+            pending_booking_state[wa_from] = {"date": None, "step": "awaiting_date"}
+            send_list_dates(wa_from)
+            return jsonify({"status": "ask_date"}), 200
+
+        # ---------- DATE SELECTION (FROM LIST OR MANUAL TEXT) ----------
         if text_body.startswith("DATE_") or parse_date_from_text(raw_text_body):
-            # Prefer ID form if present, otherwise parse from visible text
             date_str = parse_date_from_text(text_body) or parse_date_from_text(raw_text_body)
             if not date_str:
-                # Date failed to parse
                 if lang_for_user == "Marathi":
                     send_text(wa_from, "मला हा दिनांक समजला नाही. कृपया लिस्टमधून दिनांक पुन्हा निवडा.")
                 elif lang_for_user == "Hinglish":
@@ -546,7 +643,6 @@ def webhook():
             pending_booking_state[wa_from] = {"date": date_str, "step": "awaiting_time"}
             logging.info(f"User {wa_from} selected date {date_str}")
 
-            # Ask user to choose time slot
             send_buttons(
                 wa_from,
                 f"📅 Date selected: *{date_str}*\n\nNow choose a time slot:",
@@ -564,7 +660,6 @@ def webhook():
             date_str = state["date"] if state and state.get("date") else None
 
             if not date_str:
-                # User clicked time without date
                 if lang_for_user == "Marathi":
                     send_text(
                         wa_from,
@@ -586,10 +681,8 @@ def webhook():
             slot_label, window = TIME_SLOTS[text_body]
             preferred_text = f"{date_str} — {slot_label} ({window})"
 
-            # Create booking record
             booking = create_booking(wa_from, preferred_text)
 
-            # Create Razorpay payment link
             payment_url = create_payment_link(user.case_id, wa_from, amount_in_rupees=CONSULT_FEE_RS)
             if not payment_url:
                 if lang_for_user == "Marathi":
@@ -642,57 +735,43 @@ def webhook():
             pending_booking_state.pop(wa_from, None)
             return jsonify({"status": "booking_created"}), 200
 
-        # ---------- FREE MESSAGE LIMIT (AFTER BOOKING HANDLERS) ----------
+        # ---------- FREE ANSWERS LIMIT CHECK (BEFORE AI REPLY) ----------
         booking_status = get_latest_booking_status(wa_from)
-        legal_q_count = count_legal_questions(wa_from)
+        legal_answer_count = count_legal_bot_answers(wa_from)
 
-        if booking_status != "confirmed" and legal_q_count >= MAX_FREE_MESSAGES:
+        if booking_status != "confirmed" and legal_answer_count >= MAX_FREE_ANSWERS:
             limit_msg = FREE_LIMIT.get(lang_for_user, FREE_LIMIT["English"])
-            send_text(wa_from, limit_msg)
+            # Show limit message + 4 options
+            send_buttons(
+                wa_from,
+                limit_msg,
+                LIMIT_ACTION_BUTTONS,
+            )
             return jsonify({"status": "limit_reached"}), 200
 
-        # ---------- NORMAL LEGAL AI REPLY ----------
-        # We detect language fresh (user can switch languages), but store base preference in user.language
-        detected_lang = detect_language(text_body)
+        # ---------- NORMAL LEGAL AI REPLY (USES SELECTED LANGUAGE) ----------
+        # If user never set language (edge case), default to English
+        lang_for_user = normalize_language_name(user.language or "English")
         category = detect_category(text_body)
-        logging.info(f"Lang={detected_lang}, Category={category}")
+        logging.info(f"Lang={lang_for_user}, Category={category}")
 
         typing_on(wa_from)
         time.sleep(TYPING_DELAY)
-        reply = legal_reply(text_body, detected_lang, category)
+        reply = legal_reply(text_body, lang_for_user, category)
         typing_off(wa_from)
 
         send_text(wa_from, reply)
         store_message(wa_from, "bot", reply)
 
-        # Suggest next steps only if user still has free answers left and booking not yet confirmed
-        if booking_status != "confirmed" and legal_q_count < MAX_FREE_MESSAGES:
-            if detected_lang == "Marathi":
-                btn_body = "पुढे काय करायचे ते निवडा:"
-            elif detected_lang == "Hinglish":
-                btn_body = "Aap agla step choose kar sakte hain:"
-            else:
-                btn_body = "You can also choose what to do next:"
-
-            send_buttons(
-                wa_from,
-                btn_body,
-                [
-                    {"id": "book", "title": "📅 Book Consultation"},
-                    {"id": "call", "title": "📞 Speak to Lawyer"},
-                    {"id": "draft", "title": "📄 Get Draft Notice"},
-                ],
-            )
-
+        # No extra suggestion buttons here as per desired flow
         return jsonify({"status": "answered"}), 200
 
     except Exception as e:
         logging.exception("Webhook error")
         return jsonify({"status": "error", "error": str(e)}), 500
+
+
 # ---------------- RAZORPAY WEBHOOK ----------------
-# Configure this URL in Razorpay Dashboard as:
-# https://api.nyaysetu.in/payment/webhook
-# (or your Render domain)
 
 @app.route("/payment/webhook", methods=["POST"])
 def payment_webhook():
@@ -702,7 +781,6 @@ def payment_webhook():
     try:
         event_type = event.get("event")
 
-        # We only care about successful payment link events
         if event_type == "payment_link.paid":
             payment_link_entity = (
                 event.get("payload", {})
@@ -728,7 +806,6 @@ def payment_webhook():
                     booking.confirmed = True
                     db.commit()
 
-                    # Detect user stored language (same as welcome message)
                     user = db.query(User).filter_by(whatsapp=contact).first()
                     lang = normalize_language_name(user.language if user else "English")
 
@@ -810,6 +887,7 @@ ADMIN_HTML = """
 </html>
 """
 
+
 @app.route("/admin")
 def admin_dashboard():
     pwd = request.args.get("pwd", "")
@@ -819,16 +897,18 @@ def admin_dashboard():
     users = db.query(User).order_by(User.created_at.desc()).limit(200).all()
     bookings = db.query(Booking).order_by(Booking.created_at.desc()).limit(200).all()
     return render_template_string(ADMIN_HTML, users=users, bookings=bookings)
-# ---------------- HEALTH CHECK ENDPOINT ----------------
+
+
+# ---------------- HEALTH CHECK ----------------
+
 @app.route("/health")
 def health():
     return jsonify({"status": "ok", "time": datetime.utcnow().isoformat()})
 
 
-# ---------------- RUN (LOCAL DEV ONLY) ----------------
-# ⚠ Render / production ignores this block (uses gunicorn).
+# ---------------- RUN (LOCAL DEV) ----------------
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     logging.info(f"Starting NyaySetu app on port {port}")
     app.run(host="0.0.0.0", port=port)
-
