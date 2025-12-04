@@ -1,54 +1,82 @@
-# services/whatsapp_service.py
-import requests
+import os
+import httpx
 import logging
-from config import WHATSAPP_PHONE_ID, WHATSAPP_ACCESS_TOKEN
 
-def _headers():
-    return {"Authorization": f"Bearer {WHATSAPP_ACCESS_TOKEN}", "Content-Type": "application/json"}
+WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
+WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
 
-def whatsapp_url():
-    return f"https://graph.facebook.com/v19.0/{WHATSAPP_PHONE_ID}/messages"
+API_URL = f"https://graph.facebook.com/v21.0/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+HEADERS = {
+    "Content-Type": "application/json",
+    "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+}
 
-def send_text(to, text):
-    payload = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": text}}
+
+def _send(payload):
     try:
-        r = requests.post(whatsapp_url(), json=payload, headers=_headers(), timeout=10)
-        logging.info("WhatsApp send_text %s %s", r.status_code, r.text)
-        return r
+        response = httpx.post(API_URL, json=payload, headers=HEADERS, timeout=15)
+        logging.info(f"WA Response {response.status_code}: {response.text}")
     except Exception as e:
-        logging.exception("WhatsApp send_text error")
-        return None
+        logging.error(f"WA SEND ERROR: {e}")
 
-def send_typing_on(to):
-    payload = {"messaging_product": "whatsapp", "to": to, "type": "typing_on"}
-    try:
-        requests.post(whatsapp_url(), json=payload, headers=_headers(), timeout=6)
-    except Exception:
-        pass
 
-def send_typing_off(to):
-    payload = {"messaging_product": "whatsapp", "to": to, "type": "typing_off"}
-    try:
-        requests.post(whatsapp_url(), json=payload, headers=_headers(), timeout=6)
-    except Exception:
-        pass
+def send_text_message(to, message):
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "text",
+        "text": {"body": message},
+    }
+    _send(payload)
 
-def send_buttons(to, body, replies):
-    """
-    replies: list of {"id": "value", "title": "Label"}
-    This function converts to WhatsApp 'reply' buttons format.
-    """
-    buttons = [{"type": "reply", "reply": r} for r in replies]
+
+def send_typing(to, seconds=2):
+    """Shows typing indicator on WhatsApp."""
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "typing_on"
+    }
+    _send(payload)
+
+
+def send_button_message(to, message, buttons):
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
         "type": "interactive",
-        "interactive": {"type": "button", "body": {"text": body}, "action": {"buttons": buttons}}
+        "interactive": {
+            "type": "button",
+            "body": {"text": message},
+            "action": {"buttons": buttons},
+        },
     }
-    try:
-        r = requests.post(whatsapp_url(), json=payload, headers=_headers(), timeout=10)
-        logging.info("WhatsApp send_buttons %s %s", r.status_code, r.text)
-        return r
-    except Exception:
-        logging.exception("WhatsApp send_buttons error")
-        return None
+    _send(payload)
+
+
+def send_list_message(to, message, sections):
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "interactive",
+        "interactive": {
+            "type": "list",
+            "body": {"text": message},
+            "action": {
+                "button": "Select",
+                "sections": sections,
+            },
+        },
+    }
+    _send(payload)
+
+
+def send_call_button(to, message, phone_number):
+    buttons = [
+        {
+            "type": "phone_number",
+            "phone_number": phone_number,
+            "text": "📞 Call NyaySetu"
+        }
+    ]
+    send_button_message(to, message, buttons)
