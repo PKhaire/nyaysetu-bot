@@ -3,6 +3,7 @@ import time
 import uuid
 import logging
 import requests
+import threading
 from datetime import datetime, timedelta
 
 from flask import Flask, request, jsonify, render_template_string
@@ -21,7 +22,7 @@ VERIFY_TOKEN = os.environ.get("WHATSAPP_VERIFY_TOKEN")
 PRIMARY_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 
 TYPING_DELAY = 1.1
-MAX_FREE_ANSWERS = 6     # number of BOT legal answers allowed for free
+MAX_FREE_ANSWERS = 6  # number of BOT legal answers allowed for free
 CONSULT_FEE_RS = 499
 
 client = OpenAI(api_key=OPENAI_API_KEY)
@@ -64,6 +65,7 @@ class Booking(Base):
 Base.metadata.create_all(engine)
 
 # ---------------- WHATSAPP UTILITIES ----------------
+
 
 def w_headers():
     return {
@@ -205,24 +207,23 @@ WELCOME = {
 
 FREE_LIMIT = {
     "English": (
-        "🛑 You have used your free legal replies.\n\n"
-        "To get detailed personalised guidance from a legal expert, "
-        "please choose one option below."
+        "🛑 You have used your free legal answers.\n\n"
+        "To continue receiving personalised guidance, please choose an option below."
     ),
     "Hinglish": (
         "🛑 Aapke free legal jawab complete ho chuke hain.\n\n"
-        "Ab personal legal guidance ke liye niche se ek option choose karein."
+        "Personalised legal guidance ke liye, kripya niche diye gaye options me se koi ek chunen."
     ),
     "Marathi": (
         "🛑 तुमचे मोफत कायदेशीर उत्तर पूर्ण झाले आहेत.\n\n"
-        "आता वैयक्तिक मार्गदर्शनासाठी खालील पैकी एक पर्याय निवडा."
+        "पुढील वैयक्तिक मार्गदर्शनासाठी खालीलपैकी एक पर्याय निवडा."
     ),
 }
 
 LANGUAGE_BUTTONS = [
-    {"id": "lang_en", "title": "English"},
-    {"id": "lang_hinglish", "title": "Hinglish"},
-    {"id": "lang_marathi", "title": "मराठी / Marathi"},
+    {"id": "lang_en", "title": "🇬🇧 English"},
+    {"id": "lang_hinglish", "title": "🇮🇳 Hinglish"},
+    {"id": "lang_marathi", "title": "🇮🇳 Marathi"},
 ]
 
 LIMIT_ACTION_BUTTONS = [
@@ -252,20 +253,12 @@ def normalize_language_name(name: str) -> str:
 def parse_date_from_text(text: str):
     """
     Convert date-like text to 'YYYY-MM-DD' where possible.
-    Handles:
-      - 'DATE_2025-12-04'
-      - 'Thu, 04 Dec'
-      - 'Thu 04 Dec'
-      - '04 Dec'
-      - '04-12-2025'
-      - '2025-12-04'
     """
     if not text:
         return None
 
     text = text.strip()
 
-    # Direct DATE_YYYY-MM-DD format
     if text.upper().startswith("DATE_"):
         return text[5:]
 
@@ -297,6 +290,7 @@ def parse_date_from_text(text: str):
 
 
 # ---------------- USER & CONVERSATION HELPERS ----------------
+
 
 def register_user(wa_id: str) -> User:
     user = db.query(User).filter_by(whatsapp=wa_id).first()
@@ -361,7 +355,7 @@ def count_legal_bot_answers(wa_id: str) -> int:
             continue
         if "select your preferred language" in low or "bhasha" in low or "भाषा" in low:
             continue
-        if "please select your preferred date" in low or "select your convenient date" in low:
+        if "select your convenient date" in low or "कृपया दिनांक" in low:
             continue
         if "date selected" in low and "time slot" in low:
             continue
@@ -371,7 +365,9 @@ def count_legal_bot_answers(wa_id: str) -> int:
             continue
         if "payment received successfully" in low or "consultation is confirmed" in low:
             continue
-        if "you have used your free legal replies" in low or "free legal jawab" in low:
+        if "you have used your free legal answers" in low or "free legal jawab" in low:
+            continue
+        if "choose an option below" in low:
             continue
 
         # Everything else from bot is treated as a legal answer
@@ -382,42 +378,44 @@ def count_legal_bot_answers(wa_id: str) -> int:
 
 # ---------------- OPENAI UTILITIES ----------------
 
+
 def call_openai(messages, temperature=0.2, max_tokens=300):
-    backoff = 1.0
-    for attempt in range(4):
-        try:
-            res = client.chat.completions.create(
-                model=PRIMARY_MODEL,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            return res.choices[0].message.content
-        except RateLimitError as e:
-            logging.warning(f"OpenAI rate limited: {e}; retrying...")
-            time.sleep(backoff)
-            backoff *= 2
-        except (BadRequestError, APIError) as e:
-            logging.error(f"OpenAI API error: {e}")
-            break
-        except Exception as e:
-            logging.error(f"OpenAI unexpected error: {e}")
-            time.sleep(backoff)
-            backoff *= 2
+    """
+    Single-attempt OpenAI call to avoid long retry loops and OOM.
+    """
+    try:
+        res = client.chat.completions.create(
+            model=PRIMARY_MODEL,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return res.choices[0].message.content
+    except RateLimitError as e:
+        logging.warning(f"OpenAI rate limited: {e}")
+    except (BadRequestError, APIError) as e:
+        logging.error(f"OpenAI API error: {e}")
+    except Exception as e:
+        logging.error(f"OpenAI unexpected error: {e}")
     return None
 
 
-def detect_category(text: str) -> str:
-    prompt = (
-        "Classify the legal topic of this message into one word from: "
-        "property, police, family, business, money, other.\n"
-        f"Message: {text}\n"
-        "Return only the category word."
-    )
-    res = call_openai([{"role": "user", "content": prompt}], max_tokens=10)
-    if not res:
-        return "other"
-    return res.strip().lower()
+def simple_detect_category(text: str) -> str:
+    """
+    Simple rule-based category detection (no extra OpenAI call).
+    """
+    low = text.lower()
+    if any(k in low for k in ["land", "property", "flat", "plot", "rent", "lease"]):
+        return "property"
+    if any(k in low for k in ["police", "fir", "ipc", "crime", "criminal"]):
+        return "police"
+    if any(k in low for k in ["marriage", "divorce", "child", "maintenance", "498a", "husband", "wife", "family"]):
+        return "family"
+    if any(k in low for k in ["company", "job", "office", "employment", "salary", "gratuity", "pf"]):
+        return "business"
+    if any(k in low for k in ["loan", "money", "recovery", "refund", "cheque", "bounce", "debt"]):
+        return "money"
+    return "other"
 
 
 def legal_reply(text: str, lang: str, category: str) -> str:
@@ -449,6 +447,7 @@ def legal_reply(text: str, lang: str, category: str) -> str:
 
 
 # ---------------- RAZORPAY PAYMENT LINK ----------------
+
 
 def create_payment_link(case_id: str, whatsapp_number: str, amount_in_rupees: int = CONSULT_FEE_RS):
     try:
@@ -483,6 +482,7 @@ def create_payment_link(case_id: str, whatsapp_number: str, amount_in_rupees: in
 
 
 # ---------------- MAIN WEBHOOK ----------------
+
 
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
@@ -546,14 +546,12 @@ def webhook():
 
         # ---------- FIRST MESSAGE → WELCOME + LANGUAGE SELECTION ----------
         if conv_count == 1 and user.language is None:
-            # Send welcome in default English-style text
             typing_on(wa_from)
             time.sleep(TYPING_DELAY)
             welcome_text = WELCOME["English"].format(case=user.case_id)
             send_text(wa_from, welcome_text)
             typing_off(wa_from)
 
-            # Ask for preferred language
             send_buttons(
                 wa_from,
                 "Please choose your preferred language:",
@@ -587,7 +585,6 @@ def webhook():
 
         # ---------- LIMIT-ACTION BUTTON HANDLER (AFTER FREE REPLIES) ----------
         if text_body == "action_call":
-            # WhatsApp understands tel: links
             send_text(wa_from, "📞 Click to call NyaySetu: tel:7020030080")
             return jsonify({"status": "action_call"}), 200
 
@@ -614,7 +611,6 @@ def webhook():
             return jsonify({"status": "action_notice"}), 200
 
         if text_body == "action_book":
-            # Start booking flow same as BOOK
             pending_booking_state[wa_from] = {"date": None, "step": "awaiting_date"}
             send_list_dates(wa_from)
             return jsonify({"status": "ask_date"}), 200
@@ -741,7 +737,6 @@ def webhook():
 
         if booking_status != "confirmed" and legal_answer_count >= MAX_FREE_ANSWERS:
             limit_msg = FREE_LIMIT.get(lang_for_user, FREE_LIMIT["English"])
-            # Show limit message + 4 options
             send_buttons(
                 wa_from,
                 limit_msg,
@@ -749,21 +744,70 @@ def webhook():
             )
             return jsonify({"status": "limit_reached"}), 200
 
+        # ---------- DUPLICATE MESSAGE PROTECTION ----------
+        last_user_msgs = (
+            db.query(Conversation)
+            .filter_by(whatsapp=wa_from, direction="user")
+            .order_by(Conversation.ts.desc())
+            .limit(2)
+            .all()
+        )
+        if len(last_user_msgs) == 2:
+            t0 = (last_user_msgs[0].text or "").strip()
+            t1 = (last_user_msgs[1].text or "").strip()
+            if t0 and t0 == t1:
+                send_text(wa_from, "I’ve already answered this for you. Please check the previous message.")
+                return jsonify({"status": "duplicate"}), 0
+
         # ---------- NORMAL LEGAL AI REPLY (USES SELECTED LANGUAGE) ----------
-        # If user never set language (edge case), default to English
         lang_for_user = normalize_language_name(user.language or "English")
-        category = detect_category(text_body)
+        category = simple_detect_category(text_body)
         logging.info(f"Lang={lang_for_user}, Category={category}")
 
+        # ---------- SMART TYPING + BACKGROUND AI CALL ----------
+        # We'll run the AI call in a background thread while sending typing_on periodically.
+        ai_result = {"text": None}
+
+        def ai_worker():
+            try:
+                ai_text = legal_reply(text_body, lang_for_user, category)
+                ai_result["text"] = ai_text
+            except Exception as e:
+                logging.exception("AI worker failed")
+                ai_result["text"] = None
+
+        thread = threading.Thread(target=ai_worker, daemon=True)
+        thread.start()
+
         typing_on(wa_from)
-        time.sleep(TYPING_DELAY)
-        reply = legal_reply(text_body, lang_for_user, category)
+        start_time = time.time()
+        sent_gathering_message = False
+        # while the AI thread runs, keep sending typing_on every 2 seconds and optionally send gathering msg after 4s
+        while thread.is_alive():
+            elapsed = time.time() - start_time
+            # send gathering info after 4 seconds (once)
+            if not sent_gathering_message and elapsed > 4:
+                send_text(wa_from, "🧠 Gathering the correct legal information…\nPlease wait a moment.")
+                sent_gathering_message = True
+            # refresh typing indicator
+            typing_on(wa_from)
+            time.sleep(2)  # wait a bit before checking again
+
         typing_off(wa_from)
+
+        reply = ai_result.get("text")
+        if not reply:
+            # fallback friendly message
+            if lang_for_user == "Marathi":
+                reply = "माफ करा, सध्या उत्तर देताना अडचण येत आहे. कृपया थोड्या वेळाने पुन्हा प्रयत्न करा."
+            elif lang_for_user == "Hinglish":
+                reply = "Sorry, abhi jawab dene me dikkat aa rahi hai. Thodi der baad phir try karein."
+            else:
+                reply = "Sorry, I’m having trouble generating a reply right now. Please try again in a little while."
 
         send_text(wa_from, reply)
         store_message(wa_from, "bot", reply)
 
-        # No extra suggestion buttons here as per desired flow
         return jsonify({"status": "answered"}), 200
 
     except Exception as e:
@@ -772,6 +816,7 @@ def webhook():
 
 
 # ---------------- RAZORPAY WEBHOOK ----------------
+
 
 @app.route("/payment/webhook", methods=["POST"])
 def payment_webhook():
@@ -900,6 +945,7 @@ def admin_dashboard():
 
 
 # ---------------- HEALTH CHECK ----------------
+
 
 @app.route("/health")
 def health():
