@@ -1,53 +1,40 @@
-import requests
 import os
 import logging
+import requests
 
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
 
 API_URL = f"https://graph.facebook.com/v17.0/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+HEADERS = {
+    "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+    "Content-Type": "application/json"
+}
 
 
-def _post_to_whatsapp(payload):
-    """
-    Internal function to send HTTPS request to WhatsApp Cloud API.
-    """
-    headers = {
-        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
-        "Content-Type": "application/json"
-    }
+def call_whatsapp_api(payload):
+    logging.info(f"WHATSAPP REQUEST: {payload}")
+    resp = requests.post(API_URL, headers=HEADERS, json=payload)
     try:
-        r = requests.post(API_URL, json=payload, headers=headers, timeout=10)
-        logging.info(f"WHATSAPP REQUEST: {payload}")
-        logging.info(f"WHATSAPP RESPONSE: {r.text}")
-        return r
-    except Exception as e:
-        logging.error(f"WHATSAPP ERROR: {e}")
-        return None
+        logging.info(f"WHATSAPP RESPONSE: {resp.text}")
+    except Exception:
+        pass
+    return resp
 
 
-# -----------------------------------------------------------------------
-#  PUBLIC FUNCTIONS USED BY app.py
-# -----------------------------------------------------------------------
-
-def send_text(to, text):
-    """
-    Send a normal WhatsApp text message
-    """
+def send_text(to, message):
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
         "type": "text",
-        "text": {"body": text}
+        "text": {"body": message}
     }
-    return _post_to_whatsapp(payload)
+    return call_whatsapp_api(payload)
 
 
-def send_buttons(to, message, buttons):
+def send_buttons(to, text, buttons):
     """
-    Send buttons message with multiple quick-reply options.
-    Format for buttons:
-    [ { "id": "btn1", "title": "English" }, ... ]
+    buttons = [ { "id": "btn1", "title": "English" }, ... ]
     """
     payload = {
         "messaging_product": "whatsapp",
@@ -55,7 +42,7 @@ def send_buttons(to, message, buttons):
         "type": "interactive",
         "interactive": {
             "type": "button",
-            "body": {"text": message},
+            "body": {"text": text},
             "action": {
                 "buttons": [
                     {"type": "reply", "reply": {"id": b["id"], "title": b["title"]}}
@@ -64,30 +51,24 @@ def send_buttons(to, message, buttons):
             }
         }
     }
-    return _post_to_whatsapp(payload)
+    return call_whatsapp_api(payload)
 
 
 def send_typing_on(to):
-    """
-    Show 'typing...' indicator
-    """
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
-        "type": "sender_action",
-        "sender_action": "typing_on"
+        "type": "action",
+        "action": {"typing": "on"}
     }
-    return _post_to_whatsapp(payload)
+    return call_whatsapp_api(payload)
 
 
 def send_typing_off(to):
-    """
-    Hide 'typing...' indicator
-    """
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
-        "type": "sender_action",
-        "sender_action": "typing_off"
+        "type": "action",
+        "action": {"typing": "off"}
     }
-    return _post_to_whatsapp(payload)
+    return call_whatsapp_api(payload)
