@@ -1,419 +1,607 @@
 import os
 import json
-import time
 import logging
-from flask import Flask, request
-from db import get_user, create_user, update_user
-from whatsapp_service import send_text_message, send_button_message, send_list_message, send_call_button
-from openai_service import get_legal_answer
+from datetime import datetime, timedelta
 
-app = Flask(__name__)
+from flask import Flask, request
+
+from config import VERIFY_TOKEN
+from db import get_user, create_user, update_user
+
+# Services
+from services.whatsapp_service import (
+    send_text_message,
+    send_button_message,
+    send_list_message,
+    send_call_button,
+)
+
+from services.openai_service import (
+    detect_language,
+    detect_category,
+    generate_legal_reply,
+)
+
+# -----------------------------------------------------------------------------
+# CONFIG & CONSTANTS
+# -----------------------------------------------------------------------------
+
 logging.basicConfig(level=logging.INFO)
 
-FREE_LIMIT = 4
+app = Flask(__name__)
 
-# --- GLOBAL HELPERS ----------------------------------------------------------
+FREE_ANSWER_LIMIT = 6
+NYAYSETU_PHONE = "7020030080"
+NYAYSETU_URL = "https://nyaysetu.in/"
 
-def normalize_msg(msg: str) -> str:
-    """Normalize text input to avoid false triggers."""
-    if not msg:
-        return ""
-    msg = msg.strip().lower()
-    replacements = {
-        "hii": "hi", "hiii": "hi", "hiiii": "hi",
-        "hello": "hi", "helo": "hi", "hey": "hi",
-        "hye": "hi", "hy": "hi",
-    }
-    return replacements.get(msg, msg)
 
-def is_greeting(msg: str) -> bool:
-    """Returns True if user is starting conversation."""
-    greetings = ["hi", "start", "hello", "help", "restart", "menu"]
-    return normalize_msg(msg) in greetings
+# -----------------------------------------------------------------------------
+# UTILS: USER HELPER
+# -----------------------------------------------------------------------------
 
-def send_typing_indicator(user_id: str):
-    """Simulate typing effect on WhatsApp."""
-    try:
-        send_text_message(user_id, "⌛ typing…")
-        time.sleep(1.5)
-    except Exception as e:
-        logging.error(f"Typing indicator failed: {e}")
+def get_or_create_user(wa_id: str, name: str | None = None) -> dict:
+    user = get_user(wa_id)
+    if not user:
+        user = create_user(wa_id)
+        logging.info(f"New user registered: {wa_id} → {user.get('case_id')}")
+    # Ensure new fields exist
+    user.setdefault("state", "idle")
+    user.setdefault("language", None)
+    user.setdefault("free_count", 0)
+    user.setdefault("history", [])          # list of dicts: {"q": ..., "a": ...}
+    user.setdefault("pending_date", None)   # for booking flow
+    user.setdefault("pending_time", None)
+    return user
 
-def send_wait_message(user_id: str, lang: str):
-    """Multilingual wait message."""
-    msg_map = {
-        "en": "🧠 Gathering the correct legal information…\nPlease wait a moment.",
-        "hi": "🧠 Sahi kanooni jaankari dhoondi ja rahi hai…\nKripya pray wait karein.",
-        "mr": "🧠 योग्य कायदेशीर माहिती घेत आहोत…\nकृपया थांबा.",
-    }
-    send_text_message(user_id, msg_map.get(lang, msg_map["en"]))
 
-# --- UPDATE FREE LIMIT STATE -------------------------------------------------
-
-def increment_counter(user):
-    """Increase the free responses count."""
-    user["free_count"] = (user.get("free_count") or 0) + 1
+def save_user(user: dict) -> None:
     update_user(user)
-    return user["free_count"]
 
-def is_free_limit_reached(user):
-    """Check if user has crossed limit."""
-    return (user.get("free_count") or 0) >= FREE_LIMIT
-# --- LANGUAGE & UI CONFIG ----------------------------------------------------
 
-LANGUAGE_BUTTONS = [
-    {"id": "lang_en", "title": "English"},
-    {"id": "lang_hi", "title": "Hinglish"},
-    {"id": "lang_mr", "title": "Marathi"},
-]
+# -----------------------------------------------------------------------------
+# UTILS: LANGUAGE & MESSAGES
+# -----------------------------------------------------------------------------
 
-LIMIT_ACTION_BUTTONS = [
-    {"id": "action_call", "title": "📞 Call NyaySetu"},
-    {"id": "action_book", "title": "📅 Book Consultation"},
-    {"id": "action_notice", "title": "📄 Send Legal Notice"},
-    {"id": "action_visit", "title": "🌐 Visit NyaySetu"},
-]
+def language_display(lang: str | None) -> str:
+    if lang == "hi":
+        return "Hinglish"
+    if lang == "mr":
+        return "Marathi"
+    return "English"
 
-WELCOME_TEMPLATES = {
-    "en": (
-        "👋 Welcome to NyaySetu — The Bridge To Justice.\n"
-        "Your Case ID: {case_id}\n\n"
-        "Before we begin, please choose your preferred language 👇"
-    ),
-    "hi": (
-        "👋 NyaySetu mein swagat hai — The Bridge To Justice.\n"
-        "Aapka Case ID: {case_id}\n\n"
-        "Shuru karne se pehle, kripya apni pasand ki bhasha chune 👇"
-    ),
-    "mr": (
-        "👋 न्यायसेतू मध्ये स्वागत — The Bridge To Justice.\n"
-        "तुमचा केस आयडी: {case_id}\n\n"
-        "सुरुवात करण्यापूर्वी, कृपया तुमची पसंतीची भाषा निवडा 👇"
-    ),
-}
 
-FREE_LIMIT_TEXT = {
-    "en": (
-        "🛑 You have used your free legal answers.\n\n"
-        "To continue receiving personalised guidance, please choose an option below."
-    ),
-    "hi": (
-        "🛑 Aapke free legal jawab complete ho chuke hain.\n\n"
-        "Personalised legal guidance ke liye, kripya niche diye gaye options me se koi ek chunen."
-    ),
-    "mr": (
-        "🛑 तुमचे मोफत कायदेशीर उत्तर पूर्ण झाले आहेत.\n\n"
-        "पुढील वैयक्तिक मार्गदर्शनासाठी खालीलपैकी एक पर्याय निवडा."
-    ),
-}
+def send_welcome_and_language_buttons(wa_id: str, case_id: str | None = None):
+    """First message: welcome + language selection buttons"""
+    if not case_id:
+        # Best-effort: we don't hit DB again here; just show generic welcome
+        header = "👋 Welcome to NyaySetu — The Bridge To Justice."
+        case_line = ""
+    else:
+        header = "👋 Welcome to NyaySetu — The Bridge To Justice."
+        case_line = f"\nYour Case ID: {case_id}"
 
-ISSUE_PROMPT = {
-    "en": "Please type your legal issue in English.",
-    "hi": "Ab apna legal issue Hinglish (Hindi + English mix) me type karein.",
-    "mr": "कृपया तुमचा कायदेशीर प्रश्न मराठीत लिहा.",
-}
-
-def get_lang(user):
-    """Return short language code from user object."""
-    lang = (user.get("language") or "en").lower()
-    if lang.startswith("mr"):
-        return "mr"
-    if lang.startswith("hi") or "hinglish" in lang:
-        return "hi"
-    return "en"
-
-def ask_language_menu(user):
-    """Send welcome + language selection buttons."""
-    lang = "en"  # welcome message base language (English)
-    welcome_text = WELCOME_TEMPLATES[lang].format(case_id=user["case_id"])
-    send_text_message(user["user_id"], welcome_text)
-
-    # Language buttons: plain text (no flags)
-    send_button_message(
-        user["user_id"],
-        "Choose the language you are most comfortable with 👇",
-        LANGUAGE_BUTTONS,
+    body = (
+        f"{header}{case_line}\n\n"
+        "Please choose your preferred language:"
     )
 
-def send_free_limit_menu(user):
-    """Send 4-option menu when free limit reached."""
-    lang = get_lang(user)
-    body = FREE_LIMIT_TEXT.get(lang, FREE_LIMIT_TEXT["en"])
-    send_button_message(user["user_id"], body, LIMIT_ACTION_BUTTONS)
+    buttons = [
+        {
+            "type": "reply",
+            "reply": {"id": "lang_en", "title": "English"},
+        },
+        {
+            "type": "reply",
+            "reply": {"id": "lang_hi", "title": "Hinglish"},
+        },
+        {
+            "type": "reply",
+            "reply": {"id": "lang_mr", "title": "Marathi"},
+        },
+    ]
 
-def set_language_from_button(user, button_id: str):
-    """Update user language based on button reply id."""
-    mapping = {
-        "lang_en": "en",
-        "lang_hi": "hi",
-        "lang_mr": "mr",
-    }
-    lang = mapping.get(button_id, "en")
-    user["language"] = lang
-    user["state"] = "await_issue"
-    update_user(user)
+    send_button_message(wa_id, body, buttons)
 
-    msg = ISSUE_PROMPT.get(lang, ISSUE_PROMPT["en"])
-    send_text_message(user["user_id"], msg)
 
-# --- BOOKING RELATED (simple stub: we keep logic in this file) --------------
+def send_ask_issue_message(user: dict):
+    wa_id = user["user_id"]
+    lang = user.get("language", "en")
 
-def start_booking_flow(user):
-    """Entry point: ask user to choose date via list message."""
-    user["state"] = "booking_date"
-    update_user(user)
+    if lang == "hi":
+        msg = "Please type your legal issue in Hinglish (Hindi in English letters)."
+    elif lang == "mr":
+        msg = "कृपया तुमचा कायदेशीर प्रश्न मराठीत किंवा इंग्रजीत लिहा."
+    else:
+        msg = "Please type your legal issue in English."
 
-    # we send a static list for now – dates handled as simple options
-    send_list_message(
-        user["user_id"],
-        "📅 कृपया दिनांक निवडा / Select your convenient date:",
-        "Select Date",
-        sections=[{
-            "title": "Next 7 days",
-            "rows": [
-                # ids are generic; real mapping can be handled in date handler
-                {"id": "DATE_TODAY", "title": "Today"},
-                {"id": "DATE_TOMORROW", "title": "Tomorrow"},
-                {"id": "DATE_DAY3", "title": "Day 3"},
-                {"id": "DATE_DAY4", "title": "Day 4"},
-                {"id": "DATE_DAY5", "title": "Day 5"},
-                {"id": "DATE_DAY6", "title": "Day 6"},
-                {"id": "DATE_DAY7", "title": "Day 7"},
-            ]
-        }],
-    )
+    send_text_message(wa_id, msg)
 
-def handle_booking_interactive(user, payload_id: str):
-    """
-    Very simple booking flow:
-    - First selection: DATE_*
-    - Second selection: TIME_* (buttons)
-    """
-    state = user.get("state")
 
-    # user selected a date
-    if state == "booking_date" and payload_id.startswith("DATE_"):
-        user["state"] = "booking_time"
-        user["booking_date"] = payload_id
-        update_user(user)
+def send_wait_message(user: dict):
+    lang = user.get("language", "en")
+    wa_id = user["user_id"]
 
-        send_button_message(
-            user["user_id"],
-            "📅 Date selected.\n\nNow choose a time slot:",
-            [
-                {"id": "TIME_morning", "title": "Morning (10 AM – 1 PM)"},
-                {"id": "TIME_afternoon", "title": "Afternoon (1 PM – 4 PM)"},
-                {"id": "TIME_evening", "title": "Evening (4 PM – 7 PM)"},
-            ],
+    # WaitMessage: B
+    base = "🧠 Gathering the correct legal information…\nPlease wait a moment."
+
+    if lang == "hi":
+        msg = base + "\n(Thoda waqt lagega, kripya rukiyega.)"
+    elif lang == "mr":
+        msg = base + "\n(कृपया थोडा वेळ थांबा.)"
+    else:
+        msg = base
+
+    send_text_message(wa_id, msg)
+
+
+def send_free_limit_menu(user: dict):
+    """Show 4 options after free answers are over."""
+    wa_id = user["user_id"]
+    lang = user.get("language", "en")
+
+    if lang == "hi":
+        intro = (
+            "Aapke 6 free legal answers complete ho gaye hai.\n"
+            "Ab aap inme se ek option choose kar sakte hai:"
         )
-        return True
+    elif lang == "mr":
+        intro = (
+            "तुमचे 6 free कायदेशीर उत्तर पूर्ण झाले आहेत.\n"
+            "आता खालील पर्यायांपैकी एक निवडा:"
+        )
+    else:
+        intro = (
+            "Your 6 free legal answers are over.\n"
+            "To get more personalised help, please choose an option:"
+        )
 
-    # user selected a time slot
-    if state == "booking_time" and payload_id.startswith("TIME_"):
-        user["state"] = "idle"
-        user["booking_time"] = payload_id
-        update_user(user)
-
-        # For now we just confirm booking textually (no Razorpay here;
-        # that part is already in your other app, we keep this light).
-        slot_map = {
-            "TIME_morning": "Morning (10 AM – 1 PM)",
-            "TIME_afternoon": "Afternoon (1 PM – 4 PM)",
-            "TIME_evening": "Evening (4 PM – 7 PM)",
+    sections = [
+        {
+            "title": "Next steps",
+            "rows": [
+                {"id": "cta_call", "title": "📞 Call NyaySetu"},
+                {"id": "cta_book", "title": "📅 Book Consultation"},
+                {"id": "cta_notice", "title": "📨 Send Legal Notice"},
+                {"id": "cta_visit", "title": "🌐 Visit NyaySetu"},
+            ],
         }
-        slot_label = slot_map.get(payload_id, "your selected slot")
+    ]
 
-        lang = get_lang(user)
-        if lang == "mr":
+    send_list_message(wa_id, intro, sections)
+
+
+def handle_cta_selection(user: dict, cta_id: str):
+    wa_id = user["user_id"]
+    lang = user.get("language", "en")
+
+    if cta_id == "cta_call":
+        msg = (
+            f"You can call NyaySetu on {NYAYSETU_PHONE}.\n"
+            "Tap the number to dial from your phone."
+        )
+        send_text_message(wa_id, msg)
+        # Optional: call button if your whatsapp_service supports it
+        try:
+            send_call_button(wa_id, "Tap below to call NyaySetu:", NYAYSETU_PHONE)
+        except Exception as e:
+            logging.warning(f"send_call_button failed: {e}")
+
+    elif cta_id == "cta_book":
+        start_booking_flow(user)
+
+    elif cta_id == "cta_notice":
+        if lang == "hi":
             msg = (
-                f"📝 तुमचे सत्र *{slot_label}* या वेळेसाठी नोंद झाले आहे.\n"
-                "आमचा प्रतिनिधी लवकरच तुम्हाला संपर्क करेल."
+                "‘Send Legal Notice’ feature jaldi hi aa raha hai.\n"
+                "Filhaal aap NyaySetu ko call karke notice ke bare me madad le sakte hai."
             )
-        elif lang == "hi":
+        elif lang == "mr":
             msg = (
-                f"📝 Aapka session *{slot_label}* ke liye note ho gaya hai.\n"
-                "Hamari team ka representative aapse jald hi sampark karega."
+                "‘Send Legal Notice’ फीचर लवकरच उपलब्ध होईल.\n"
+                f"आत्तासाठी तुम्ही NyaySetu ला {NYAYSETU_PHONE} या नंबरवर कॉल करू शकता."
             )
         else:
             msg = (
-                f"📝 Your consultation request is noted for *{slot_label}*.\n"
-                "Our team will contact you shortly to confirm the slot."
+                "‘Send Legal Notice’ feature is coming soon.\n"
+                f"For now, you can call NyaySetu on {NYAYSETU_PHONE} for help."
             )
+        send_text_message(wa_id, msg)
 
-        send_text_message(user["user_id"], msg)
-        return True
+    elif cta_id == "cta_visit":
+        msg = f"You can visit NyaySetu at: {NYAYSETU_URL}"
+        send_text_message(wa_id, msg)
 
-    return False
-# --- WEBHOOK CORE ------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# BOOKING FLOW
+# -----------------------------------------------------------------------------
+
+def generate_next_7_days():
+    days = []
+    today = datetime.now().date()
+    for i in range(7):
+        d = today + timedelta(days=i)
+        title = d.strftime("%a, %d %b")  # Thu, 04 Dec
+        days.append((d.isoformat(), title))
+    return days
+
+
+def start_booking_flow(user: dict):
+    wa_id = user["user_id"]
+    lang = user.get("language", "en")
+
+    user["state"] = "booking_date"
+    user["pending_date"] = None
+    user["pending_time"] = None
+    save_user(user)
+
+    if lang == "hi":
+        msg = "📅 Kripya aapko convenient date select kijiye:"
+    elif lang == "mr":
+        msg = "📅 कृपया तुमच्यासाठी सोयीची तारीख निवडा:"
+    else:
+        msg = "📅 Please select your convenient date:"
+
+    rows = []
+    for iso_date, title in generate_next_7_days():
+        rows.append({"id": f"DATE_{iso_date}", "title": title})
+
+    sections = [{"title": "Available Dates", "rows": rows}]
+    send_list_message(wa_id, msg, sections)
+
+
+def handle_date_selected(user: dict, date_id: str):
+    wa_id = user["user_id"]
+    lang = user.get("language", "en")
+
+    iso_date = date_id.replace("DATE_", "", 1)
+    user["pending_date"] = iso_date
+    user["state"] = "booking_time"
+    save_user(user)
+
+    if lang == "hi":
+        msg = f"Date selected: {iso_date}\nAb time slot choose kijiye:"
+    elif lang == "mr":
+        msg = f"तारीख निवडली: {iso_date}\nआता वेळ स्लॉट निवडा:"
+    else:
+        msg = f"Date selected: {iso_date}\nNow please choose your preferred time slot:"
+
+    sections = [
+        {
+            "title": "Time Slot",
+            "rows": [
+                {"id": "TIME_MORNING", "title": "🌅 Morning"},
+                {"id": "TIME_AFTERNOON", "title": "🌞 Afternoon"},
+                {"id": "TIME_EVENING", "title": "🌙 Evening"},
+            ],
+        }
+    ]
+    send_list_message(wa_id, msg, sections)
+
+
+def handle_time_selected(user: dict, time_id: str):
+    wa_id = user["user_id"]
+    lang = user.get("language", "en")
+
+    slot_map = {
+        "TIME_MORNING": "Morning",
+        "TIME_AFTERNOON": "Afternoon",
+        "TIME_EVENING": "Evening",
+    }
+    slot = slot_map.get(time_id, "Preferred time")
+
+    date_str = user.get("pending_date") or "your chosen date"
+
+    if lang == "hi":
+        msg = (
+            f"Thank you! Aapki consultation request note kar li gayi hai.\n"
+            f"Date: {date_str}\nTime: {slot}\n\n"
+            "NyaySetu team aapse confirm karne ke liye contact karegi."
+        )
+    elif lang == "mr":
+        msg = (
+            f"धन्यवाद! तुमची consultation विनंती नोंदवली गेली आहे.\n"
+            f"दिनांक: {date_str}\nवेळ: {slot}\n\n"
+            "NyaySetu टीम तुम्हाला पुष्टीसाठी संपर्क करेल."
+        )
+    else:
+        msg = (
+            "Thank you! Your consultation request has been noted.\n"
+            f"Date: {date_str}\nTime: {slot}\n\n"
+            "The NyaySetu team will contact you to confirm your slot."
+        )
+
+    send_text_message(wa_id, msg)
+
+    # Reset booking state but keep language & free_count
+    user["state"] = "chatting"
+    user["pending_date"] = None
+    user["pending_time"] = slot
+    save_user(user)
+
+
+# -----------------------------------------------------------------------------
+# LEGAL REPLY FLOW
+# -----------------------------------------------------------------------------
+
+def handle_legal_question(user: dict, text_body: str):
+    wa_id = user["user_id"]
+
+    # Check free limit
+    free_count = user.get("free_count", 0)
+    if free_count >= FREE_ANSWER_LIMIT:
+        logging.info(f"User {wa_id} reached free limit ({free_count}). Showing CTA.")
+        send_free_limit_menu(user)
+        user["state"] = "limit_reached"
+        save_user(user)
+        return
+
+    # Typing + wait message
+    try:
+        # If your whatsapp_service has send_typing you can add it there.
+        # Here we just send wait text.
+        send_wait_message(user)
+    except Exception as e:
+        logging.warning(f"Wait message failed: {e}")
+
+    # Detect language + category (for logging / future)
+    try:
+        lang_detected = detect_language(text_body)
+        category = detect_category(text_body)
+        logging.info(f"Lang={lang_detected}, Category={category}")
+    except Exception as e:
+        logging.error(f"Language/category detection failed: {e}")
+        lang_detected = user.get("language", "en")
+        category = "other"
+
+    # Generate legal reply
+    try:
+        reply = generate_legal_reply(
+            text_body,
+            language=lang_detected,
+            category=category,
+            style="short",  # your Q1: A (short & simple)
+        )
+    except Exception as e:
+        logging.error(f"OpenAI error: {e}")
+        fallback = (
+            "I'm unable to generate a proper legal explanation right now.\n"
+            f"For urgent help, please call NyaySetu on {NYAYSETU_PHONE} "
+            "or consult a qualified advocate."
+        )
+        send_text_message(wa_id, fallback)
+        return
+
+    # Send reply
+    send_text_message(wa_id, reply)
+
+    # Update free count & history
+    user["free_count"] = free_count + 1
+    user["state"] = "chatting"
+    history = user.get("history", [])
+    history.append({"q": text_body, "a": reply, "ts": datetime.utcnow().isoformat()})
+    # keep last 30
+    user["history"] = history[-30:]
+    save_user(user)
+
+
+# -----------------------------------------------------------------------------
+# MESSAGE ROUTING
+# -----------------------------------------------------------------------------
+
+def is_greeting(text: str) -> bool:
+    t = text.strip().lower()
+    return t in {"hi", "hello", "hii", "hey", "helo", "hlo", "hy", "hello nyaysetu"}
+
+
+def handle_text_message(user: dict, text_body: str):
+    wa_id = user["user_id"]
+    raw = text_body
+    text_body = text_body.strip()
+    logging.info(f"Parsed text_body='{text_body}', raw_text_body='{raw}'")
+
+    # Restart flow on greeting
+    if is_greeting(text_body):
+        user["state"] = "awaiting_language"
+        user["language"] = None
+        user["free_count"] = 0
+        user["history"] = []
+        user["pending_date"] = None
+        user["pending_time"] = None
+        save_user(user)
+        send_welcome_and_language_buttons(wa_id, user.get("case_id"))
+        return
+
+    state = user.get("state", "idle")
+
+    # If we are waiting for language but user typed it instead of pressing button
+    if state in {"idle", "awaiting_language"} and user.get("language") is None:
+        lower = text_body.lower()
+        if "english" in lower or "eng" == lower:
+            user["language"] = "en"
+        elif "hinglish" in lower or "hindi" in lower:
+            user["language"] = "hi"
+        elif "marathi" in lower or "मराठी" in lower:
+            user["language"] = "mr"
+
+        if user.get("language") is None:
+            # Ask again properly with buttons
+            send_welcome_and_language_buttons(wa_id, user.get("case_id"))
+            user["state"] = "awaiting_language"
+            save_user(user)
+            return
+
+        # Got language from text
+        user["state"] = "awaiting_issue"
+        save_user(user)
+        send_ask_issue_message(user)
+        return
+
+    # Handle booking-related manual text (very basic)
+    if state == "booking_date":
+        # User typed a date instead of selecting; just ask to use menu
+        msg = "Please select a date from the list above by tapping it."
+        send_text_message(wa_id, msg)
+        return
+
+    if state == "booking_time":
+        msg = "Please select a time slot from the list above by tapping it."
+        send_text_message(wa_id, msg)
+        return
+
+    # Limit state: any further legal question → show menu again
+    if state == "limit_reached":
+        send_free_limit_menu(user)
+        return
+
+    # Normal legal Q&A
+    if user.get("language") is None:
+        # Safety: if somehow language lost
+        user["state"] = "awaiting_language"
+        save_user(user)
+        send_welcome_and_language_buttons(wa_id, user.get("case_id"))
+        return
+
+    handle_legal_question(user, text_body)
+
+
+def handle_button_reply(user: dict, button_id: str):
+    wa_id = user["user_id"]
+    logging.info(f"Button reply from {wa_id}: {button_id}")
+
+    if button_id.startswith("lang_"):
+        lang = button_id.replace("lang_", "", 1)
+        if lang not in {"en", "hi", "mr"}:
+            lang = "en"
+        user["language"] = lang
+        user["state"] = "awaiting_issue"
+        save_user(user)
+        send_ask_issue_message(user)
+        return
+
+    # Backward compatibility: 'book' id from older flows
+    if button_id in {"book", "cta_book"}:
+        handle_cta_selection(user, "cta_book")
+        return
+
+
+def handle_list_reply(user: dict, row_id: str):
+    wa_id = user["user_id"]
+    logging.info(f"List reply from {wa_id}: {row_id}")
+
+    # Booking date
+    if row_id.startswith("DATE_"):
+        handle_date_selected(user, row_id)
+        return
+
+    # Booking time
+    if row_id.startswith("TIME_"):
+        handle_time_selected(user, row_id)
+        return
+
+    # CTA menu
+    if row_id.startswith("cta_"):
+        handle_cta_selection(user, row_id)
+        return
+
+
+# -----------------------------------------------------------------------------
+# WEBHOOK ENDPOINTS
+# -----------------------------------------------------------------------------
+
+@app.route("/webhook", methods=["GET"])
+def verify():
+    mode = request.args.get("hub.mode")
+    token = request.args.get("hub.verify_token")
+    challenge = request.args.get("hub.challenge")
+
+    if mode == "subscribe" and token == VERIFY_TOKEN:
+        logging.info("Webhook verified successfully.")
+        return challenge, 200
+
+    logging.warning("Webhook verification failed.")
+    return "Verification failed", 403
+
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
-    logging.info(f"Incoming payload: {data}")
+    logging.info(f"Incoming payload: {json.dumps(data, ensure_ascii=False)}")
 
-    # Extract message or button/list payload
-    try:
-        entry = data["entry"][0]["changes"][0]["value"]
-    except Exception:
+    if not data or "entry" not in data:
         return "OK", 200
-
-    user_id = None
-    message = None
-    button_payload = None
-    list_payload = None
-
-    if "messages" in entry:
-        msg = entry["messages"][0]
-        user_id = msg.get("from")
-
-        # interactive button
-        if msg.get("type") == "interactive" and "button_reply" in msg["interactive"]:
-            button_payload = msg["interactive"]["button_reply"]["id"]
-
-        # interactive list
-        if msg.get("type") == "interactive" and "list_reply" in msg["interactive"]:
-            list_payload = msg["interactive"]["list_reply"]["id"]
-
-        # normal text
-        if msg.get("type") == "text":
-            message = msg["text"]["body"]
-
-    else:
-        return "OK", 200
-
-    if not user_id:
-        return "OK", 200
-
-    # Fetch / create user
-    user = get_user(user_id)
-    if user is None:
-        user = create_user(user_id)
-        logging.info(f"New user registered: {user_id} → {user['case_id']}")
-        ask_language_menu(user)
-        return "OK", 200
-
-    # ----------------------------------------------------------------------
-    # Handle language selection buttons
-    # ----------------------------------------------------------------------
-    if button_payload and button_payload.startswith("lang_"):
-        set_language_from_button(user, button_payload)
-        return "OK", 200
-
-    # ----------------------------------------------------------------------
-    # Handle free-limit menu actions (after limit reached)
-    # ----------------------------------------------------------------------
-    if button_payload and button_payload.startswith("action_"):
-        if button_payload == "action_call":
-            send_call_button(user["user_id"], "📞 Tap to call NyaySetu now", "+917020030080")
-        elif button_payload == "action_book":
-            start_booking_flow(user)
-        elif button_payload == "action_notice":
-            send_text_message(user["user_id"], "📄 *Coming Soon*\nLegal notice service will be activated shortly.")
-        elif button_payload == "action_visit":
-            send_text_message(user["user_id"], "🌐 Visit us on https://nyaysetu.in/")
-        return "OK", 200
-
-    # ----------------------------------------------------------------------
-    # Booking list selection → choose time
-    # ----------------------------------------------------------------------
-    if list_payload:
-        if handle_booking_interactive(user, list_payload):
-            return "OK", 200
-
-    # ----------------------------------------------------------------------
-    # Booking button selection → confirm
-    # ----------------------------------------------------------------------
-    if button_payload and button_payload.startswith("TIME_"):
-        if handle_booking_interactive(user, button_payload):
-            return "OK", 200
-
-    # ----------------------------------------------------------------------
-    # If language not selected yet → always ask language
-    # ----------------------------------------------------------------------
-    if not user.get("language"):
-        ask_language_menu(user)
-        return "OK", 200
-
-    # ----------------------------------------------------------------------
-    # If booking session active & user sends text instead of interactive input
-    # ----------------------------------------------------------------------
-    if user.get("state") in ["booking_date", "booking_time"]:
-        send_text_message(user["user_id"], "⚠ Please select from the on-screen options to continue booking.")
-        return "OK", 200
-
-    # ----------------------------------------------------------------------
-    # Normal conversation mode
-    # ----------------------------------------------------------------------
-    msg = normalize_msg(message or "")
-
-    # Restart greeting
-    if is_greeting(msg):
-        user["state"] = "idle"
-        update_user(user)
-        ask_language_menu(user)
-        return "OK", 200
-
-    # If free limit reached → show plans screen
-    if is_free_limit_reached(user):
-        send_free_limit_menu(user)
-        return "OK", 200
-
-    # ----------------------------------------------------------------------
-    # LEGAL ANSWER FLOW (call GPT)
-    # ----------------------------------------------------------------------
-    lang = get_lang(user)
-    send_wait_message(user["user_id"], lang)
-    send_typing_indicator(user["user_id"])
 
     try:
-        answer = get_legal_answer(message, lang)
+        entry = data["entry"][0]
+        change = entry["changes"][0]
+        value = change["value"]
+
+        if "messages" not in value:
+            # Status updates etc.
+            return "OK", 200
+
+        message = value["messages"][0]
+        wa_id = message["from"]
+        contacts = value.get("contacts", [])
+        name = contacts[0]["profile"]["name"] if contacts else None
+
+        user = get_or_create_user(wa_id, name)
+
+        msg_type = message.get("type")
+
+        if msg_type == "text":
+            text_body = message["text"]["body"]
+            handle_text_message(user, text_body)
+
+        elif msg_type == "interactive":
+            interactive = message["interactive"]
+            itype = interactive.get("type")
+
+            if itype == "button_reply":
+                button_id = interactive["button_reply"]["id"]
+                handle_button_reply(user, button_id)
+
+            elif itype == "list_reply":
+                row_id = interactive["list_reply"]["id"]
+                handle_list_reply(user, row_id)
+
+        # Ignore other message types silently
     except Exception as e:
-        logging.error(f"OpenAI error: {e}")
-        send_text_message(user["user_id"], "⚠ There was an issue fetching the legal info. Please try again.")
-        return "OK", 200
-
-    send_text_message(user["user_id"], answer)
-    increment_counter(user)
-
-    # After sending answer, if limit reached on this exact reply → show menu
-    if is_free_limit_reached(user):
-        time.sleep(1)
-        send_free_limit_menu(user)
+        logging.exception(f"Error handling webhook: {e}")
 
     return "OK", 200
-# --- SAFETY: FALLBACKS ------------------------------------------------------
-
-@app.errorhandler(Exception)
-def handle_exception(e):
-    logging.error(f"Server Error: {e}")
-    return "OK", 200
 
 
-# --- ROOT ROUTES FOR RENDER HEALTH CHECK ------------------------------------
+# -----------------------------------------------------------------------------
+# ROOT & DEBUG
+# -----------------------------------------------------------------------------
 
 @app.route("/", methods=["GET"])
 def home():
-    return {"status": "NyaySetu Legal Bot Running", "version": "app10"}, 200
+    return {"status": "NyaySetu Legal Bot Running", "version": "app11"}, 200
 
-
-# --- DEBUG TRIGGER (Optional) -----------------------------------------------
 
 @app.route("/reset/<user_id>", methods=["GET"])
 def reset_user(user_id):
-    """Manual reset via URL only for testing."""
+    """Manual reset via URL (for testing only)."""
     user = get_user(user_id)
     if not user:
         return {"error": "user_not_found"}, 404
     user["state"] = "idle"
     user["language"] = None
     user["free_count"] = 0
-    update_user(user)
+    user["history"] = []
+    user["pending_date"] = None
+    user["pending_time"] = None
+    save_user(user)
     return {"reset": "ok"}, 200
-# --- START SERVER -----------------------------------------------------------
+
+
+# -----------------------------------------------------------------------------
+# START SERVER (for local / Render)
+# -----------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))   # Render default dynamic port
+    port = int(os.environ.get("PORT", 10000))
     print(f"🚀 NyaySetu Legal Bot Server started on port {port}")
     app.run(host="0.0.0.0", port=port)
-
-
