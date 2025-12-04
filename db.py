@@ -1,58 +1,77 @@
 import json
 import os
+from datetime import datetime
+from threading import Lock
 
 DB_FILE = "users.json"
-
-# Ensure DB file exists
-if not os.path.exists(DB_FILE):
-    with open(DB_FILE, "w") as f:
-        json.dump({}, f)
+db_lock = Lock()     # Prevents simultaneous writes (Render safety)
 
 
 def load_db():
-    with open(DB_FILE, "r") as f:
+    """Load JSON DB, create file if missing."""
+    if not os.path.exists(DB_FILE):
+        with open(DB_FILE, "w", encoding="utf-8") as f:
+            json.dump({}, f)
+    with open(DB_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def save_db(data):
-    with open(DB_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+    """Store JSON DB safely."""
+    with db_lock:
+        with open(DB_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
 
 
-def get_user(user_id: str):
-    """Return stored user from DB or None."""
-    db = load_db()
-    return db.get(user_id)
+def get_user(phone):
+    users = load_db()
+    return users.get(phone)
 
 
-def create_user(user_id: str):
-    """Insert new user and return the created record."""
-    db = load_db()
-    case_id = generate_case_id()
-    user = {
-        "user_id": user_id,
+def create_user(phone, case_id):
+    """Register a new user structure when chat starts."""
+    users = load_db()
+    users[phone] = {
+        "user_id": phone,
         "case_id": case_id,
-        "state": "idle",
+        "state": "awaiting_language",   # new user always receives language selector first
         "language": None,
         "free_count": 0,
+        "messages": []                  # store last 10 chat messages
     }
-    db[user_id] = user
-    save_db(db)
-    return user
+    save_db(users)
+    return users[phone]
 
 
-def update_user(user: dict):
-    """Update a stored user row."""
-    db = load_db()
-    db[user["user_id"]] = user
-    save_db(db)
-    return user
+def update_user(phone, data: dict):
+    """Update multiple fields in user profile."""
+    users = load_db()
+    if phone not in users:
+        return
+    users[phone].update(data)
+    save_db(users)
 
 
-# ----------- Case ID Generator (short + unique) -----------------
+def add_message(phone, role, message):
+    """
+    Adds one chat record:
+    role = "user" or "bot"
+    Only last 10 messages are retained.
+    """
+    users = load_db()
+    user = users.get(phone)
+    if not user:
+        return
 
-def generate_case_id():
-    import random
-    import string
-    suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-    return f"NS-{suffix}"
+    if "messages" not in user:
+        user["messages"] = []
+
+    user["messages"].append({
+        "role": role,
+        "message": message,
+        "timestamp": datetime.utcnow().isoformat()
+    })
+
+    user["messages"] = user["messages"][-10:]   # keep only last 10
+
+    save_db(users)
