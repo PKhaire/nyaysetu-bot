@@ -1,4 +1,3 @@
-# models.py
 from sqlalchemy import Column, String, Integer, DateTime, Boolean
 from datetime import datetime
 from db import Base
@@ -18,6 +17,7 @@ class User(Base):
     selected_time = Column(String, nullable=True)
     payment_done = Column(Boolean, default=False)
 
+
 class Booking(Base):
     __tablename__ = "bookings"
 
@@ -27,3 +27,13 @@ class Booking(Base):
     time = Column(String, nullable=False)
     payment_status = Column(String, default="pending")
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_whatsapp_id = Column(String, nullable=False)   # WA number
+    direction = Column(String, nullable=False)          # "user" or "bot"
+    text = Column(String, nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow)
