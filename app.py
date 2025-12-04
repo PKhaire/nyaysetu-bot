@@ -38,15 +38,14 @@ logging.basicConfig(level=logging.INFO)
 # Make sure tables exist
 Base.metadata.create_all(bind=engine)
 
-# Single shared DB session (simple pattern, OK for small app on Render)
+# Single shared DB session (OK for small app)
 db = SessionLocal()
 
-# ---------------- CONSTANTS ----------------
+# ---------------- CONSTANTS & TEXTS ----------------
 
 TYPING_DELAY = TYPING_DELAY_SECONDS
-CONSULT_FEE_RS = 199  # must match your PAYMENT_BASE_URL logic
+CONSULT_FEE_RS = 199  # match PAYMENT_BASE_URL in config.py
 
-# Language and flow texts
 WELCOME_BASE = (
     "👋 Welcome to *NyaySetu — The Bridge To Justice*.\n\n"
     "Your Case ID: *{case_id}*\n\n"
@@ -67,11 +66,11 @@ INTRO_SUGGESTIONS = [
     {"id": "business", "title": "💼 Business / Work"},
 ]
 
-FREE_LIMIT = {
+FREE_LIMIT_TEXT = {
     "English": (
         "You’ve reached your free answer limit. 🙏\n\n"
         "To get more detailed help and speak with a verified lawyer, "
-        "please book a consultation."
+        "please book a consultation call."
     ),
     "Hindi": (
         "Aapne apne free jawab ki seema poori kar li hai. 🙏\n\n"
@@ -90,8 +89,11 @@ FREE_LIMIT = {
 
 WAIT_MESSAGE = "🧠 Gathering the correct legal information…\nPlease wait a moment."
 
-# Booking state in memory: {whatsapp_id: {"date": "YYYY-MM-DD", "step": "awaiting_time"}}
-pending_booking_state = {}
+BOOK_CTA_EN = (
+    "📞 *Book a 45-minute call with a verified lawyer* for just "
+    f"*₹{CONSULT_FEE_RS}*.\n\n"
+    "I’ll first confirm a suitable date & time, then share a secure payment link."
+)
 
 TIME_SLOTS = {
     "TIME_morning": ("Morning", "10 AM – 1 PM"),
@@ -99,61 +101,51 @@ TIME_SLOTS = {
     "TIME_evening": ("Evening", "4 PM – 7 PM"),
 }
 
-GREETING_KEYWORDS = {
-    "hi",
-    "hello",
-    "hey",
-    "hola",
-    "namaste",
-    "namaskar",
-    "good morning",
-    "good evening",
-    "good afternoon",
-}
-
+GREETING_KEYWORDS = {"hi", "hello", "hey", "namaste", "namaskar", "hi nyaysetu"}
 COMMAND_KEYWORDS = {
     "book",
-    "booking",
+    "book call",
     "consult",
     "consultation",
-    "appointment",
-    "📅 book consultation",
-    "📞 speak to lawyer",
-    "📄 get draft notice",
-    "call",
-    "draft",
-    "restart",
-    "start",
+    "talk to lawyer",
+    "call lawyer",
 }
+TIME_COMMANDS = set(TIME_SLOTS.keys())
 
-TIME_COMMANDS = {"time_morning", "time_afternoon", "time_evening"}
+# In-memory booking state: {whatsapp_id: {"date": "YYYY-MM-DD", "step": "await_time"}}
+pending_booking_state = {}
 
 
-# ---------------- HELPER FUNCTIONS ----------------
+# ---------------- SMALL HELPERS ----------------
 
-def register_user(wa_id: str) -> User:
-    """
-    Find or create a user by whatsapp_id.
-    """
+def generate_case_id() -> str:
+    """Short, user-friendly Case ID."""
+    suffix = uuid.uuid4().hex[:6].upper()
+    return f"NS-{suffix}"
+
+
+def get_or_create_user(wa_id: str) -> User:
     user = db.query(User).filter_by(whatsapp_id=wa_id).first()
     if user:
         return user
-
-    case_id = f"NS-{uuid.uuid4().hex[:8].upper()}"
     user = User(
         whatsapp_id=wa_id,
-        case_id=case_id,
+        case_id=generate_case_id(),
         language="English",
     )
     db.add(user)
     db.commit()
-    logging.info(f"New user registered: {wa_id} → {case_id}")
+    db.refresh(user)
     return user
 
 
-def store_message(wa_id: str, direction: str, text: str):
-    msg = Conversation(user_whatsapp_id=wa_id, direction=direction, text=text)
-    db.add(msg)
+def log_message(wa_id: str, direction: str, text: str):
+    conv = Conversation(
+        user_whatsapp_id=wa_id,
+        direction=direction,
+        text=text,
+    )
+    db.add(conv)
     db.commit()
 
 
@@ -165,24 +157,12 @@ def user_message_count(wa_id: str) -> int:
     )
 
 
-def get_latest_booking_status(wa_id: str):
-    b = (
-        db.query(Booking)
-        .filter_by(user_whatsapp_id=wa_id)
-        .order_by(Booking.created_at.desc())
-        .first()
-    )
-    if not b:
-        return None
-    return "confirmed" if b.confirmed else "pending"
-
-
 def count_legal_questions(wa_id: str) -> int:
     """
-    Count only 'real' user legal questions:
+    Count only 'real' legal questions:
     - ignore greetings
-    - ignore commands (book, call, etc.)
-    - ignore DATE_..., TIME_... selections
+    - ignore booking commands
+    - ignore date/time selections
     """
     msgs = (
         db.query(Conversation)
@@ -210,15 +190,14 @@ def count_legal_questions(wa_id: str) -> int:
 
 def parse_date_from_text(text: str):
     """
-    Convert variants like 'DATE_2025-12-04' or '04 Dec' etc. into 'YYYY-MM-DD'.
-    Returns None if parsing fails.
+    Convert values like 'DATE_2025-12-04' or '04 Dec' into 'YYYY-MM-DD'.
     """
     if not text:
         return None
 
     text = text.strip()
 
-    # Direct DATE_YYYY-MM-DD format
+    # Direct format: DATE_YYYY-MM-DD
     if text.upper().startswith("DATE_"):
         return text[5:]
 
@@ -251,7 +230,6 @@ def parse_date_from_text(text: str):
 def send_list_dates(to, days=7):
     """
     Send WhatsApp interactive list for next `days` days.
-    Uses direct Graph API call (simple helper).
     """
     from config import WHATSAPP_PHONE_ID, WHATSAPP_ACCESS_TOKEN
 
@@ -300,6 +278,18 @@ def send_list_dates(to, days=7):
         logging.error("Error sending date list: %s", e)
 
 
+def language_from_id(btn_id: str) -> str:
+    if btn_id == "lang_hi":
+        return "Hindi"
+    if btn_id == "lang_hinglish":
+        return "Hinglish"
+    return "English"
+
+
+def get_free_limit_text(lang: str) -> str:
+    return FREE_LIMIT_TEXT.get(lang, FREE_LIMIT_TEXT["English"])
+
+
 # ---------------- WEBHOOK VERIFY (GET) ----------------
 
 @app.route("/webhook", methods=["GET"])
@@ -327,273 +317,247 @@ def handle_whatsapp():
     changes = (entry.get("changes") or [None])[0] or {}
     value = changes.get("value") or {}
 
-    # Status updates (sent, delivered, read) – just ACK quickly
-    if value.get("statuses"):
+    # Handle status callbacks (delivered, read, etc.) – ignore for now
+    if "statuses" in value and not value.get("messages"):
         return jsonify({"status": "ok"}), 200
 
     messages = value.get("messages") or []
     if not messages:
-        return jsonify({"status": "ignored"}), 200
+        return jsonify({"status": "no_messages"}), 200
 
     msg = messages[0]
-    wa_from = msg.get("from")
-    msg_type = msg.get("type")
+    wa_id = None
+    text_body = None
 
-    # Extract logical text_body from normal text or interactive reply
-    text_body = ""
-    if msg_type == "text":
-        text_body = (msg.get("text") or {}).get("body", "")
-    elif msg_type == "interactive":
-        interactive = msg.get("interactive") or {}
-        if interactive.get("type") == "button_reply":
-            text_body = (interactive.get("button_reply") or {}).get("id", "")
-        elif interactive.get("type") == "list_reply":
-            text_body = (interactive.get("list_reply") or {}).get("id", "")
-    else:
-        return jsonify({"status": "ignored_type"}), 200
+    contacts = value.get("contacts") or []
+    if contacts:
+        wa_id = contacts[0].get("wa_id")
+
+    # Interactive button or list reply
+    if msg.get("type") == "interactive":
+        interactive = msg.get("interactive", {})
+        itype = interactive.get("type")
+        if itype == "button_reply":
+            button_reply = interactive.get("button_reply", {})
+            text_body = button_reply.get("id") or button_reply.get("title")
+        elif itype == "list_reply":
+            list_reply = interactive.get("list_reply", {})
+            text_body = list_reply.get("id") or list_reply.get("title")
+    elif msg.get("type") == "text":
+        text_body = (msg.get("text") or {}).get("body")
 
     text_body = (text_body or "").strip()
     logging.info("Parsed text_body='%s'", text_body)
 
+    if not wa_id:
+        return jsonify({"status": "missing_wa_id"}), 200
+
+    user = get_or_create_user(wa_id)
+    log_message(wa_id, "user", text_body)
+
+    # ---------------- GREETING & ONBOARDING ----------------
+
+    lower = text_body.lower()
+
+    is_new_user = user_message_count(wa_id) <= 1
+    if is_new_user or lower in GREETING_KEYWORDS or lower in {"start", "restart"}:
+        welcome = WELCOME_BASE.format(case_id=user.case_id)
+        send_text(wa_id, welcome)
+        send_buttons(wa_id, "Select your language:", LANGUAGE_BUTTONS)
+        return jsonify({"status": "welcome"}), 200
+
+    # ---------------- LANGUAGE SELECTION ----------------
+
+    if text_body.startswith("lang_"):
+        lang = language_from_id(text_body)
+        user.language = lang
+        db.commit()
+
+        # Short confirmation + ask for issue with light suggestions
+        if lang == "Hindi":
+            msg = (
+                "✅ भाषा चुनी गई: हिंदी.\n\n"
+                "कृपया अपना कानूनी सवाल हिंदी में लिखिए.\n"
+                "उदाहरण: FIR, परिवार, संपत्ति, पैसा, बिज़नेस…"
+            )
+        elif lang == "Hinglish":
+            msg = (
+                "✅ Language set: Hinglish.\n\n"
+                "Apna legal sawal Hinglish mein likhiye.\n"
+                "Example: FIR, family, property, money, business…"
+            )
+        else:
+            msg = (
+                "✅ Language set: English.\n\n"
+                "Please type your legal issue in English.\n"
+                "Example: FIR, family, property, money, business…"
+            )
+
+        send_text(wa_id, msg)
+        return jsonify({"status": "language_set"}), 200
+
+    # ---------------- BOOKING FLOW ----------------
+
+    # If user is currently in booking state
+    state = pending_booking_state.get(wa_id)
+
+    # Step 1: user selects DATE (from list or manually)
+    if state and state.get("step") == "await_date":
+        chosen_date = parse_date_from_text(text_body)
+        if not chosen_date:
+            send_text(
+                wa_id,
+                "❗ I couldn't understand this date. Please select from the list "
+                "or type in format like '04 Dec' or '2025-12-04'.",
+            )
+            send_list_dates(wa_id)
+            return jsonify({"status": "booking_date_invalid"}), 200
+
+        pending_booking_state[wa_id]["date"] = chosen_date
+        pending_booking_state[wa_id]["step"] = "await_time"
+
+        # Ask for time slot
+        send_buttons(
+            wa_id,
+            f"📅 Selected date: *{chosen_date}*\n\n"
+            "Please select a convenient time slot:",
+            [
+                {"id": "TIME_morning", "title": "☀️ Morning (10 AM – 1 PM)"},
+                {"id": "TIME_afternoon", "title": "🌤 Afternoon (1 PM – 4 PM)"},
+                {"id": "TIME_evening", "title": "🌙 Evening (4 PM – 7 PM)"},
+            ],
+        )
+        return jsonify({"status": "booking_time_requested"}), 200
+
+    # Step 2: user selects TIME slot
+    if state and state.get("step") == "await_time" and text_body in TIME_SLOTS:
+        chosen_date = state.get("date")
+        slot_name, slot_window = TIME_SLOTS[text_body]
+
+        preferred_time = f"{chosen_date} — {slot_name} ({slot_window})"
+
+        # Finalize booking (creates OTP + payment link)
+        booking = create_booking_for_user(wa_id, preferred_time)
+
+        # Clear pending state
+        pending_booking_state.pop(wa_id, None)
+
+        # Send OTP + payment link
+        reply = (
+            "✅ Your consultation request is *almost confirmed*.\n\n"
+            f"📅 *Date & Time*: {preferred_time}\n"
+            f"💰 *Fees*: ₹{CONSULT_FEE_RS}\n"
+            f"🔐 *OTP for confirmation*: {booking.otp}\n\n"
+            f"💳 Please complete the payment using this secure link:\n{booking.payment_link}\n\n"
+            "After payment, our team will confirm the booking on WhatsApp.\n"
+            "You will also receive a reminder before the call. 📲"
+        )
+        send_text(wa_id, reply)
+        return jsonify({"status": "booking_created"}), 200
+
+    # If user explicitly asks to book now
+    if lower in COMMAND_KEYWORDS or "consultation" in lower or "advocate" in lower:
+        send_text(wa_id, BOOK_CTA_EN)
+        pending_booking_state[wa_id] = {"step": "await_date"}
+        send_list_dates(wa_id)
+        return jsonify({"status": "booking_flow_started"}), 200
+
+    # ---------------- FREE LIMIT CHECK ----------------
+
+    legal_count = count_legal_questions(wa_id)
+    if legal_count >= MAX_FREE_MESSAGES:
+        # Free limit reached → show booking CTA
+        free_msg = get_free_limit_text(user.language)
+        send_text(wa_id, free_msg)
+        send_text(wa_id, BOOK_CTA_EN)
+        pending_booking_state[wa_id] = {"step": "await_date"}
+        send_list_dates(wa_id)
+        return jsonify({"status": "free_limit_reached"}), 200
+
+    # ---------------- NORMAL LEGAL ANSWER FLOW ----------------
+
+    # Show wait message + typing indicator
+    send_text(wa_id, WAIT_MESSAGE)
+    send_typing_on(wa_id)
+    time.sleep(TYPING_DELAY)
+
+    # Language & category detection
+    lang = user.language or "English"
     try:
-        # Ensure user exists
-        user = register_user(wa_from)
-        lang_for_user = user.language or "English"
-
-        # Store user message
-        store_message(wa_from, "user", text_body)
-
-        lowered = text_body.lower()
-
-        # ---------- GREETING / START FLOW ----------
-        if lowered in GREETING_KEYWORDS or lowered in {"start", "restart", "hello", "hi"}:
-            welcome_text = WELCOME_BASE.format(case_id=user.case_id)
-            send_text(wa_from, welcome_text)
-            send_buttons(wa_from, "Select your language:", LANGUAGE_BUTTONS)
-            return jsonify({"status": "welcome"}), 200
-
-        # ---------- LANGUAGE SELECTION ----------
-        if text_body in {"lang_en", "lang_hi", "lang_hinglish"}:
-            if text_body == "lang_en":
-                user.language = "English"
-                body = "Please type your legal issue in English."
-            elif text_body == "lang_hi":
-                user.language = "Hindi"
-                body = "कृपया अपनी कानूनी समस्या हिंदी में लिखें।"
-            else:
-                user.language = "Hinglish"
-                body = "Please type your legal issue in simple Hinglish (Hindi in English letters)."
-
-            db.commit()
-            send_text(wa_from, body)
-
-            # Show quick category buttons
-            send_buttons(
-                wa_from,
-                "You can also choose a topic:",
-                INTRO_SUGGESTIONS,
-            )
-            return jsonify({"status": "language_set"}), 200
-
-        # ---------- BOOKING FLOW (BUTTON) ----------
-        if lowered in {"book", "book consultation", "📅 book consultation"}:
-            pending_booking_state[wa_from] = {"step": "awaiting_date"}
-            send_list_dates(wa_from)
-            return jsonify({"status": "booking_date_select"}), 200
-
-        # ---------- TIME SELECTION AFTER DATE ----------
-        if text_body.startswith("DATE_") or lowered.startswith("date_"):
-            date_str = parse_date_from_text(text_body)
-            if not date_str:
-                send_text(wa_from, "Sorry, I could not understand that date. Please select again.")
-                send_list_dates(wa_from)
-                return jsonify({"status": "date_error"}), 200
-
-            pending_booking_state[wa_from] = {"step": "awaiting_time", "date": date_str}
-
-            # Time slot buttons
-            send_buttons(
-                wa_from,
-                "Select a convenient time window:",
-                [
-                    {"id": "TIME_morning", "title": "☀️ Morning (10 AM – 1 PM)"},
-                    {"id": "TIME_afternoon", "title": "🌤 Afternoon (1 PM – 4 PM)"},
-                    {"id": "TIME_evening", "title": "🌙 Evening (4 PM – 7 PM)"},
-                ],
-            )
-            return jsonify({"status": "time_select"}), 200
-
-        if text_body in TIME_SLOTS:
-            state = pending_booking_state.get(wa_from)
-            if not state or state.get("step") != "awaiting_time":
-                send_text(wa_from, "Please choose a date first so we can schedule properly.")
-                send_list_dates(wa_from)
-                return jsonify({"status": "missing_date"}), 200
-
-            date_str = state["date"]
-            slot_name, slot_window = TIME_SLOTS[text_body]
-            preferred_time_text = f"{date_str} — {slot_name} ({slot_window})"
-
-            # Create booking using booking_service
-            booking = create_booking_for_user(wa_from, preferred_time_text)
-            payment_url = booking.payment_link
-            otp = booking.otp
-
-            lang = user.language or "English"
-            if lang == "Hindi":
-                msg_out = (
-                    "📝 धन्यवाद! Aapka session is date/time ke liye note ho gaya hai:\n"
-                    f"*{booking.preferred_time}*\n\n"
-                    f"💰 45-minute consultation ke liye kripya *₹{CONSULT_FEE_RS}* pay karein.\n"
-                    f"🔗 Payment Link: {payment_url}\n"
-                    f"🔐 OTP: *{otp}* (verify karne ke liye use ho sakta hai)\n\n"
-                    "Payment complete hote hi aapka appointment confirm ho jayega."
-                )
-            elif lang == "Hinglish":
-                msg_out = (
-                    "📝 Thank you! Aapka session is time ke liye note ho gaya hai:\n"
-                    f"*{booking.preferred_time}*\n\n"
-                    f"💰 45-minute legal consultation ke liye kripya *₹{CONSULT_FEE_RS}* pay karein.\n"
-                    f"🔗 Payment Link: {payment_url}\n"
-                    f"🔐 OTP: *{otp}*\n\n"
-                    "Payment complete hote hi aapka appointment confirm ho jayega."
-                )
-            else:
-                msg_out = (
-                    "📝 Thank you. We’ve scheduled your session for:\n"
-                    f"*{booking.preferred_time}*\n\n"
-                    f"💰 To confirm your 45-minute legal expert call, please pay *₹{CONSULT_FEE_RS}*.\n"
-                    f"🔗 Payment Link: {payment_url}\n"
-                    f"🔐 OTP: *{otp}*\n\n"
-                    "Once payment is completed, your appointment will be confirmed "
-                    "and a verified legal expert will call you within that window."
-                )
-
-            send_text(wa_from, msg_out)
-            pending_booking_state.pop(wa_from, None)
-            return jsonify({"status": "booking_created"}), 200
-
-        # ---------- FREE MESSAGE LIMIT ----------
-        booking_status = get_latest_booking_status(wa_from)
-        legal_q_count = count_legal_questions(wa_from)
-
-        if booking_status != "confirmed" and legal_q_count >= MAX_FREE_MESSAGES:
-            limit_msg = FREE_LIMIT.get(lang_for_user, FREE_LIMIT["English"])
-            send_text(wa_from, limit_msg)
-            return jsonify({"status": "limit_reached"}), 200
-
-        # ---------- NORMAL LEGAL AI REPLY ----------
         detected_lang = detect_language(text_body)
-        category = detect_category(text_body)
-        logging.info("Lang=%s, Category=%s", detected_lang, category)
-
-        # Show typing & wait message
-        send_typing_on(wa_from)
-        send_text(wa_from, WAIT_MESSAGE)
-        time.sleep(TYPING_DELAY)
-
-        reply = generate_legal_reply(text_body, detected_lang, category)
-        send_typing_off(wa_from)
-
-        send_text(wa_from, reply)
-        store_message(wa_from, "bot", reply)
-
-        # Suggest next steps (if still in free range and not confirmed booking)
-        if booking_status != "confirmed" and legal_q_count < MAX_FREE_MESSAGES:
-            if detected_lang == "Marathi":
-                btn_body = "पुढे काय करायचे ते निवडा:"
-            elif detected_lang == "Hinglish":
-                btn_body = "Aap agla step choose kar sakte hain:"
-            elif detected_lang == "Hindi":
-                btn_body = "Aap agla step chun sakte hain:"
-            else:
-                btn_body = "You can also choose what to do next:"
-
-            send_buttons(
-                wa_from,
-                btn_body,
-                [
-                    {"id": "book", "title": "📅 Book Consultation"},
-                    {"id": "call", "title": "📞 Speak to Lawyer"},
-                    {"id": "draft", "title": "📄 Get Draft Notice"},
-                ],
-            )
-
-        return jsonify({"status": "answered"}), 200
-
+        if detected_lang:
+            lang = detected_lang
+            user.language = lang
+            db.commit()
     except Exception as e:
-        logging.exception("Webhook error")
-        return jsonify({"status": "error", "error": str(e)}), 500
+        logging.error("Language detection failed: %s", e)
+
+    try:
+        category = detect_category(text_body)
+    except Exception as e:
+        logging.error("Category detection failed: %s", e)
+        category = "other"
+
+    # Get legal reply from OpenAI
+    reply = generate_legal_reply(text_body, language=lang, category=category)
+
+    send_typing_off(wa_id)
+    send_text(wa_id, reply)
+    log_message(wa_id, "bot", reply)
+
+    return jsonify({"status": "answered", "language": lang, "category": category}), 200
 
 
-# ---------------- SIMPLE ADMIN DASHBOARD ----------------
+# ---------------- SIMPLE HEALTH / DEBUG ROUTES ----------------
 
-ADMIN_HTML = """
-<html>
-<head>
-  <title>NyaySetu Admin</title>
-  <style>
-    body { font-family: Arial; padding: 30px; }
-    table { border-collapse: collapse; width: 100%; margin-bottom: 40px; }
-    th, td { border: 1px solid #555; padding: 10px; font-size: 14px; }
-    th { background-color: #eee; }
-    h1 { margin-bottom: 30px; }
-  </style>
-</head>
-<body>
-  <h1>NyaySetu — Admin Dashboard</h1>
-
-  <h2>Users</h2>
-  <table>
-    <tr><th>WhatsApp</th><th>Case ID</th><th>Language</th><th>Created</th></tr>
-    {% for u in users %}
-    <tr>
-      <td>{{u.whatsapp_id}}</td>
-      <td>{{u.case_id}}</td>
-      <td>{{u.language}}</td>
-      <td>{{u.created_at}}</td>
-    </tr>
-    {% endfor %}
-  </table>
-
-  <h2>Bookings</h2>
-  <table>
-    <tr><th>WhatsApp</th><th>Preferred Time</th><th>Confirmed</th><th>Created</th></tr>
-    {% for b in bookings %}
-    <tr>
-      <td>{{b.user_whatsapp_id}}</td>
-      <td>{{b.preferred_time}}</td>
-      <td>{{"Yes" if b.confirmed else "No"}}</td>
-      <td>{{b.created_at}}</td>
-    </tr>
-    {% endfor %}
-  </table>
-</body>
-</html>
-"""
+@app.route("/", methods=["GET"])
+def index():
+    return render_template_string(
+        """
+        <h1>NyaySetu WhatsApp Bot</h1>
+        <p>Status: <b>OK</b></p>
+        <p>DB URL: {{ db_url }}</p>
+        """,
+        db_url=os.getenv("DATABASE_URL", "sqlite:///nyaysetu.db"),
+    )
 
 
-@app.route("/admin")
-def admin_dashboard():
-    pwd = request.args.get("pwd", "")
-    if pwd != ADMIN_PASSWORD:
+@app.route("/admin/conversations", methods=["GET"])
+def admin_conversations():
+    password = request.args.get("password")
+    if password != ADMIN_PASSWORD:
         return "Forbidden", 403
 
-    users = db.query(User).order_by(User.created_at.desc()).limit(200).all()
-    bookings = db.query(Booking).order_by(Booking.created_at.desc()).limit(200).all()
-    return render_template_string(ADMIN_HTML, users=users, bookings=bookings)
+    rows = (
+        db.query(Conversation)
+        .order_by(Conversation.timestamp.desc())
+        .limit(100)
+        .all()
+    )
+
+    html_rows = ""
+    for r in rows:
+        html_rows += (
+            f"<tr><td>{r.timestamp}</td>"
+            f"<td>{r.user_whatsapp_id}</td>"
+            f"<td>{r.direction}</td>"
+            f"<td>{r.text}</td></tr>"
+        )
+
+    html = f"""
+    <h1>Last 100 Conversations</h1>
+    <table border="1" cellpadding="4">
+      <tr>
+        <th>Time</th><th>WhatsApp ID</th><th>Direction</th><th>Text</th>
+      </tr>
+      {html_rows}
+    </table>
+    """
+    return html
 
 
-# ---------------- HEALTH CHECK ----------------
-
-@app.route("/health")
-def health():
-    return jsonify({"status": "ok", "time": datetime.utcnow().isoformat()})
-
-
-# ---------------- LOCAL DEV RUN ----------------
+# ---------------- MAIN ----------------
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    logging.info(f"Starting NyaySetu app on port {port}")
+    port = int(os.getenv("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
