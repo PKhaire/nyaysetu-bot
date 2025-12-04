@@ -1,3 +1,8 @@
+# Map config values to local constants used in the app
+VERIFY_TOKEN = WHATSAPP_VERIFY_TOKEN
+TYPING_DELAY = TYPING_DELAY_SECONDS
+# MAX_FREE_MESSAGES already comes from config
+
 import os
 import json
 import logging
@@ -5,7 +10,7 @@ from datetime import datetime, timedelta
 
 from flask import Flask, request
 
-from config import VERIFY_TOKEN
+from config import WHATSAPP_VERIFY_TOKEN, MAX_FREE_MESSAGES, TYPING_DELAY_SECONDS
 from db import get_user, create_user, update_user
 
 # Services
