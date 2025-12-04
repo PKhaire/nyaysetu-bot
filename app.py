@@ -187,21 +187,22 @@ TIME_SLOTS = {
 }
 
 # ---------------- MULTI-LANGUAGE WELCOME & LIMIT TEXT ----------------
+# Welcome: Style A (professional)
 WELCOME = {
     "English": (
         "👋 Welcome to NyaySetu — The Bridge To Justice.\n"
         "Your Case ID: {case}\n\n"
-        "Please select your preferred language to continue."
+        "Before we begin, please choose your preferred language 👇"
     ),
     "Hinglish": (
         "👋 NyaySetu mein swagat hai — The Bridge To Justice.\n"
         "Aapka Case ID: {case}\n\n"
-        "Kripya apni pasand ki bhasha select karein."
+        "Shuru karne se pehle, kripya apni pasand ki bhasha choose karein 👇"
     ),
     "Marathi": (
         "👋 न्यायसेतू मध्ये स्वागत — The Bridge To Justice.\n"
         "तुमचा केस आयडी: {case}\n\n"
-        "कृपया तुमची पसंतीची भाषा निवडा."
+        "सुरुवात करण्यापूर्वी, कृपया तुमची पसंतीची भाषा निवडा 👇"
     ),
 }
 
@@ -220,10 +221,11 @@ FREE_LIMIT = {
     ),
 }
 
+# Plain text language buttons (no emojis)
 LANGUAGE_BUTTONS = [
-    {"id": "lang_en", "title": "🇬🇧 English"},
-    {"id": "lang_hinglish", "title": "🇮🇳 Hinglish"},
-    {"id": "lang_marathi", "title": "🇮🇳 Marathi"},
+    {"id": "lang_en", "title": "English"},
+    {"id": "lang_hinglish", "title": "Hinglish"},
+    {"id": "lang_marathi", "title": "Marathi"},
 ]
 
 LIMIT_ACTION_BUTTONS = [
@@ -335,7 +337,9 @@ def create_booking(wa_id: str, preferred_time_text: str) -> Booking:
 
 def count_legal_bot_answers(wa_id: str) -> int:
     """
-    Count BOT replies that are likely legal answers (not welcome, not booking, not limit).
+    Count BOT replies that are likely legal answers / guidance.
+    We EXCLUDE only system / flow messages (welcome, language, booking, payment, limit).
+    Everything else is treated as a legal answer.
     """
     msgs = (
         db.query(Conversation)
@@ -344,33 +348,41 @@ def count_legal_bot_answers(wa_id: str) -> int:
         .all()
     )
     total = 0
+
+    skip_keywords = [
+        "welcome to nyaysetu",
+        "nyaysetu mein swagat hai",
+        "न्यायसेतू मध्ये स्वागत",
+        "select your preferred language",
+        "bhasha",
+        "भाषा",
+        "select your convenient date",
+        "कृपया दिनांक",
+        "date selected:",
+        "now choose a time slot",
+        "payment link",
+        "we’ve scheduled your session",
+        "we've scheduled your session",
+        "payment received successfully",
+        "consultation is confirmed",
+        "thank you for trusting nyaysetu",
+        "you have used your free legal answers",
+        "aapke free legal jawab",
+        "तुमचे मोफत कायदेशीर उत्तर पूर्ण झाले आहेत",
+        "choose an option below",
+    ]
+
     for m in msgs:
         t = (m.text or "").strip()
         if not t:
             continue
         low = t.lower()
 
-        # Skip system / non-legal messages
-        if "welcome to nyaysetu" in low:
-            continue
-        if "select your preferred language" in low or "bhasha" in low or "भाषा" in low:
-            continue
-        if "select your convenient date" in low or "कृपया दिनांक" in low:
-            continue
-        if "date selected" in low and "time slot" in low:
-            continue
-        if "we’ve scheduled your session" in low or "we've scheduled your session" in low:
-            continue
-        if "payment link" in low and "scheduled your session" in low:
-            continue
-        if "payment received successfully" in low or "consultation is confirmed" in low:
-            continue
-        if "you have used your free legal answers" in low or "free legal jawab" in low:
-            continue
-        if "choose an option below" in low:
+        # Skip non-legal / system messages
+        if any(k in low for k in skip_keywords):
             continue
 
-        # Everything else from bot is treated as a legal answer
+        # Everything else is a counted legal answer
         total += 1
 
     return total
@@ -444,6 +456,17 @@ def legal_reply(text: str, lang: str, category: str) -> str:
             return "Sorry, abhi proper answer generate nahi ho paya. Thodi der baad phir try karein."
         return "Sorry, I am unable to prepare a proper answer right now. Please try again in some time."
     return res
+
+
+# ---------------- WAIT MESSAGE (LANGUAGE-SPECIFIC) ----------------
+
+
+def get_wait_message(lang: str) -> str:
+    if lang == "Marathi":
+        return "🧠 योग्य कायदेशीर माहिती मिळवत आहे…\nकृपया थोडा वेळ प्रतीक्षा करा."
+    if lang == "Hinglish":
+        return "🧠 Sahi legal information check kar raha hoon…\nKripya thoda intezaar karein."
+    return "🧠 Gathering the correct legal information…\nPlease wait a moment."
 
 
 # ---------------- RAZORPAY PAYMENT LINK ----------------
@@ -554,7 +577,7 @@ def webhook():
 
             send_buttons(
                 wa_from,
-                "Please choose your preferred language:",
+                "Choose the language you are most comfortable with 👇",
                 LANGUAGE_BUTTONS,
             )
             return jsonify({"status": "ask_language"}), 200
@@ -643,9 +666,9 @@ def webhook():
                 wa_from,
                 f"📅 Date selected: *{date_str}*\n\nNow choose a time slot:",
                 [
-                    {"id": "TIME_morning", "title": "🌅 Morning (10 AM – 1 PM)"},
-                    {"id": "TIME_afternoon", "title": "🌞 Afternoon (1 PM – 4 PM)"},
-                    {"id": "TIME_evening", "title": "🌙 Evening (4 PM – 7 PM)"},
+                    {"id": "TIME_morning", "title": "Morning (10 AM – 1 PM)"},
+                    {"id": "TIME_afternoon", "title": "Afternoon (1 PM – 4 PM)"},
+                    {"id": "TIME_evening", "title": "Evening (4 PM – 7 PM)"},
                 ],
             )
             return jsonify({"status": "ask_time"}), 200
@@ -757,22 +780,21 @@ def webhook():
             t1 = (last_user_msgs[1].text or "").strip()
             if t0 and t0 == t1:
                 send_text(wa_from, "I’ve already answered this for you. Please check the previous message.")
-                return jsonify({"status": "duplicate"}), 0
+                return jsonify({"status": "duplicate"}), 200
 
         # ---------- NORMAL LEGAL AI REPLY (USES SELECTED LANGUAGE) ----------
         lang_for_user = normalize_language_name(user.language or "English")
         category = simple_detect_category(text_body)
         logging.info(f"Lang={lang_for_user}, Category={category}")
 
-        # ---------- SMART TYPING + BACKGROUND AI CALL ----------
-        # We'll run the AI call in a background thread while sending typing_on periodically.
+        # ---------- SMART TYPING + BACKGROUND AI CALL + WAIT MESSAGE ----------
         ai_result = {"text": None}
 
         def ai_worker():
             try:
                 ai_text = legal_reply(text_body, lang_for_user, category)
                 ai_result["text"] = ai_text
-            except Exception as e:
+            except Exception:
                 logging.exception("AI worker failed")
                 ai_result["text"] = None
 
@@ -781,21 +803,33 @@ def webhook():
 
         typing_on(wa_from)
         start_time = time.time()
-        sent_gathering_message = False
-        # while the AI thread runs, keep sending typing_on every 2 seconds and optionally send gathering msg after 4s
+        sent_wait_message = False
+
+        # While the AI thread runs, keep sending typing_on every ~1.5 seconds
+        # and send a wait message after ~3 seconds if still not ready.
         while thread.is_alive():
             elapsed = time.time() - start_time
-            # send gathering info after 4 seconds (once)
-            if not sent_gathering_message and elapsed > 4:
-                send_text(wa_from, "🧠 Gathering the correct legal information…\nPlease wait a moment.")
-                sent_gathering_message = True
-            # refresh typing indicator
+
+            if not sent_wait_message and elapsed > 3:
+                wait_msg = get_wait_message(lang_for_user)
+                send_text(wa_from, wait_msg)
+                sent_wait_message = True
+
             typing_on(wa_from)
-            time.sleep(2)  # wait a bit before checking again
+            time.sleep(1.5)
+
+            # Safety break after ~25 seconds to avoid hanging
+            if elapsed > 25:
+                break
 
         typing_off(wa_from)
 
-        reply = ai_result.get("text")
+        # If thread is still alive after safety break, we don't block further
+        if thread.is_alive():
+            reply = ai_result.get("text")
+        else:
+            reply = ai_result.get("text")
+
         if not reply:
             # fallback friendly message
             if lang_for_user == "Marathi":
