@@ -2,10 +2,12 @@ import os
 import logging
 import requests
 
-WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
-WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
+# Match the variable names you already have on Render
+WHATSAPP_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN")
+WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_ID")
 
 API_URL = f"https://graph.facebook.com/v17.0/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+
 HEADERS = {
     "Authorization": f"Bearer {WHATSAPP_TOKEN}",
     "Content-Type": "application/json"
@@ -14,12 +16,12 @@ HEADERS = {
 
 def call_whatsapp_api(payload):
     logging.info(f"WHATSAPP REQUEST: {payload}")
-    resp = requests.post(API_URL, headers=HEADERS, json=payload)
+    response = requests.post(API_URL, headers=HEADERS, json=payload)
     try:
-        logging.info(f"WHATSAPP RESPONSE: {resp.text}")
+        logging.info(f"WHATSAPP RESPONSE: {response.text}")
     except Exception:
         pass
-    return resp
+    return response
 
 
 def send_text(to, message):
@@ -27,14 +29,15 @@ def send_text(to, message):
         "messaging_product": "whatsapp",
         "to": to,
         "type": "text",
-        "text": {"body": message}
+        "text": {"body": message},
     }
     return call_whatsapp_api(payload)
 
 
 def send_buttons(to, text, buttons):
     """
-    buttons = [ { "id": "btn1", "title": "English" }, ... ]
+    buttons format:
+    [ { "id": "lang_en", "title": "English" }, ... ]
     """
     payload = {
         "messaging_product": "whatsapp",
@@ -48,8 +51,8 @@ def send_buttons(to, text, buttons):
                     {"type": "reply", "reply": {"id": b["id"], "title": b["title"]}}
                     for b in buttons
                 ]
-            }
-        }
+            },
+        },
     }
     return call_whatsapp_api(payload)
 
@@ -59,7 +62,7 @@ def send_typing_on(to):
         "messaging_product": "whatsapp",
         "to": to,
         "type": "action",
-        "action": {"typing": "on"}
+        "action": {"typing": "on"},
     }
     return call_whatsapp_api(payload)
 
@@ -69,6 +72,6 @@ def send_typing_off(to):
         "messaging_product": "whatsapp",
         "to": to,
         "type": "action",
-        "action": {"typing": "off"}
+        "action": {"typing": "off"},
     }
     return call_whatsapp_api(payload)
