@@ -1,77 +1,68 @@
-import os
-import logging
 import requests
+import logging
+from config import WHATSAPP_TOKEN
 
-# Match the variable names you already have on Render
-WHATSAPP_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN")
-WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_ID")
+API_URL = "https://graph.facebook.com/v20.0/me/messages"
 
-API_URL = f"https://graph.facebook.com/v17.0/{WHATSAPP_PHONE_NUMBER_ID}/messages"
-
-HEADERS = {
+headers = {
     "Authorization": f"Bearer {WHATSAPP_TOKEN}",
     "Content-Type": "application/json"
 }
 
 
-def call_whatsapp_api(payload):
-    logging.info(f"WHATSAPP REQUEST: {payload}")
-    response = requests.post(API_URL, headers=HEADERS, json=payload)
+def send_whatsapp(data):
     try:
-        logging.info(f"WHATSAPP RESPONSE: {response.text}")
-    except Exception:
-        pass
-    return response
+        r = requests.post(API_URL, json=data, headers=headers, timeout=10)
+        logging.info(f"WHATSAPP REQUEST: {data}")
+        logging.info(f"WHATSAPP RESPONSE: {r.text}")
+    except Exception as e:
+        logging.error(f"WhatsApp Error: {e}")
 
 
-def send_text(to, message):
-    payload = {
+def send_text(to, text):
+    send_whatsapp({
         "messaging_product": "whatsapp",
         "to": to,
         "type": "text",
-        "text": {"body": message},
-    }
-    return call_whatsapp_api(payload)
+        "text": {"body": text}
+    })
 
 
-def send_buttons(to, text, buttons):
-    """
-    buttons format:
-    [ { "id": "lang_en", "title": "English" }, ... ]
-    """
-    payload = {
+def send_buttons(to, body, buttons):
+    send_whatsapp({
         "messaging_product": "whatsapp",
         "to": to,
         "type": "interactive",
         "interactive": {
             "type": "button",
-            "body": {"text": text},
+            "body": {"text": body},
             "action": {
                 "buttons": [
-                    {"type": "reply", "reply": {"id": b["id"], "title": b["title"]}}
-                    for b in buttons
+                    {"type": "reply", "reply": {"id": btn[1], "title": btn[0]}}
+                    for btn in buttons
                 ]
-            },
-        },
-    }
-    return call_whatsapp_api(payload)
+            }
+        }
+    })
+
+
+def send_list_picker(to, title, body, rows):
+    send_whatsapp({
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "interactive",
+        "interactive": {
+            "type": "list",
+            "header": {"type": "text", "text": title},
+            "body": {"text": body},
+            "action": {"sections": [{"title": "Select", "rows": rows}]}
+        }
+    })
 
 
 def send_typing_on(to):
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "action",
-        "action": {"typing": "on"},
-    }
-    return call_whatsapp_api(payload)
+    send_whatsapp({"messaging_product": "whatsapp", "to": to, "type": "typing_on"})
 
 
 def send_typing_off(to):
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "action",
-        "action": {"typing": "off"},
-    }
-    return call_whatsapp_api(payload)
+    send_whatsapp({"messaging_product": "whatsapp", "to": to, "type": "typing_off"})
