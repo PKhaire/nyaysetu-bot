@@ -3,6 +3,7 @@ import uuid
 import time
 import logging
 from flask import Flask, request, jsonify
+
 from db import SessionLocal
 from models import User, Conversation, Booking
 from services.whatsapp_service import send_text, send_buttons, send_typing_on, send_typing_off
@@ -28,10 +29,10 @@ CATEGORY_PRICE = {
 CATEGORY_LABELS = {
     "police": "Police / FIR / Crime",
     "property": "Property / Land / Rental",
-    "money": "Money / Loan / Fraud / Cheating",
-    "family": "Family / Divorce / Domestic dispute",
-    "business": "Business / Contract / Company matters",
-    "other": "Other legal issue",
+    "money": "Money / Loan / Fraud",
+    "family": "Family / Divorce",
+    "business": "Business / Contracts",
+    "other": "Other legal issues",
 }
 
 LANGUAGE_BUTTONS = [
@@ -54,10 +55,9 @@ STATE_PORTALS = {
     "telangana": "https://tspolice.gov.in",
 }
 
-pending_booking_state = {}     # {wa_id: step progress}
-pending_followup_state = {}    # {wa_id: state selection}
-pending_rating_state = {}      # {wa_id: booking_id}
-followup_sent = set()          # users who already saw upsell
+pending_booking_state = {}
+pending_rating_state = {}
+followup_sent = set()
 
 
 def generate_case_id():
@@ -97,7 +97,7 @@ def count_bot(wa_id):
     return len(msgs)
 
 
-# --------------------------- ADMIN ENDPOINT ------------------------------------
+# -------------------- ADMIN: mark booking as completed -> request rating --------------------
 @app.post("/booking/mark_completed")
 def admin_mark_completed():
     token = request.args.get("token")
@@ -131,7 +131,7 @@ def admin_mark_completed():
     return {"status": "rating_requested"}
 
 
-# --------------------------- WHATSAPP VERIFICATION ------------------------------
+# -------------------- VERIFY WEBHOOK --------------------
 @app.get("/webhook")
 def verify():
     if request.args.get("hub.verify_token") == WHATSAPP_VERIFY_TOKEN:
@@ -139,18 +139,36 @@ def verify():
     return "Invalid", 403
 
 
-# --------------------------- MAIN BOT LOGIC -------------------------------------
+# -------------------- MAIN WHATSAPP BOT --------------------
 @app.post("/webhook")
 def webhook():
     payload = request.get_json(silent=True) or {}
-    value = payload["entry"][0]["changes"][0]["value"]
-    msg = value.get("messages", [{}])[0]
-    wa_id = value["contacts"][0]["wa_id"]
+    logging.info("INCOMING WHATSAPP PAYLOAD: %s", payload)
 
-    # extract text
+    try:
+        entry = payload.get("entry", [{}])[0]
+        changes = entry.get("changes", [{}])[0]
+        value = changes.get("value", {})
+    except Exception:
+        return jsonify({"status": "ignored"}), 200
+
+    # ⛔ ignore system events (delivery/read receipts etc)
+    if not value.get("messages"):
+        logging.info("No user message — system event ignored")
+        return jsonify({"status": "ignored"}), 200
+
+    msg = value["messages"][0]
+    contacts = value.get("contacts", [{}])
+    wa_id = contacts[0].get("wa_id")
+
+    if not wa_id:
+        logging.info("Missing wa_id — ignored")
+        return jsonify({"status": "ignored"}), 200
+
+    # extract message text
     if msg.get("type") == "interactive":
-        t = msg["interactive"]
-        text = t.get("button_reply", {}).get("id") or t.get("list_reply", {}).get("id", "")
+        inter = msg["interactive"]
+        text = inter.get("button_reply", {}).get("id") or inter.get("list_reply", {}).get("id", "")
     else:
         text = msg.get("text", {}).get("body", "")
     text = (text or "").strip()
@@ -158,7 +176,7 @@ def webhook():
     user = get_or_create_user(wa_id)
     log_msg(wa_id, "user", text)
 
-    # ⭐ 1) RATING FLOW
+    # ⭐ RATING MODE
     if wa_id in pending_rating_state:
         booking_id = pending_rating_state[wa_id]
         if text not in {"1", "2", "3", "4"}:
@@ -182,22 +200,19 @@ def webhook():
             )
         return {"status": "rating_done"}
 
-    # ⭐ 2) FREE NEW LAWYER AFTER BAD RATING
-    if text.lower() == "yes" and wa_id not in pending_booking_state and wa_id not in pending_followup_state:
-        send_text(
-            wa_id,
-            "Sure — I’ll arrange a call with a better matched lawyer.\n\nPlease reply with your preferred call time slot."
-        )
+    # ⭐ Free replacement lawyer request
+    if text.lower() == "yes" and wa_id not in pending_booking_state:
+        send_text(wa_id, "Sure — please reply with your preferred call time slot.")
         pending_booking_state[wa_id] = {"step": "await_time", "fee": 0, "category": "other"}
         return {"status": "rebook_free"}
 
-    # ⭐ 3) FIRST MESSAGE → LANGUAGE SELECTION
+    # ⭐ First message — show language buttons
     if count_bot(wa_id) == 0:
         send_text(wa_id, f"👋 Welcome to NyaySetu! Your Case ID: {user.case_id}")
         send_buttons(wa_id, "Select your preferred language 👇", LANGUAGE_BUTTONS)
         return {"status": "lang_select"}
 
-    # ⭐ 4) LANGUAGE UPDATE
+    # ⭐ Language change
     if text.startswith("lang_"):
         lang = "English" if text == "lang_en" else ("Hinglish" if text == "lang_hinglish" else "Marathi")
         db = SessionLocal()
@@ -207,14 +222,14 @@ def webhook():
         send_text(wa_id, f"Language updated to {lang}. Please type your legal issue.")
         return {"status": "lang_set"}
 
-    # ⭐ 5) CATEGORY SELECTION — if user asks to speak to lawyer
+    # ⭐ User asks for lawyer
     if any(k in text.lower() for k in BOOKING_KEYWORDS) and count_real_questions(wa_id) >= 1:
         buttons = [{"id": c, "title": CATEGORY_LABELS[c]} for c in CATEGORY_LABELS]
-        send_buttons(wa_id, "Please select the legal category 👇", buttons)
+        send_buttons(wa_id, "Please select your legal category 👇", buttons)
         pending_booking_state[wa_id] = {"step": "choose_category"}
         return {"status": "category_asked"}
 
-    # ⭐ 6) CATEGORY CHOSEN
+    # ⭐ Category selected
     if wa_id in pending_booking_state and pending_booking_state[wa_id]["step"] == "choose_category":
         if text not in CATEGORY_PRICE:
             send_text(wa_id, "Please select a valid category.")
@@ -227,14 +242,13 @@ def webhook():
         send_text(wa_id, f"Consultation fee: ₹{CATEGORY_PRICE[text]}\nPlease share preferred call time.")
         return {"status": "await_time"}
 
-    # ⭐ 7) BOOKING TIME RECEIVED
+    # ⭐ Time provided — booking created
     if wa_id in pending_booking_state and pending_booking_state[wa_id]["step"] == "await_time":
         slot = text
         fee = pending_booking_state[wa_id]["fee"]
         category = pending_booking_state[wa_id]["category"]
 
         booking = create_booking_for_user(wa_id, fee, slot)
-
         send_text(
             wa_id,
             f"📞 Booking created!\nAmount: ₹{fee}\nTime: {slot}\n\n"
@@ -243,7 +257,7 @@ def webhook():
         pending_booking_state.pop(wa_id, None)
         return {"status": "booking_done"}
 
-    # ⭐ 8) NORMAL AI REPLY WITH FOLLOW-UP OFFER
+    # ⭐ AI assistance
     lang = user.language
     category = detect_category(text)
     reply = generate_legal_reply(text, lang)
@@ -255,7 +269,7 @@ def webhook():
     send_text(wa_id, reply)
     log_msg(wa_id, "bot", reply)
 
-    # After 1–2 replies only show upsell once
+    # Soft upsell only once
     if count_real_questions(wa_id) >= 2 and wa_id not in followup_sent:
         price = CATEGORY_PRICE.get(category, 199)
         send_buttons(
@@ -265,7 +279,7 @@ def webhook():
         )
         followup_sent.add(wa_id)
 
-    return {"status": "replied"}
+    return jsonify({"status": "replied"}), 200
 
 
 if __name__ == "__main__":
