@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from db import get_db
-from models import User, Booking
+from models import Booking
 from config import PAYMENT_BASE_URL
 from services.whatsapp_service import send_buttons, send_list_picker
 
