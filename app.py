@@ -54,7 +54,7 @@ LEGAL_CATEGORIES = [
 ]
 
 def get_or_create_user(wa_id):
-    db = get_db()
+    db = next(get_db())
     user = db.query(User).filter_by(whatsapp_id=wa_id).first()
     if user:
         return user
@@ -72,7 +72,7 @@ def get_or_create_user(wa_id):
     return user
 
 def save_and_close_state(user, state):
-    db = get_db()
+    db = next(get_db())
     user.state = state
     db.add(user)
     db.commit()
@@ -84,7 +84,7 @@ def handle_language_change(user, wa_id, message):
     }
 
     if message in language_map:
-        db = get_db()
+        db = next(get_db())
         user.language = language_map[message]
         user.state = NORMAL_CHAT
         db.add(user)
@@ -190,7 +190,7 @@ def webhook():
         try:
             rating = int(text)
             if 1 <= rating <= 5:
-                db = get_db()
+                db = next(get_db())
                 booking = db.query(Booking).filter_by(user_id=user.id, rating=None).order_by(Booking.id.desc()).first()
                 booking.rating = rating
                 db.commit()
@@ -239,7 +239,7 @@ def webhook():
     send_text(wa_id, reply)
 
     # Increment message count
-    db = get_db()
+    db = next(get_db())
     user.query_count += 1
     db.commit()
 
@@ -261,7 +261,7 @@ def payment_success():
     if not wa_id or not payment_id:
         return jsonify({"status": "failed", "error": "missing_fields"}), 400
 
-    db = get_db()
+    db = next(get_db())
     user = db.query(User).filter_by(whatsapp_id=wa_id).first()
     if not user:
         return jsonify({"status": "failed", "error": "user_not_found"}), 404
@@ -298,7 +298,7 @@ def mark_completed_api():
 
     # Ask for rating automatically
     ask_rating_buttons(wa_id)
-    db = get_db()
+    db = next(get_db())
     booking.user.state = ASK_RATING
     db.commit()
 
@@ -310,7 +310,7 @@ def broadcast():
         return jsonify({"status": "unauthorized"}), 401
 
     msg = request.json.get("message")
-    db = get_db()
+    db = next(get_db())
     users = db.query(User).all()
 
     for u in users:
