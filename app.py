@@ -20,12 +20,14 @@ from services.whatsapp_service import (
 from services.openai_service import ai_reply
 from services.booking_service import (
     generate_dates_calendar,
-    generate_slots_calendar,
-    create_booking_temp,
+    generate_slots,
+    start_booking_flow,
+    handle_date_selection,
+    handle_slot_selection,
     confirm_booking_after_payment,
-    mark_booking_completed,
-    ask_rating_buttons
+    mark_booking_completed
 )
+
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
