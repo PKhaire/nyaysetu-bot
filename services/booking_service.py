@@ -2,9 +2,9 @@ from datetime import datetime, timedelta
 from db import get_db
 from models import User, Booking
 from config import PAYMENT_BASE_URL
-from whatsapp_service import send_buttons
+from services.whatsapp_service import send_buttons, send_list_picker
 
-# Generate dates (next 7 days)
+
 def generate_dates_calendar():
     dates = []
     today = datetime.now()
@@ -12,25 +12,33 @@ def generate_dates_calendar():
         d = today + timedelta(days=i)
         label = d.strftime("%b %d (%a)")
         dates.append({"id": f"date_{label}", "title": label})
-    return [{"id": d["id"], "title": d["title"]} for d in dates]
+    return dates
 
-# Generate slots: 10 AM – 8 PM
+
 def generate_slots():
     slots = []
     for hour in range(10, 21):
-        t = datetime.strptime(str(hour), "%H").strftime("%I:00 %p")
-        slots.append({"id": f"slot_{t}", "title": t})
+        time_label = datetime.strptime(str(hour), "%H").strftime("%I:00 %p")
+        slots.append({"id": f"slot_{time_label}", "title": time_label})
     return slots
 
 
 def start_booking_flow(user, wa_id):
-    from whatsapp_service import send_list_picker
-    send_list_picker(wa_id, "Select Appointment Date", "Choose a date 👇", generate_dates_calendar())
+    send_list_picker(
+        wa_id,
+        "Select Appointment Date",
+        "Choose a legal consultation date 👇",
+        generate_dates_calendar()
+    )
 
 
 def handle_date_selection(user, wa_id, date_title):
-    from whatsapp_service import send_list_picker
-    send_list_picker(wa_id, "Select Time Slot", f"Date: {date_title}\nChoose a time 👇", generate_slots())
+    send_list_picker(
+        wa_id,
+        "Select Time Slot",
+        f"Selected: {date_title}\nChoose a time 👇",
+        generate_slots()
+    )
 
 
 def handle_slot_selection(user, wa_id, date_title, slot_title):
@@ -45,8 +53,9 @@ def handle_slot_selection(user, wa_id, date_title, slot_title):
 
     send_buttons(
         wa_id,
-        f"To confirm your appointment on {date_title} at {slot_title}, please complete the payment 👇\nFee: ₹499",
-        [("Pay ₹499", payment_url)]
+        f"To confirm your consultation on {date_title} at {slot_title}, "
+        f"please complete the payment 👇\nConsultation Fee: ₹499",
+        [(f"Pay ₹499", payment_url)]
     )
 
 
