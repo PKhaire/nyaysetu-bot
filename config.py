@@ -18,3 +18,5 @@ TYPING_DELAY_SECONDS = float(os.getenv("TYPING_DELAY_SECONDS", 1.0))
 
 # Admin
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "adminpass")
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "default_admin_token")
+
