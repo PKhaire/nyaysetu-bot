@@ -3,9 +3,6 @@ import json
 import logging
 from datetime import datetime
 from db import create_all
-print("🔧 Running DB migrations...")
-create_all()
-print("✅ DB tables ready.")
 
 from flask import Flask, request, jsonify
 from config import (
