@@ -4,9 +4,6 @@ import logging
 from datetime import datetime
 
 from flask import Flask, request, jsonify
-from db import create_all
-create_all()
-
 from config import (
     WHATSAPP_VERIFY_TOKEN,
     MAX_FREE_MESSAGES,
