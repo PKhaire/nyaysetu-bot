@@ -30,3 +30,6 @@ def get_db():
         yield db
     finally:
         db.close()
+        
+from models import User, Booking, Rating
+Base.metadata.create_all(bind=engine)
