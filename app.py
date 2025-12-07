@@ -1,43 +1,61 @@
 import os
 import json
 import logging
+import random
+import string
 from datetime import datetime
 
 from flask import Flask, request, jsonify
 
-from db import create_all, get_db, SessionLocal
+# --- DB & Models ---
+from db import create_all, SessionLocal
+from models import User, Booking, Rating
+
+# --- Config ---
 from config import (
     WHATSAPP_VERIFY_TOKEN,
     MAX_FREE_MESSAGES,
     TYPING_DELAY_SECONDS,
-    ADMIN_TOKEN
+    ADMIN_TOKEN,
 )
-from models import User, Booking
+
+# --- Services ---
 from services.whatsapp_service import (
-    send_text, send_buttons, send_typing_on, send_typing_off,
-    send_list_picker
+    send_text,
+    send_buttons,
+    send_typing_on,
+    send_typing_off,
+    send_list_picker,
 )
+
 from services.openai_service import ai_reply
+
 from services.booking_service import (
     generate_dates_calendar,
-    generate_slots,
-    start_booking_flow as booking_start_flow,
-    handle_date_selection,
-    handle_slot_selection,
+    generate_slots_calendar,
+    create_booking_temp,
     confirm_booking_after_payment,
     mark_booking_completed,
     ask_rating_buttons,
 )
 
-# Run DB migrations once at startup
-logging.basicConfig(level=logging.INFO)
-logging.info("🔧 Running DB migrations...")
-create_all()
-logging.info("✅ DB tables ready.")
-
+# -------------------------------------------------------------------
+# Flask & Logging
+# -------------------------------------------------------------------
 app = Flask(__name__)
 
-# Chat states
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s:%(name)s:%(message)s"
+)
+logger = logging.getLogger(__name__)
+
+# -------------------------------------------------------------------
+# Conversation States
+# -------------------------------------------------------------------
+NORMAL = "NORMAL"
+SUGGEST_CONSULT = "SUGGEST_CONSULT"
+
 ASK_NAME = "ASK_NAME"
 ASK_CITY = "ASK_CITY"
 ASK_CATEGORY = "ASK_CATEGORY"
@@ -45,496 +63,441 @@ ASK_DATE = "ASK_DATE"
 ASK_SLOT = "ASK_SLOT"
 WAITING_PAYMENT = "WAITING_PAYMENT"
 ASK_RATING = "ASK_RATING"
-NORMAL_CHAT = "NORMAL_CHAT"
 
-LEGAL_CATEGORIES = [
-    "Criminal",
-    "Property",
-    "Family / Divorce",
-    "Cyber",
-    "Consumer",
-    "Employment",
-    "Motor Accident",
-    "Other",
-]
+# -------------------------------------------------------------------
+# Helper: DB session per request
+# -------------------------------------------------------------------
+def get_db_session():
+    """
+    Returns a fresh SQLAlchemy session.
+    Call db.close() in finally.
+    """
+    return SessionLocal()
 
+# -------------------------------------------------------------------
+# Helper: Case ID generator
+# -------------------------------------------------------------------
+def generate_case_id(length=6):
+    suffix = "".join(random.choices(string.hexdigits.upper(), k=length))
+    return f"NS-{suffix}"
 
-def get_or_create_user(wa_id):
-    db = next(get_db())
+# -------------------------------------------------------------------
+# DB: get or create user
+# -------------------------------------------------------------------
+def get_or_create_user(db, wa_id: str) -> User:
     user = db.query(User).filter_by(whatsapp_id=wa_id).first()
-    if user:
-        return user
-
-    case_id = f"NS-{os.urandom(3).hex().upper()}"
-    user = User(
-        whatsapp_id=wa_id,
-        case_id=case_id,
-        language="English",
-        query_count=0,
-        state=NORMAL_CHAT,
-    )
-    db.add(user)
-    db.commit()
+    if not user:
+        user = User(
+            whatsapp_id=wa_id,
+            case_id=generate_case_id(),
+            language="English",
+            query_count=0,
+            state=NORMAL,
+            created_at=datetime.utcnow(),
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        logger.info(f"Created new user {wa_id} with case_id={user.case_id}")
     return user
 
+# -------------------------------------------------------------------
+# State helper
+# -------------------------------------------------------------------
+def save_state(db, user: User, state: str):
+    user.state = state
+    db.add(user)
+    db.commit()
 
-def save_and_close_state(user, state):
+# -------------------------------------------------------------------
+# Language helper
+# -------------------------------------------------------------------
+def handle_language_change(db, user: User, wa_id: str, msg_id: str) -> bool:
     """
-    Safely update user.state even if user came from another session.
+    Returns True if this message was a language button and handled.
     """
-    db = SessionLocal()
-    try:
-        user.state = state
-        db.merge(user)  # merge handles objects from other sessions
-        db.commit()
-    finally:
-        db.close()
-
-
-def handle_language_change(user, wa_id, message):
     language_map = {
         "lang_en": "English",
         "lang_hinglish": "Hinglish",
         "lang_mar": "Marathi",
     }
 
-    if message in language_map:
-        db = SessionLocal()
-        try:
-            # refresh user in this session
-            db_user = db.query(User).filter_by(id=user.id).first()
-            if not db_user:
-                return False
-            db_user.language = language_map[message]
-            db_user.state = NORMAL_CHAT
-            db.commit()
-        finally:
-            db.close()
+    if msg_id not in language_map:
+        return False
 
-        send_text(
-            wa_id,
-            f"Language updated to {language_map[message]}. Please type your legal issue.",
-        )
-        return True
-    return False
+    user.language = language_map[msg_id]
+    save_state(db, user, NORMAL)
 
-
-def should_offer_booking(user, ai_msg):
-    keywords = [
-        "speak to lawyer",
-        "talk to lawyer",
-        "call lawyer",
-        "book lawyer",
-        "consult",
-        "appointment",
-        "advocate",
-    ]
-    msg = ai_msg.lower()
-    return any(k in msg for k in keywords)
-
-
-def start_booking_flow(user, wa_id):
     send_text(
         wa_id,
-        "Before we schedule your consultation call, please share your full name.",
+        f"Language updated to *{user.language}*.\n\nPlease type your legal issue."
     )
-    save_and_close_state(user, ASK_NAME)
+    return True
 
+# -------------------------------------------------------------------
+# Booking: start & booking flow
+# -------------------------------------------------------------------
+def start_booking_flow(db, user: User, wa_id: str):
+    """
+    Move user into ASK_NAME and start the call-booking journey.
+    """
+    save_state(db, user, ASK_NAME)
+    send_text(
+        wa_id,
+        "Great! Let's schedule your legal consultation call (₹499).\n\n"
+        "First, please tell me your *full name*."
+    )
 
-@app.route("/webhook", methods=["GET"])
-def verify():
-    token = request.args.get("hub.verify_token")
-    challenge = request.args.get("hub.challenge")
-    return (challenge, 200) if token == WHATSAPP_VERIFY_TOKEN else ("Invalid", 403)
+def handle_booking_flow(db, user: User, wa_id: str, text: str, interactive_id: str | None):
+    """
+    State machine for the booking flow.
+    """
+    t = text.strip()
 
-
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    data = request.get_json()
-    logging.info(f"INCOMING WHATSAPP PAYLOAD: {json.dumps(data)}")
-
-    try:
-        value = data["entry"][0]["changes"][0]["value"]
-    except Exception:
-        return jsonify({"status": "ignored"}), 200
-
-    # System events (sent/read/delivered) → ignore
-    if "messages" not in value:
-        logging.info("No user message — system event ignored")
-        return jsonify({"status": "ignored"}), 200
-
-    message = value["messages"][0]
-    wa_id = value["contacts"][0]["wa_id"]
-    user = get_or_create_user(wa_id)
-
-    # Extract message content
-    if message["type"] == "text":
-        text = message["text"]["body"].strip()
-    elif message["type"] == "interactive" and message["interactive"]["type"] == "button_reply":
-        text = message["interactive"]["button_reply"]["id"]
-    elif message["type"] == "interactive" and message["interactive"]["type"] == "list_reply":
-        text = message["interactive"]["list_reply"]["id"]
-    else:
-        send_text(wa_id, "Sorry, I only process text messages currently.")
-        return jsonify({"status": "ok"}), 200
-
-    # Handle language selection
-    if handle_language_change(user, wa_id, text):
-        return jsonify({"status": "ok"}), 200
-
-    # ==========================
-    # BOOKING STATE MACHINE
-    # ==========================
-
-    # ASK_NAME
+    # 1) Ask for name
     if user.state == ASK_NAME:
-        db = SessionLocal()
-        try:
-            db_user = db.query(User).filter_by(id=user.id).first()
-            if db_user:
-                db_user.temp_name = text
-                db_user.state = ASK_CITY
-                db.commit()
-        finally:
-            db.close()
+        user.temp_name = t  # these attrs can be dynamic on the model object
+        db.add(user)
+        db.commit()
 
-        send_text(wa_id, "Please confirm your city.")
-        return jsonify({"status": "ok"}), 200
+        save_state(db, user, ASK_CITY)
+        send_text(wa_id, "Thanks! 🙏\nNow please tell me your *city*.")
+        return
 
-    # ASK_CITY
+    # 2) Ask for city
     if user.state == ASK_CITY:
-        db = SessionLocal()
-        try:
-            db_user = db.query(User).filter_by(id=user.id).first()
-            if db_user:
-                db_user.temp_city = text
-                db_user.state = ASK_CATEGORY
-                db.commit()
-        finally:
-            db.close()
+        user.temp_city = t
+        db.add(user)
+        db.commit()
 
-        # Build legal category list as WhatsApp-compliant list
-        rows = [{"id": f"cat_{c}", "title": c} for c in LEGAL_CATEGORIES]
-        sections = [{"title": "Legal categories", "rows": rows}]
-        send_list_picker(
+        save_state(db, user, ASK_CATEGORY)
+        send_text(
             wa_id,
-            "Select legal category 👇",
-            "Choose one",
-            sections,
+            "Got it 👍\nPlease choose your *legal issue category* (e.g., FIR, Police, Property, Family, Job, Business, Other)."
         )
-        return jsonify({"status": "ok"}), 200
+        return
 
-    # ASK_CATEGORY
+    # 3) Ask for category
     if user.state == ASK_CATEGORY:
-        db = SessionLocal()
-        try:
-            db_user = db.query(User).filter_by(id=user.id).first()
-            if db_user:
-                db_user.temp_category = text
-                db_user.state = ASK_DATE
-                db.commit()
-        finally:
-            db.close()
+        user.temp_category = t
+        db.add(user)
+        db.commit()
 
-        raw_dates = generate_dates_calendar()
-        date_rows = []
-        for d in raw_dates:
-            if isinstance(d, (list, tuple)) and len(d) >= 2:
-                date_id, date_title = d[0], d[1]
-            elif isinstance(d, dict):
-                date_id = d.get("id") or d.get("value") or d.get("title")
-                date_title = d.get("title") or d.get("label") or date_id
-            else:
-                date_id = str(d)
-                date_title = str(d)
-            date_rows.append({"id": date_id, "title": date_title})
-
-        sections = [{"title": "Available dates", "rows": date_rows}]
+        # Now show date list (next 7 days)
+        rows = generate_dates_calendar()
+        save_state(db, user, ASK_DATE)
         send_list_picker(
             wa_id,
-            "Select appointment date 👇",
-            "Available Dates",
-            sections,
+            header="Select appointment date 👇",
+            body="Available Dates",
+            rows=rows,
+            section_title="Next 7 days"
         )
-        return jsonify({"status": "ok"}), 200
+        return
 
-    # ASK_DATE
+    # 4) Ask for date (interactive list reply)
     if user.state == ASK_DATE:
-        db = SessionLocal()
-        try:
-            db_user = db.query(User).filter_by(id=user.id).first()
-            if db_user:
-                db_user.temp_date = text
-                db_user.state = ASK_SLOT
-                db.commit()
-        finally:
-            db.close()
+        if interactive_id and interactive_id.startswith("date_"):
+            user.temp_date = interactive_id.replace("date_", "", 1)
+            db.add(user)
+            db.commit()
 
-        raw_slots = generate_slots(text)
-        slot_rows = []
-        for s in raw_slots:
-            if isinstance(s, (list, tuple)) and len(s) >= 2:
-                slot_id, slot_title = s[0], s[1]
-            elif isinstance(s, dict):
-                slot_id = s.get("id") or s.get("value") or s.get("title")
-                slot_title = s.get("title") or s.get("label") or slot_id
-            else:
-                slot_id = str(s)
-                slot_title = str(s)
-            slot_rows.append({"id": slot_id, "title": slot_title})
+            rows = generate_slots_calendar(user.temp_date)
+            save_state(db, user, ASK_SLOT)
+            send_list_picker(
+                wa_id,
+                header=f"Select time slot for {user.temp_date}",
+                body="Available time slots (IST)",
+                rows=rows,
+                section_title="Time Slots"
+            )
+        else:
+            send_text(
+                wa_id,
+                "Please select a date from the list I sent. If you didn't receive it, type *Book* to restart booking."
+            )
+        return
 
-        sections = [{"title": "Available slots", "rows": slot_rows}]
-        send_list_picker(
-            wa_id,
-            "Choose time slot 👇",
-            "Available Slots",
-            sections,
-        )
-        return jsonify({"status": "ok"}), 200
-
-    # ASK_SLOT
+    # 5) Ask for slot (interactive list reply)
     if user.state == ASK_SLOT:
-        # temp_slot + create booking + payment link
-        db = SessionLocal()
-        try:
-            db_user = db.query(User).filter_by(id=user.id).first()
-            if not db_user:
-                send_text(wa_id, "Something went wrong while saving your slot.")
-                return jsonify({"status": "ok"}), 200
-
-            db_user.temp_slot = text
+        if interactive_id and interactive_id.startswith("slot_"):
+            user.temp_slot = interactive_id.replace("slot_", "", 1)
+            db.add(user)
             db.commit()
 
-            payment_url = confirm_booking_after_payment(
-                db_user, None, preview_only=True
-            ) if hasattr(confirm_booking_after_payment, "preview_only") else None
+            # Now create booking + payment link
+            name = getattr(user, "temp_name", "Client")
+            city = getattr(user, "temp_city", "NA")
+            category = getattr(user, "temp_category", "General")
+            date_str = getattr(user, "temp_date", "")
+            slot_str = getattr(user, "temp_slot", "")
 
-            if not payment_url:
-                # fallback: use booking_service temp booking creator if you have it
-                from services.booking_service import create_booking_temp
-                payment_url = create_booking_temp(db_user)
+            booking, payment_link = create_booking_temp(
+                db=db,
+                user=user,
+                name=name,
+                city=city,
+                category=category,
+                date=date_str,
+                slot=slot_str,
+                price=499,
+            )
 
-            db_user.state = WAITING_PAYMENT
-            db_user.last_payment_link = payment_url
-            db.commit()
-        finally:
-            db.close()
+            user.last_payment_link = payment_link
+            save_state(db, user, WAITING_PAYMENT)
 
-        send_buttons(
+            send_text(
+                wa_id,
+                "✅ Your appointment details:\n"
+                f"*Name:* {name}\n"
+                f"*City:* {city}\n"
+                f"*Category:* {category}\n"
+                f"*Date:* {date_str}\n"
+                f"*Slot:* {slot_str}\n"
+                f"*Fees:* ₹499 (one-time)\n\n"
+                f"Please complete payment using this link:\n{payment_link}"
+            )
+        else:
+            send_text(
+                wa_id,
+                "Please select a time slot from the list I sent. If you didn't receive it, type *Book* to restart booking."
+            )
+        return
+
+    # 6) Waiting payment – here you could later plug payment-webhook or manual confirm
+    if user.state == WAITING_PAYMENT:
+        # For now, just gently remind user
+        send_text(
             wa_id,
-            "Consultation fee: ₹499\nPress below to pay & confirm your call.",
-            [("Pay ₹499", payment_url)],
+            "💳 Your payment link is still active.\n"
+            "Once payment is done, our team will confirm your consultation slot.\n\n"
+            f"If you lost the link, here it is again:\n{user.last_payment_link or 'Link not found, type *Book* to restart.'}"
         )
-        return jsonify({"status": "ok"}), 200
+        return
 
-    # ASK_RATING
+    # 7) Rating flow
     if user.state == ASK_RATING:
         try:
-            rating = int(text)
-            if 1 <= rating <= 5:
-                db = SessionLocal()
-                try:
-                    booking = (
-                        db.query(Booking)
-                        .filter_by(user_id=user.id, rating=None)
-                        .order_by(Booking.id.desc())
-                        .first()
-                    )
-                    if booking:
-                        booking.rating = rating
-                        booking.user.state = NORMAL_CHAT
-                        db.commit()
-                        send_text(wa_id, "Thank you for your feedback! 🙏")
-                        return jsonify({"status": "ok"}), 200
-                finally:
-                    db.close()
-        except Exception:
-            pass
-
-        send_text(wa_id, "Please rate from 1 to 5 ⭐")
-        return jsonify({"status": "ok"}), 200
-
-    # ==========================
-    # FREE MESSAGE LIMIT
-    # ==========================
-    if user.query_count >= MAX_FREE_MESSAGES and user.state == NORMAL_CHAT:
-        send_buttons(
-            wa_id,
-            "You've reached the free message limit.\nTo continue, book a consultation call with a lawyer 👇",
-            [("📞 Book Lawyer – ₹499", "start_booking")],
-        )
-        return jsonify({"status": "ok"}), 200
-
-    # Detect explicit request to book
-    if text.lower() in [
-        "book",
-        "book lawyer",
-        "consult",
-        "speak to lawyer",
-        "call lawyer",
-        "appointment",
-    ]:
-        start_booking_flow(user, wa_id)
-        return jsonify({"status": "ok"}), 200
-
-    # If waiting for payment, ignore casual messages
-    if user.state == WAITING_PAYMENT:
-        db = next(get_db())
-        db_user = db.query(User).filter_by(id=user.id).first()
-        link = db_user.last_payment_link if db_user else user.last_payment_link
-        send_buttons(
-            wa_id,
-            "Kindly complete the payment to confirm your consultation call 👇",
-            [("Pay ₹499", link)],
-        )
-        return jsonify({"status": "ok"}), 200
-
-    # Smart: returning user → go straight to calendar if text indicates booking intent
-    if user.state == NORMAL_CHAT and should_offer_booking(user, text):
-        raw_dates = generate_dates_calendar()
-        date_rows = []
-        for d in raw_dates:
-            if isinstance(d, (list, tuple)) and len(d) >= 2:
-                date_id, date_title = d[0], d[1]
-            elif isinstance(d, dict):
-                date_id = d.get("id") or d.get("value") or d.get("title")
-                date_title = d.get("title") or d.get("label") or date_id
+            rating_val = int(t)
+            if 1 <= rating_val <= 5:
+                # Simple: store rating row
+                rating = Rating(
+                    whatsapp_id=user.whatsapp_id,
+                    score=rating_val,
+                    created_at=datetime.utcnow(),
+                )
+                db.add(rating)
+                db.commit()
+                save_state(db, user, NORMAL)
+                send_text(
+                    wa_id,
+                    "🙏 Thank you for your feedback! It helps us improve NyaySetu for everyone."
+                )
             else:
-                date_id = str(d)
-                date_title = str(d)
-            date_rows.append({"id": date_id, "title": date_title})
-        sections = [{"title": "Available dates", "rows": date_rows}]
-        send_list_picker(
+                send_text(wa_id, "Please rate between 1 and 5 🌟.")
+        except ValueError:
+            send_text(wa_id, "Please send a number between 1 and 5 for rating 🌟.")
+        return
+
+# -------------------------------------------------------------------
+# Hybrid AI + Smart consult suggestion
+# -------------------------------------------------------------------
+CONSULT_KEYWORDS = [
+    "fir", "police", "zero fir", "e-fir", "efir",
+    "domestic", "violence", "harassment",
+    "theft", "stolen", "robbery",
+    "dowry", "498a",
+    "custody", "divorce", "maintenance",
+    "property", "sale deed", "agreement", "possession",
+    "fraud", "cheated", "scam",
+    "arrest", "bail", "charge sheet",
+]
+
+YES_WORDS = {
+    "yes", "y", "ok", "okay", "sure",
+    "book", "book now", "book call",
+    "need lawyer", "want lawyer", "talk to lawyer",
+    "consult now", "help me"
+}
+
+NO_WORDS = {
+    "no", "not now", "later", "dont want", "don't want", "no thanks"
+}
+
+def maybe_suggest_consult(db, user: User, wa_id: str, text: str):
+    """
+    After giving AI answer, check if we should push consult offer.
+    """
+    lower = text.lower()
+    if user.state != NORMAL:
+        return
+
+    if any(word in lower for word in CONSULT_KEYWORDS):
+        save_state(db, user, SUGGEST_CONSULT)
+        send_buttons(
             wa_id,
-            "Select appointment date 👇",
-            "Available Dates",
-            sections,
+            "Your issue looks important. I can connect you to a qualified lawyer on call for *₹499*.\n\n"
+            "Would you like to book a consultation?",
+            [
+                {"id": "book_consult_now", "title": "Yes — Book Call"},
+                {"id": "consult_later", "title": "Not now"},
+            ],
         )
-        save_and_close_state(user, ASK_DATE)
+
+# -------------------------------------------------------------------
+# Flask routes
+# -------------------------------------------------------------------
+
+@app.route("/", methods=["GET"])
+def index():
+    return "NyaySetu backend is running.", 200
+
+# --- Webhook verification (GET) ---
+@app.route("/webhook", methods=["GET"])
+def verify():
+    mode = request.args.get("hub.mode")
+    token = request.args.get("hub.verify_token")
+    challenge = request.args.get("hub.challenge")
+
+    if mode == "subscribe" and token == WHATSAPP_VERIFY_TOKEN:
+        logger.info("Webhook verified successfully.")
+        return challenge, 200
+
+    logger.warning("Webhook verification failed.")
+    return "Verification failed", 403
+
+# --- Main webhook (POST) ---
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    payload = request.get_json(force=True, silent=True) or {}
+    logger.info(f"INCOMING WHATSAPP PAYLOAD: {json.dumps(payload)}")
+
+    # Handle admin ping (optional)
+    # e.g. POST /webhook?admin_token=xxx&action=migrate
+    # Skipped for now.
+
+    # Standard WhatsApp structure
+    try:
+        entry = payload["entry"][0]
+        change = entry["changes"][0]
+        value = change["value"]
+    except (KeyError, IndexError):
+        logger.error("Malformed payload")
+        return jsonify({"status": "ignored"}), 200
+
+    # Ignore pure status updates (no messages)
+    messages = value.get("messages")
+    if not messages:
+        logger.info("No user message — system event ignored")
+        return jsonify({"status": "ignored"}), 200
+
+    message = messages[0]
+    wa_id = value["contacts"][0]["wa_id"]
+
+    # Open DB session
+    db = get_db_session()
+    try:
+        user = get_or_create_user(db, wa_id)
+
+        msg_type = message.get("type")
+        text_body = ""
+        interactive_id = None
+
+        if msg_type == "text":
+            text_body = message["text"]["body"]
+        elif msg_type == "interactive":
+            itype = message["interactive"]["type"]
+            if itype == "button_reply":
+                interactive_id = message["interactive"]["button_reply"]["id"]
+                text_body = interactive_id  # use id for logic (e.g. lang_en, book_consult_now)
+            elif itype == "list_reply":
+                interactive_id = message["interactive"]["list_reply"]["id"]
+                text_body = interactive_id
+        else:
+            # unsupported type; ignore politely
+            send_text(wa_id, "Sorry, I currently support text and simple button/list replies only.")
+            return jsonify({"status": "ok"}), 200
+
+        logger.info(f"Parsed text_body='{text_body}', interactive_id='{interactive_id}', state={user.state}")
+
+        # 1) Language change buttons
+        if interactive_id and interactive_id.startswith("lang_"):
+            if handle_language_change(db, user, wa_id, interactive_id):
+                return jsonify({"status": "ok"}), 200
+
+        # 2) Consultation button from suggestion
+        if interactive_id == "book_consult_now":
+            start_booking_flow(db, user, wa_id)
+            return jsonify({"status": "ok"}), 200
+
+        if interactive_id == "consult_later":
+            save_state(db, user, NORMAL)
+            send_text(wa_id, "No problem 👍 You can type *Book* anytime to speak with a lawyer.")
+            return jsonify({"status": "ok"}), 200
+
+        # 3) Explicit booking keywords
+        lower_text = text_body.lower()
+        if user.state in [NORMAL, SUGGEST_CONSULT] and any(
+            kw in lower_text for kw in ["book", "consultation", "lawyer call", "appointment"]
+        ):
+            start_booking_flow(db, user, wa_id)
+            return jsonify({"status": "ok"}), 200
+
+        # 4) If we are in booking states, route to booking flow
+        if user.state in {
+            ASK_NAME,
+            ASK_CITY,
+            ASK_CATEGORY,
+            ASK_DATE,
+            ASK_SLOT,
+            WAITING_PAYMENT,
+            ASK_RATING,
+        }:
+            handle_booking_flow(db, user, wa_id, text_body, interactive_id)
+            return jsonify({"status": "ok"}), 200
+
+        # 5) If we are in SUGGEST_CONSULT and user types yes/no in text
+        if user.state == SUGGEST_CONSULT:
+            if lower_text in YES_WORDS:
+                start_booking_flow(db, user, wa_id)
+                return jsonify({"status": "ok"}), 200
+            if lower_text in NO_WORDS:
+                save_state(db, user, NORMAL)
+                send_text(wa_id, "Sure, we can continue chatting. Ask me anything related to law.")
+                return jsonify({"status": "ok"}), 200
+
+        # 6) Normal AI chat + smart consult suggestion
+        # Simulated typing for nicer UX (actual typing on/off calls are stubbed in whatsapp_service)
+        send_typing_on(wa_id)
+        reply = ai_reply(text_body, user)
+        send_typing_off(wa_id)
+
+        send_text(wa_id, reply)
+
+        # After AI reply, maybe suggest consult (hybrid mode)
+        maybe_suggest_consult(db, user, wa_id, text_body)
+
         return jsonify({"status": "ok"}), 200
 
-    # ==========================
-    # NORMAL AI REPLY
-    # ==========================
-    send_typing_on(wa_id)
-    reply = ai_reply(text, user.language)
-    send_typing_off(wa_id)
-    send_text(wa_id, reply)
-
-    # Increment message count safely
-    db = SessionLocal()
-    try:
-        db_user = db.query(User).filter_by(id=user.id).first()
-        if db_user:
-            db_user.query_count += 1
-            db.commit()
+    except Exception as e:
+        logger.error("Error:", exc_info=True)
+        return jsonify({"error": str(e)}), 500
     finally:
         db.close()
 
-    # After reply → offer lawyer only when relevant
-    if should_offer_booking(user, reply):
-        send_buttons(
-            wa_id,
-            "📞 Want to speak to a lawyer for personalised help?\nConsultation fee: ₹499",
-            [("Book Consultation", "start_booking")],
-        )
+# -------------------------------------------------------------------
+# DB migrations at startup
+# -------------------------------------------------------------------
+with app.app_context():
+    try:
+        print("🔧 Running DB migrations...")
+        create_all()
+        print("✅ DB tables ready.")
+    except Exception as e:
+        print("⚠️ DB migration failed:", e)
 
-    return jsonify({"status": "ok"}), 200
-
-
-@app.route("/payment/success", methods=["POST"])
-def payment_success():
-    data = request.get_json()
-    wa_id = data.get("wa_id")
-    payment_id = data.get("payment_id")
-
-    if not wa_id or not payment_id:
-        return jsonify({"status": "failed", "error": "missing_fields"}), 400
-
-    db = next(get_db())
-    user = db.query(User).filter_by(whatsapp_id=wa_id).first()
-    if not user:
-        return jsonify({"status": "failed", "error": "user_not_found"}), 404
-
-    booking = confirm_booking_after_payment(user, payment_id)
-    if not booking:
-        return jsonify({"status": "failed", "error": "booking_not_found"}), 404
-
-    # Notify user
-    send_text(
-        wa_id,
-        f"🎉 Appointment Confirmed!\n\n"
-        f"📅 Date: {booking.date}\n"
-        f"⏰ Time: {booking.slot}\n"
-        f"📞 The lawyer will call you on your phone number.\n\n"
-        f"If you need anything before your call, just text here.",
-    )
-
-    return jsonify({"status": "ok"}), 200
-
-
-@app.route("/booking/mark_completed", methods=["POST"])
-def mark_completed_api():
-    token = request.args.get("token")
-    booking_id = request.json.get("booking_id")
-
-    if token != ADMIN_TOKEN:
-        return jsonify({"status": "unauthorized"}), 401
-
-    # Mark as completed in service
-    mark_booking_completed(booking_id)
-
-    # Re-fetch booking & user in this session
-    db = next(get_db())
-    booking = db.query(Booking).get(booking_id)
-    if not booking:
-        return jsonify({"status": "failed", "error": "booking_not_found"}), 404
-
-    wa_id = booking.user.whatsapp_id
-
-    # Ask for rating automatically
-    ask_rating_buttons(wa_id)
-    booking.user.state = ASK_RATING
-    db.commit()
-
-    return jsonify({"status": "ok", "rating_request_sent": True}), 200
-
-
-@app.route("/admin/broadcast", methods=["POST"])
-def broadcast():
-    token = request.args.get("token")
-    if token != ADMIN_TOKEN:
-        return jsonify({"status": "unauthorized"}), 401
-
-    msg = request.json.get("message")
-    db = next(get_db())
-    users = db.query(User).all()
-
-    for u in users:
-        try:
-            send_text(u.whatsapp_id, msg)
-        except Exception as e:
-            logging.error(f"Broadcast failed for {u.whatsapp_id}: {e}")
-
-    return jsonify({"status": "ok", "sent": len(users)}), 200
-
-
-@app.route("/", methods=["GET"])
-def health():
-    return jsonify(
-        {
-            "status": "running",
-            "service": "NyaySetu WhatsApp Legal AI",
-            "version": "3.0",
-        }
-    ), 200
-
-
-@app.errorhandler(Exception)
-def error_handler(e):
-    logging.error("Error:", exc_info=e)
-    return jsonify({"status": "error", "message": str(e)}), 500
-
+# -------------------------------------------------------------------
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    # For local testing; Render uses gunicorn
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
