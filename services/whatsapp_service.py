@@ -149,3 +149,14 @@ def send_rating_buttons(to):
         ("rating_1", "⭐"),
     ]
     send_buttons(to, "How was your consultation experience?", buttons)
+
+# =======================================================
+# BACKWARD COMPATIBILITY — required by app.py
+# =======================================================
+def send_list_picker(to, header, body, sections):
+    """
+    Wrapper alias kept only because app.py imports send_list_picker.
+    Internally uses send_list().
+    """
+    return send_list(to, header, body, sections)
+
