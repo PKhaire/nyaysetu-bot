@@ -1,8 +1,12 @@
+import logging
 from datetime import datetime, timedelta
+import razorpay
+from config import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
 from db import get_db
+from sqlalchemy.orm import Session
 from models import Booking
-from config import PAYMENT_BASE_URL
-from services.whatsapp_service import send_buttons, send_list_picker
+
+PRICE = 499  # Fixed consultation price
 
 
 def generate_dates_calendar():
@@ -10,8 +14,8 @@ def generate_dates_calendar():
     today = datetime.now()
     for i in range(7):
         d = today + timedelta(days=i)
-        label = d.strftime("%b %d (%a)")
-        dates.append({"id": f"date_{label}", "title": label})
+        date_str = d.strftime("%b %d (%a)")
+        dates.append({"id": f"date_{date_str}", "title": date_str})
     return dates
 
 
@@ -23,58 +27,46 @@ def generate_slots():
     return slots
 
 
-def start_booking_flow(user, wa_id):
-    send_list_picker(
-        wa_id,
-        "Select Appointment Date",
-        "Choose a legal consultation date 👇",
-        generate_dates_calendar()
+def generate_slots_calendar():
+    return generate_slots()
+
+
+# ---------------------------------------------------
+# Create booking temporarily and generate payment
+# ---------------------------------------------------
+def create_booking_and_payment(user, date_choice, slot_choice):
+    db: Session = next(get_db())
+
+    # Save temporary booking
+    booking = Booking(
+        user_id=user.whatsapp_id,
+        date=date_choice,
+        slot=slot_choice,
+        status="pending"
     )
-
-
-def handle_date_selection(user, wa_id, date_title):
-    send_list_picker(
-        wa_id,
-        "Select Time Slot",
-        f"Selected: {date_title}\nChoose a time 👇",
-        generate_slots()
-    )
-
-
-def handle_slot_selection(user, wa_id, date_title, slot_title):
-    db = next(get_db())
-    booking = Booking(whatsapp_id=wa_id, date=date_title, slot=slot_title)
     db.add(booking)
     db.commit()
 
-    payment_url = f"{PAYMENT_BASE_URL}?wa_id={wa_id}&booking_id={booking.id}"
-    user.last_payment_link = payment_url
-    db.commit()
+    # Razorpay order
+    try:
+        client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
 
-    send_buttons(
-        wa_id,
-        f"To confirm your consultation on {date_title} at {slot_title}, "
-        f"please complete the payment 👇\nConsultation Fee: ₹499",
-        [(f"Pay ₹499", payment_url)]
-    )
+        order = client.order.create({
+            "amount": PRICE * 100,
+            "currency": "INR",
+            "receipt": f"NS-{user.whatsapp_id}",
+            "payment_capture": 1
+        })
 
+        payment_url = f"https://rzp.io/i/{order['id']}"
+        logging.info(f"Razorpay Order created: {order['id']}")
 
-def confirm_booking_after_payment(user, payment_id):
-    db = next(get_db())
-    booking = db.query(Booking).filter_by(whatsapp_id=user.whatsapp_id, status="PENDING").first()
-    if not booking:
-        return None
-    booking.status = "PAID"
-    booking.payment_id = payment_id
-    db.commit()
-    return booking
+        return {
+            "success": True,
+            "payment_url": payment_url,
+            "amount": PRICE
+        }
 
-
-def mark_booking_completed(booking_id):
-    db = next(get_db())
-    booking = db.query(Booking).filter_by(id=booking_id, status="PAID").first()
-    if not booking:
-        return None
-    booking.status = "COMPLETED"
-    db.commit()
-    return booking
+    except Exception as e:
+        logging.error(f"Payment error: {e}")
+        return {"success": False, "error": str(e)}
