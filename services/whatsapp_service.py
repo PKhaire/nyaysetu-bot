@@ -1,8 +1,9 @@
 import requests
 import logging
-from config import WHATSAPP_TOKEN
+from config import WHATSAPP_TOKEN, WHATSAPP_PHONE_ID
 
-API_URL = "https://graph.facebook.com/v20.0/me/messages"
+API_URL = f"https://graph.facebook.com/v20.0/{WHATSAPP_PHONE_ID}/messages"
+
 
 headers = {
     "Authorization": f"Bearer {WHATSAPP_TOKEN}",
