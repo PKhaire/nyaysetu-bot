@@ -50,7 +50,6 @@ def send_buttons(to, text, buttons):
     return send_request(payload)
 
 
-# 🚀 FIXED LIST PICKER — 100% META COMPLIANT
 def send_list_picker(to, header, body, rows, section_title="Options"):
     payload = {
         "messaging_product": "whatsapp",
@@ -61,13 +60,15 @@ def send_list_picker(to, header, body, rows, section_title="Options"):
             "header": {"type": "text", "text": header},
             "body": {"text": body},
             "action": {
+                "button": "Select",
                 "sections": [
                     {
                         "title": section_title,
-                        "rows": rows   # must be [{id,title},...]
+                        "rows": rows,  # ← rows is a flat list of {id,title,description}
                     }
-                ]
-            }
-        }
+                ],
+            },
+        },
     }
-    return send_request(payload)
+    return _send(payload)
+
