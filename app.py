@@ -48,7 +48,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(levelname)s:%(name)s:%(message)s"
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("app")
 
 # -------------------------------------------------------------------
 # Conversation States
@@ -77,7 +77,7 @@ def get_db_session():
 # -------------------------------------------------------------------
 # Helper: Case ID generator
 # -------------------------------------------------------------------
-def generate_case_id(length=6):
+def generate_case_id(length: int = 6) -> str:
     suffix = "".join(random.choices(string.hexdigits.upper(), k=length))
     return f"NS-{suffix}"
 
@@ -122,10 +122,11 @@ def handle_language_change(db, user: User, wa_id: str, msg_id: str) -> bool:
         "lang_mar": "Marathi",
     }
 
-    if msg_id not in language_map:
+    new_lang = language_map.get(msg_id)
+    if not new_lang:
         return False
 
-    user.language = language_map[msg_id]
+    user.language = new_lang
     save_state(db, user, NORMAL)
 
     send_text(
@@ -148,15 +149,22 @@ def start_booking_flow(db, user: User, wa_id: str):
         "First, please tell me your *full name*."
     )
 
-def handle_booking_flow(db, user: User, wa_id: str, text: str, interactive_id: str | None):
+def handle_booking_flow(
+    db,
+    user: User,
+    wa_id: str,
+    text: str,
+    interactive_id: str | None
+):
     """
     State machine for the booking flow.
     """
-    t = text.strip()
+    t = (text or "").strip()
 
     # 1) Ask for name
     if user.state == ASK_NAME:
-        user.temp_name = t  # these attrs can be dynamic on the model object
+        # Store temporary fields just on the object (no schema change needed)
+        user.temp_name = t
         db.add(user)
         db.commit()
 
@@ -173,7 +181,8 @@ def handle_booking_flow(db, user: User, wa_id: str, text: str, interactive_id: s
         save_state(db, user, ASK_CATEGORY)
         send_text(
             wa_id,
-            "Got it 👍\nPlease choose your *legal issue category* (e.g., FIR, Police, Property, Family, Job, Business, Other)."
+            "Got it 👍\nPlease choose your *legal issue category* "
+            "(e.g., FIR, Police, Property, Family, Job, Business, Other)."
         )
         return
 
@@ -183,7 +192,7 @@ def handle_booking_flow(db, user: User, wa_id: str, text: str, interactive_id: s
         db.add(user)
         db.commit()
 
-        # Now show date list (next 7 days)
+        # Show date list (next 7 days)
         rows = generate_dates_calendar()
         save_state(db, user, ASK_DATE)
         send_list_picker(
@@ -191,7 +200,7 @@ def handle_booking_flow(db, user: User, wa_id: str, text: str, interactive_id: s
             header="Select appointment date 👇",
             body="Available Dates",
             rows=rows,
-            section_title="Next 7 days"
+            section_title="Next 7 days",
         )
         return
 
@@ -209,12 +218,13 @@ def handle_booking_flow(db, user: User, wa_id: str, text: str, interactive_id: s
                 header=f"Select time slot for {user.temp_date}",
                 body="Available time slots (IST)",
                 rows=rows,
-                section_title="Time Slots"
+                section_title="Time Slots",
             )
         else:
             send_text(
                 wa_id,
-                "Please select a date from the list I sent. If you didn't receive it, type *Book* to restart booking."
+                "Please select a date from the list I sent. "
+                "If you didn't receive it, type *Book Consultation* to restart booking."
             )
         return
 
@@ -225,7 +235,6 @@ def handle_booking_flow(db, user: User, wa_id: str, text: str, interactive_id: s
             db.add(user)
             db.commit()
 
-            # Now create booking + payment link
             name = getattr(user, "temp_name", "Client")
             city = getattr(user, "temp_city", "NA")
             category = getattr(user, "temp_category", "General")
@@ -248,7 +257,7 @@ def handle_booking_flow(db, user: User, wa_id: str, text: str, interactive_id: s
 
             send_text(
                 wa_id,
-                "✅ Your appointment details:\n"
+                "✅ *Your appointment details:*\n"
                 f"*Name:* {name}\n"
                 f"*City:* {city}\n"
                 f"*Category:* {category}\n"
@@ -260,18 +269,19 @@ def handle_booking_flow(db, user: User, wa_id: str, text: str, interactive_id: s
         else:
             send_text(
                 wa_id,
-                "Please select a time slot from the list I sent. If you didn't receive it, type *Book* to restart booking."
+                "Please select a time slot from the list I sent. "
+                "If you didn't receive it, type *Book Consultation* to restart booking."
             )
         return
 
-    # 6) Waiting payment – here you could later plug payment-webhook or manual confirm
+    # 6) Waiting payment – soft reminder
     if user.state == WAITING_PAYMENT:
-        # For now, just gently remind user
         send_text(
             wa_id,
-            "💳 Your payment link is still active.\n"
-            "Once payment is done, our team will confirm your consultation slot.\n\n"
-            f"If you lost the link, here it is again:\n{user.last_payment_link or 'Link not found, type *Book* to restart.'}"
+            "💳 Your consultation booking is almost done.\n\n"
+            "Once payment is completed, our team will confirm your consultation slot.\n\n"
+            f"If you lost the payment link, here it is again:\n"
+            f"{user.last_payment_link or 'Link not found, type *Book Consultation* to restart.'}"
         )
         return
 
@@ -280,7 +290,6 @@ def handle_booking_flow(db, user: User, wa_id: str, text: str, interactive_id: s
         try:
             rating_val = int(t)
             if 1 <= rating_val <= 5:
-                # Simple: store rating row
                 rating = Rating(
                     whatsapp_id=user.whatsapp_id,
                     score=rating_val,
@@ -302,33 +311,58 @@ def handle_booking_flow(db, user: User, wa_id: str, text: str, interactive_id: s
 # -------------------------------------------------------------------
 # Hybrid AI + Smart consult suggestion
 # -------------------------------------------------------------------
+# Topics where a lawyer is often needed
 CONSULT_KEYWORDS = [
-    "fir", "police", "zero fir", "e-fir", "efir",
-    "domestic", "violence", "harassment",
+    "fir", "zero fir", "e-fir", "efir",
+    "police", "complaint",
+    "domestic violence", "violence", "harassment",
     "theft", "stolen", "robbery",
     "dowry", "498a",
     "custody", "divorce", "maintenance",
     "property", "sale deed", "agreement", "possession",
     "fraud", "cheated", "scam",
     "arrest", "bail", "charge sheet",
+    "lawyer", "advocate", "legal notice",
 ]
 
+# Direct “yes I want a lawyer” words
 YES_WORDS = {
     "yes", "y", "ok", "okay", "sure",
     "book", "book now", "book call",
     "need lawyer", "want lawyer", "talk to lawyer",
-    "consult now", "help me"
+    "speak to lawyer", "consult now", "help me",
 }
 
 NO_WORDS = {
-    "no", "not now", "later", "dont want", "don't want", "no thanks"
+    "no", "not now", "later", "dont want", "don't want", "no thanks",
 }
+
+# Strong explicit booking triggers (user text)
+BOOK_KEYWORDS = [
+    "book consultation",
+    "book consult",
+    "book call",
+    "book lawyer",
+    "lawyer call",
+    "call lawyer",
+    "talk to a lawyer",
+    "talk to lawyer",
+    "speak to a lawyer",
+    "speak to lawyer",
+    "need a lawyer",
+    "need lawyer",
+    "want a lawyer",
+    "want lawyer",
+    "book appointment",
+    "legal consultation",
+]
 
 def maybe_suggest_consult(db, user: User, wa_id: str, text: str):
     """
     After giving AI answer, check if we should push consult offer.
+    Triggers only when in NORMAL state and message contains problem keywords.
     """
-    lower = text.lower()
+    lower = (text or "").lower()
     if user.state != NORMAL:
         return
 
@@ -347,7 +381,6 @@ def maybe_suggest_consult(db, user: User, wa_id: str, text: str):
 # -------------------------------------------------------------------
 # Flask routes
 # -------------------------------------------------------------------
-
 @app.route("/", methods=["GET"])
 def index():
     return "NyaySetu backend is running.", 200
@@ -372,10 +405,6 @@ def webhook():
     payload = request.get_json(force=True, silent=True) or {}
     logger.info(f"INCOMING WHATSAPP PAYLOAD: {json.dumps(payload)}")
 
-    # Handle admin ping (optional)
-    # e.g. POST /webhook?admin_token=xxx&action=migrate
-    # Skipped for now.
-
     # Standard WhatsApp structure
     try:
         entry = payload["entry"][0]
@@ -394,7 +423,6 @@ def webhook():
     message = messages[0]
     wa_id = value["contacts"][0]["wa_id"]
 
-    # Open DB session
     db = get_db_session()
     try:
         user = get_or_create_user(db, wa_id)
@@ -409,16 +437,23 @@ def webhook():
             itype = message["interactive"]["type"]
             if itype == "button_reply":
                 interactive_id = message["interactive"]["button_reply"]["id"]
-                text_body = interactive_id  # use id for logic (e.g. lang_en, book_consult_now)
+                text_body = interactive_id
             elif itype == "list_reply":
                 interactive_id = message["interactive"]["list_reply"]["id"]
                 text_body = interactive_id
         else:
-            # unsupported type; ignore politely
-            send_text(wa_id, "Sorry, I currently support text and simple button/list replies only.")
+            send_text(
+                wa_id,
+                "Sorry, I currently support text and simple button/list replies only."
+            )
             return jsonify({"status": "ok"}), 200
 
-        logger.info(f"Parsed text_body='{text_body}', interactive_id='{interactive_id}', state={user.state}")
+        logger.info(
+            f"Parsed text_body='{text_body}', "
+            f"interactive_id='{interactive_id}', state={user.state}"
+        )
+
+        lower_text = (text_body or "").lower()
 
         # 1) Language change buttons
         if interactive_id and interactive_id.startswith("lang_"):
@@ -432,13 +467,15 @@ def webhook():
 
         if interactive_id == "consult_later":
             save_state(db, user, NORMAL)
-            send_text(wa_id, "No problem 👍 You can type *Book* anytime to speak with a lawyer.")
+            send_text(
+                wa_id,
+                "No problem 👍 You can type *Book Consultation* anytime to speak with a lawyer."
+            )
             return jsonify({"status": "ok"}), 200
 
-        # 3) Explicit booking keywords
-        lower_text = text_body.lower()
+        # 3) Explicit booking keywords in plain text (strong intent)
         if user.state in [NORMAL, SUGGEST_CONSULT] and any(
-            kw in lower_text for kw in ["book", "consultation", "lawyer call", "appointment"]
+            kw in lower_text for kw in BOOK_KEYWORDS
         ):
             start_booking_flow(db, user, wa_id)
             return jsonify({"status": "ok"}), 200
@@ -456,25 +493,27 @@ def webhook():
             handle_booking_flow(db, user, wa_id, text_body, interactive_id)
             return jsonify({"status": "ok"}), 200
 
-        # 5) If we are in SUGGEST_CONSULT and user types yes/no in text
+        # 5) If we are in SUGGEST_CONSULT and user replies yes/no in text
         if user.state == SUGGEST_CONSULT:
             if lower_text in YES_WORDS:
                 start_booking_flow(db, user, wa_id)
                 return jsonify({"status": "ok"}), 200
             if lower_text in NO_WORDS:
                 save_state(db, user, NORMAL)
-                send_text(wa_id, "Sure, we can continue chatting. Ask me anything related to law.")
+                send_text(
+                    wa_id,
+                    "Sure, we can continue chatting. Ask me anything related to law."
+                )
                 return jsonify({"status": "ok"}), 200
 
         # 6) Normal AI chat + smart consult suggestion
-        # Simulated typing for nicer UX (actual typing on/off calls are stubbed in whatsapp_service)
         send_typing_on(wa_id)
         reply = ai_reply(text_body, user)
         send_typing_off(wa_id)
 
         send_text(wa_id, reply)
 
-        # After AI reply, maybe suggest consult (hybrid mode)
+        # After AI reply, maybe suggest consult
         maybe_suggest_consult(db, user, wa_id, text_body)
 
         return jsonify({"status": "ok"}), 200
@@ -497,7 +536,6 @@ with app.app_context():
         print("⚠️ DB migration failed:", e)
 
 # -------------------------------------------------------------------
-
 if __name__ == "__main__":
     # For local testing; Render uses gunicorn
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
