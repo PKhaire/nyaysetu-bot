@@ -12,34 +12,31 @@ PRIMARY_MODEL = os.getenv("PRIMARY_MODEL", "gpt-4.1-mini")
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN", "")
 WHATSAPP_VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "")
 
-# We support either:
-#   WHATSAPP_PHONE_NUMBER_ID  (recommended)
-#   PHONE_NUMBER_ID           (fallback, matches Meta dashboard wording)
-WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID") or os.getenv("PHONE_NUMBER_ID")
+# Accept both naming styles from Render / Meta
+WHATSAPP_PHONE_ID = (
+    os.getenv("WHATSAPP_PHONE_ID") or
+    os.getenv("WHATSAPP_PHONE_NUMBER_ID") or
+    os.getenv("PHONE_NUMBER_ID")
+)
 
-if not WHATSAPP_PHONE_NUMBER_ID:
-    # Fail fast so you immediately see the problem in logs
+if not WHATSAPP_PHONE_ID:
     raise RuntimeError(
-        "WhatsApp phone number ID is not set. "
-        "Please add WHATSAPP_PHONE_NUMBER_ID (or PHONE_NUMBER_ID) in Render env."
+        "❌ WhatsApp Phone ID missing.\n"
+        "Please add environment variable WHATSAPP_PHONE_ID "
+        "(or PHONE_NUMBER_ID / WHATSAPP_PHONE_NUMBER_ID)."
     )
 
-WHATSAPP_API_URL = f"https://graph.facebook.com/v19.0/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+WHATSAPP_API_URL = f"https://graph.facebook.com/v19.0/{WHATSAPP_PHONE_ID}/messages"
 
 # =========================
-# 👤 App Behaviour
+# ⚙ Bot Behaviour
 # =========================
 MAX_FREE_MESSAGES = int(os.getenv("MAX_FREE_MESSAGES", "6"))
 TYPING_DELAY_SECONDS = float(os.getenv("TYPING_DELAY_SECONDS", "1.5"))
-
-# Admin token for protected actions (/webhook?admin_token=...)
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
 
 # =========================
-# 💳 Payments (Razorpay)
+# 💳 Razorpay
 # =========================
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
-
-# Optional: base URL (if you ever need it)
-BASE_URL = os.getenv("BASE_URL", "https://api.nyaysetu.in")
