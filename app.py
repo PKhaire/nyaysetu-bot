@@ -106,6 +106,7 @@ def get_or_create_user(db, wa_id: str) -> User:
 # -------------------------------------------------------------------
 def save_state(db, user: User, state: str):
     user.state = state
+    db.add(user)
     db.commit()
 
 # -------------------------------------------------------------------
