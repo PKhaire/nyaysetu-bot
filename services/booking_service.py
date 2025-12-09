@@ -41,20 +41,30 @@ def parse_date_selection(selection_id: str) -> str:
 # 2. TIME SLOT CALENDAR (for WhatsApp list picker)
 # ---------------------------------------------------------------------------
 
-def generate_slots_calendar():
-    slots = [
-        ("slot_morning", "10:00 – 11:00 AM"),
-        ("slot_afternoon", "2:00 – 3:00 PM"),
-        ("slot_evening", "6:00 – 7:00 PM"),
+def generate_slots_calendar(selected_date: str):
+    """
+    Return time slot rows formatted for WhatsApp list picker.
+    Must match WhatsApp format: id, title, description.
+    """
+
+    # INDIA lawyer consultation realistic timing
+    slot_labels = [
+        ("slot_10_11", "10:00 AM – 11:00 AM"),
+        ("slot_12_1", "12:00 PM – 1:00 PM"),
+        ("slot_3_4", "3:00 PM – 4:00 PM"),
+        ("slot_6_7", "6:00 PM – 7:00 PM"),
+        ("slot_8_9", "8:00 PM – 9:00 PM"),
     ]
-    return [
-        {
+
+    rows = []
+    for slot_id, label in slot_labels:
+        rows.append({
             "id": slot_id,
             "title": label,
-            "description": "Select this time"
-        }
-        for slot_id, label in slots
-    ]
+            "description": f"Available on {selected_date}"
+        })
+
+    return rows
 
 
 def parse_slot_selection(selection_id: str) -> str:
