@@ -1,9 +1,12 @@
 import uuid
+import razorpay
 from datetime import datetime, timedelta
 
 from models import Booking, Rating
 from db import SessionLocal
+from config import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
 
+razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
 
 # ---------------------------------------------------------
 # Generate next 7 calendar days for WhatsApp list selector
@@ -51,23 +54,42 @@ def generate_slots_calendar(date_str):
 # ---------------------------------------------------------
 # Create booking (PENDING) + dummy payment URL
 # ---------------------------------------------------------
-def create_booking_temp(db, user, date, slot):
-    """
-    Only creates Booking entry that matches the DB model exactly.
-    Returns (booking, payment_link)
-    """
-    payment_link = f"https://pay.nyaysetu.in/{uuid.uuid4().hex}"  # make unique pay link
-
+def create_booking_temp(db, user, date_str, slot_str):
     booking = Booking(
-        whatsapp_id=user.whatsapp_id,
-        date=date,
-        slot=slot,
-        status="PENDING",
-        payment_id=None
+        user_id=user.id,
+        name=user.name,
+        city=user.city,
+        category=user.category,
+        date=date_str,
+        slot=slot_str,
+        status="pending",
     )
     db.add(booking)
     db.commit()
     db.refresh(booking)
+
+    # Create Razorpay Payment Link
+    payment = razorpay_client.payment_link.create({
+        "amount": 49900,  # ₹499 × 100
+        "currency": "INR",
+        "description": "NyaySetu Legal Consultation",
+        "reference_id": str(booking.id),
+        "customer": {
+            "name": user.name,
+            "contact": user.wa_id  # WhatsApp number
+        },
+        "notify": {
+            "sms": True,
+            "email": False
+        },
+        "callback_url": "https://api.nyaysetu.in/payment/success",
+        "callback_method": "get"
+    })
+
+    payment_link = payment["short_url"]
+    booking.payment_link = payment_link
+    db.add(booking)
+    db.commit()
 
     return booking, payment_link
 
