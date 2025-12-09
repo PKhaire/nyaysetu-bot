@@ -3,6 +3,8 @@ import json
 import logging
 import random
 import string
+import razorpay
+
 from datetime import datetime
 
 from flask import Flask, request, jsonify
@@ -17,7 +19,11 @@ from config import (
     MAX_FREE_MESSAGES,
     TYPING_DELAY_SECONDS,
     ADMIN_TOKEN,
+    RAZORPAY_KEY_ID, 
+    RAZORPAY_KEY_SECRET,
 )
+
+razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
 
 # --- Services ---
 from services.whatsapp_service import (
@@ -205,60 +211,57 @@ def handle_booking_flow(
         return
 
     # 5) Ask for slot (interactive list reply)
-if user.state == ASK_SLOT:
-    if interactive_id and interactive_id.startswith("slot_"):
+    if user.state == ASK_SLOT:
+        if interactive_id and interactive_id.startswith("slot_"):
 
-        # Save slot (only slot code e.g., "8_9")
-        user.temp_slot = interactive_id.replace("slot_", "", 1)
-        db.add(user)
-        db.commit()
+            user.temp_slot = interactive_id.replace("slot_", "", 1)
+            db.add(user)
+            db.commit()
 
-        name = user.name
-        city = user.city
-        category = user.category
-        date = user.temp_date
-        slot_code = user.temp_slot  # → "8_9"
+            name = user.temp_name
+            city = user.temp_city
+            category = user.temp_category
+            date = user.temp_date
+            slot_code = user.temp_slot
 
-        # Convert slot to readable format
-        slot_map = {
-            "10_11": "10:00 AM – 11:00 AM",
-            "12_1": "12:00 PM – 1:00 PM",
-            "3_4": "3:00 PM – 4:00 PM",
-            "6_7": "6:00 PM – 7:00 PM",
-            "8_9": "8:00 PM – 9:00 PM",
-        }
-        slot_readable = slot_map.get(slot_code, slot_code)
+            slot_map = {
+                "10_11": "10:00 AM – 11:00 AM",
+                "12_1": "12:00 PM – 1:00 PM",
+                "3_4": "3:00 PM – 4:00 PM",
+                "6_7": "6:00 PM – 7:00 PM",
+                "8_9": "8:00 PM – 9:00 PM",
+            }
+            slot_readable = slot_map.get(slot_code, slot_code)
 
-        # Create booking + payment link
-        booking, payment_link = create_booking_temp(
-            db=db,
-            user=user,
-            date_str=date,
-            slot_str=slot_readable,
-        )
+            booking, payment_link = create_booking_temp(
+                db=db,
+                user=user,
+                date_str=date,
+                slot_str=slot_readable
+            )
 
-        user.last_payment_link = payment_link
-        save_state(db, user, WAITING_PAYMENT)
+            user.last_payment_link = payment_link
+            save_state(db, user, WAITING_PAYMENT)
 
-        send_text(
-            wa_id,
-            "✅ *Your appointment is scheduled:*\n"
-            f"*Name:* {name}\n"
-            f"*City:* {city}\n"
-            f"*Category:* {category}\n"
-            f"*Date:* {date}\n"
-            f"*Slot:* {slot_readable}\n"
-            f"*Fees:* ₹499 (one legal session) 🙂\n\n"
-            f"Please complete payment using the link:\n{payment_link}"
-        )
+            send_text(
+                wa_id,
+                "✅ *Your appointment is scheduled:*\n"
+                f"*Name:* {name}\n"
+                f"*City:* {city}\n"
+                f"*Category:* {category}\n"
+                f"*Date:* {date}\n"
+                f"*Slot:* {slot_readable}\n"
+                f"*Fees:* ₹499 (one legal session) 🙂\n\n"
+                f"💳 Please complete payment using this secure link:\n{payment_link}"
+            )
+        else:
+            send_text(
+                wa_id,
+                "Please select a time slot from the list I sent. "
+                "If you didn't receive it, type *Book Consultation* to restart booking."
+            )
+            return
 
-    else:
-        send_text(
-            wa_id,
-            "Please select a time slot from the list I sent. "
-            "If you didn't receive it, type *Book Consultation* to restart booking."
-        )
-    return
 
     # 6) Waiting payment – soft reminder
     if user.state == WAITING_PAYMENT:
@@ -509,6 +512,40 @@ def webhook():
         return jsonify({"error": str(e)}), 500
     finally:
         db.close()
+
+@app.post("/payment-webhook")
+async def payment_webhook(request: Request):
+    body = await request.body()
+    payload = request.json()
+
+    event = payload.get("event")
+    if event != "payment.captured":
+        return {"status": "ignored"}
+
+    payment_id = payload["payload"]["payment"]["entity"]["id"]
+    booking_id = payload["payload"]["payment"]["entity"]["notes"]["booking_id"]
+
+    db = SessionLocal()
+    booking = db.query(Booking).filter_by(id=booking_id).first()
+    if not booking:
+        return {"status": "booking_not_found"}
+
+    booking.payment_status = "PAID"
+    db.add(booking)
+    db.commit()
+
+    user = db.query(User).filter_by(id=booking.user_id).first()
+    if not user:
+        return {"status": "user_not_found"}
+
+    send_text(
+        user.whatsapp_number,
+        "🎉 *Payment confirmed!* Your legal consultation is booked successfully.\n"
+        "⏳ Our legal expert will call you at your appointment time.\n\n"
+        "Thank you for choosing *NyaySetu* ⚖️"
+    )
+
+    return {"status": "success"}
 
 # -------------------------------------------------------------------
 # DB migrations at startup
