@@ -83,36 +83,40 @@ def parse_slot_selection(selection_id: str) -> str:
 # 3. BOOKING HELPERS (DB)
 # ---------------------------------------------------------------------------
 
-def create_booking_temp(user, chosen_date_iso: str, slot_code: str) -> Booking:
+def create_booking_temp(
+    db,
+    user,
+    name,
+    city,
+    category,
+    date,
+    slot,
+    price
+):
     """
-    Create a temporary booking in DB with status='pending_payment'.
-
-    - user: SQLAlchemy User object (already loaded in app.py)
-    - chosen_date_iso: 'YYYY-MM-DD' string
-    - slot_code: e.g. 'slot_morning'
+    Creates booking entry in DB and returns (booking_object, payment_link).
+    Payment link can be Razorpay / Instamojo / Cashfree / Dummy.
     """
-    from models import Booking  # local import to avoid circular issues
 
-    slot_label = parse_slot_selection(slot_code)
+    booking = Booking(
+        whatsapp_id=user.whatsapp_id,
+        name=name,
+        city=city,
+        category=category,
+        date=date,
+        slot=slot,
+        price=price,
+        status="Pending Payment",
+        created_at=datetime.utcnow(),
+    )
+    db.add(booking)
+    db.commit()
+    db.refresh(booking)
 
-    db = next(get_db())
-    try:
-        booking = Booking(
-            whatsapp_id=getattr(user, "whatsapp_id", None),
-            case_id=getattr(user, "case_id", None),
-            date=chosen_date_iso,
-            slot=slot_label,
-            amount=CONSULTATION_PRICE,
-            status="pending_payment",
-            created_at=datetime.utcnow()
-        )
-        db.add(booking)
-        db.commit()
-        db.refresh(booking)
-        return booking
-    finally:
-        db.close()
+    # For now payment link is dummy — later Razorpay webhook can confirm
+    payment_link = f"https://pay.nyaysetu.in/pay/{booking.id}"
 
+    return booking, payment_link
 
 def confirm_booking_after_payment(booking_id: int) -> Optional[Booking]:
     """
