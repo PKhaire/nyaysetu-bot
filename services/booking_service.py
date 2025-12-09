@@ -14,42 +14,18 @@ CONSULTATION_PRICE = 499
 # ---------------------------------------------------------------------------
 # 1. DATE CALENDAR (for WhatsApp list picker)
 # ---------------------------------------------------------------------------
-
-def generate_dates_calendar(num_days: int = 7) -> List[Dict]:
-    """
-    Build WhatsApp 'list' sections for the next `num_days` dates.
-
-    Returns a list of sections compatible with send_list_picker():
-    [
-      {
-        "title": "Available dates",
-        "rows": [
-          {"id": "date_2025-12-07", "title": "07 Dec (Sun)", "description": "..."},
-          ...
-        ]
-      }
-    ]
-    """
+def generate_dates_calendar(num_days: int = 7):
     today = datetime.now().date()
     rows = []
-
     for i in range(num_days):
         d = today + timedelta(days=i)
-        row_id = f"date_{d.isoformat()}"          # e.g. "date_2025-12-07"
-        title = d.strftime("%d %b (%a)")          # e.g. "07 Dec (Sun)"
         rows.append({
-            "id": row_id,
-            "title": title,
-            "description": "Tap to select this date"
+            "id": f"date_{d.isoformat()}",
+            "title": d.strftime("%d %b (%a)"),
+            "description": "Select this date"
         })
+    return rows
 
-    sections = [
-        {
-            "title": "Available dates",
-            "rows": rows
-        }
-    ]
-    return sections
 
 
 def parse_date_selection(selection_id: str) -> str:
@@ -65,44 +41,20 @@ def parse_date_selection(selection_id: str) -> str:
 # 2. TIME SLOT CALENDAR (for WhatsApp list picker)
 # ---------------------------------------------------------------------------
 
-def generate_slots_calendar() -> List[Dict]:
-    """
-    Build WhatsApp 'list' sections for time slots.
-
-    Returns:
-    [
-      {
-        "title": "Available time slots",
-        "rows": [
-          {"id": "slot_morning", "title": "10:00 – 11:00 AM", "description": "..."},
-          ...
-        ]
-      }
-    ]
-    """
-    # You can tweak these labels as you like.
+def generate_slots_calendar():
     slots = [
         ("slot_morning", "10:00 – 11:00 AM"),
         ("slot_afternoon", "2:00 – 3:00 PM"),
         ("slot_evening", "6:00 – 7:00 PM"),
     ]
-
-    rows = [
+    return [
         {
             "id": slot_id,
             "title": label,
-            "description": "Tap to select this time"
+            "description": "Select this time"
         }
         for slot_id, label in slots
     ]
-
-    sections = [
-        {
-            "title": "Available time slots",
-            "rows": rows
-        }
-    ]
-    return sections
 
 
 def parse_slot_selection(selection_id: str) -> str:
