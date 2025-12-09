@@ -83,41 +83,7 @@ def parse_slot_selection(selection_id: str) -> str:
 # 3. BOOKING HELPERS (DB)
 # ---------------------------------------------------------------------------
 
-def create_booking_temp(
-    db,
-    user,
-    name,
-    city,
-    category,
-    date,
-    slot,
-    price
-):
-    """
-    Creates booking entry in DB and returns (booking_object, payment_link).
-    Payment link can be Razorpay / Instamojo / Cashfree / Dummy.
-    """
-
-    booking = Booking(
-        whatsapp_id=user.whatsapp_id,
-        name=name,
-        city=city,
-        category=category,
-        date=date,
-        slot=slot,
-        price=price,
-        status="Pending Payment",
-        created_at=datetime.utcnow(),
-    )
-    db.add(booking)
-    db.commit()
-    db.refresh(booking)
-
-    # For now payment link is dummy — later Razorpay webhook can confirm
-    payment_link = f"https://pay.nyaysetu.in/pay/{booking.id}"
-
-    return booking, payment_link
-
+create_booking_temp
 def confirm_booking_after_payment(booking_id: int) -> Optional[Booking]:
     """
     Mark booking as 'paid' after successful payment.
@@ -135,7 +101,6 @@ def confirm_booking_after_payment(booking_id: int) -> Optional[Booking]:
         return booking
     finally:
         db.close()
-
 
 def mark_booking_completed(booking_id: int) -> Optional[Booking]:
     """
