@@ -242,16 +242,12 @@ def handle_booking_flow(
             slot_str = getattr(user, "temp_slot", "")
 
             booking, payment_link = create_booking_temp(
-                db=db,
-                user=user,
-                name=name,
-                city=city,
-                category=category,
-                date=date_str,
-                slot=slot_str,
-                price=499,
+                            db,
+                            user,
+                            date_str,
+                            slot_str
             )
-
+            
             user.last_payment_link = payment_link
             save_state(db, user, WAITING_PAYMENT)
 
