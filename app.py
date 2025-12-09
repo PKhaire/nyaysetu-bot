@@ -229,10 +229,10 @@ def handle_booking_flow(
         return
 
     # 5) Ask for slot (interactive list reply)
-        if user.state == ASK_SLOT:
-            if interactive_id and interactive_id.startswith("slot_"):
+if user.state == ASK_SLOT:
+    if interactive_id and interactive_id.startswith("slot_"):
 
-        # Save slot code (e.g., 8_9)
+        # Save slot (only slot code e.g., "8_9")
         user.temp_slot = interactive_id.replace("slot_", "", 1)
         db.add(user)
         db.commit()
@@ -241,7 +241,7 @@ def handle_booking_flow(
         city = user.city
         category = user.category
         date = user.temp_date
-        slot_code = user.temp_slot  # "8_9"
+        slot_code = user.temp_slot  # → "8_9"
 
         # Convert slot to readable format
         slot_map = {
@@ -253,12 +253,12 @@ def handle_booking_flow(
         }
         slot_readable = slot_map.get(slot_code, slot_code)
 
-        # Create temporary booking + payment link
+        # Create booking + payment link
         booking, payment_link = create_booking_temp(
             db=db,
             user=user,
-            date=date,
-            slot=slot_code
+            date_str=date,
+            slot_str=slot_readable,
         )
 
         user.last_payment_link = payment_link
@@ -266,20 +266,21 @@ def handle_booking_flow(
 
         send_text(
             wa_id,
-            "📌 *Your appointment details:*\n"
+            "✅ *Your appointment is scheduled:*\n"
             f"*Name:* {name}\n"
             f"*City:* {city}\n"
             f"*Category:* {category}\n"
             f"*Date:* {date}\n"
             f"*Slot:* {slot_readable}\n"
-            f"*Fees:* ₹499 (single consultation session 🙂)\n\n"
-            f"Please complete payment using this link:\n{payment_link}"
+            f"*Fees:* ₹499 (one legal session) 🙂\n\n"
+            f"Please complete payment using the link:\n{payment_link}"
         )
 
     else:
         send_text(
             wa_id,
-            "Please select a time slot from the list."
+            "Please select a time slot from the list I sent. "
+            "If you didn't receive it, type *Book Consultation* to restart booking."
         )
     return
 
