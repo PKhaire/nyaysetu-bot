@@ -229,56 +229,59 @@ def handle_booking_flow(
         return
 
     # 5) Ask for slot (interactive list reply)
-    if user.state == ASK_SLOT:
-        if interactive_id and interactive_id.startswith("slot_"):
-            user.temp_slot = interactive_id.replace("slot_", "", 1)
-            db.add(user)
-            db.commit()
+        if user.state == ASK_SLOT:
+            if interactive_id and interactive_id.startswith("slot_"):
 
-            name = user.temp_name
-            city = user.temp_city
-            category = user.temp_category
-            date_str = user.temp_date
-            slot_str = user.temp_slot
+        # Save slot code (e.g., 8_9)
+        user.temp_slot = interactive_id.replace("slot_", "", 1)
+        db.add(user)
+        db.commit()
 
-            # Convert slot to readable format before sending
-            slot_map = {
-                "10_11": "10:00 AM – 11:00 AM",
-                "12_1": "12:00 PM – 1:00 PM",
-                "3_4": "3:00 PM – 4:00 PM",
-                "6_7": "6:00 PM – 7:00 PM",
-                "8_9": "8:00 PM – 9:00 PM",
-            }
-            slot_readable = slot_map.get(slot_str, slot_str)
+        name = user.name
+        city = user.city
+        category = user.category
+        date = user.temp_date
+        slot_code = user.temp_slot  # "8_9"
 
-            booking, payment_link = create_booking_temp(
-                            db,
-                            user,
-                            date_str,
-                            slot_str
-            )
-            
-            user.last_payment_link = payment_link
-            save_state(db, user, WAITING_PAYMENT)
+        # Convert slot to readable format
+        slot_map = {
+            "10_11": "10:00 AM – 11:00 AM",
+            "12_1": "12:00 PM – 1:00 PM",
+            "3_4": "3:00 PM – 4:00 PM",
+            "6_7": "6:00 PM – 7:00 PM",
+            "8_9": "8:00 PM – 9:00 PM",
+        }
+        slot_readable = slot_map.get(slot_code, slot_code)
 
-            send_text(
-                wa_id,
-                "✅ *Your appointment details:*\n"
-                f"*Name:* {name}\n"
-                f"*City:* {city}\n"
-                f"*Category:* {category}\n"
-                f"*Date:* {date_str}\n"
-                f"*Slot:* {slot_str}\n"
-                f"*Fees:* ₹499 (single session only) 🙂\n\n"
-                f"Please complete payment using this link:\n{payment_link}"
-            )
-        else:
-            send_text(
-                wa_id,
-                "Please select a time slot from the list I sent. "
-                "If you didn't receive it, type *Book Consultation* to restart booking."
-            )
-        return
+        # Create temporary booking + payment link
+        booking, payment_link = create_booking_temp(
+            db=db,
+            user=user,
+            date=date,
+            slot=slot_code
+        )
+
+        user.last_payment_link = payment_link
+        save_state(db, user, WAITING_PAYMENT)
+
+        send_text(
+            wa_id,
+            "📌 *Your appointment details:*\n"
+            f"*Name:* {name}\n"
+            f"*City:* {city}\n"
+            f"*Category:* {category}\n"
+            f"*Date:* {date}\n"
+            f"*Slot:* {slot_readable}\n"
+            f"*Fees:* ₹499 (single consultation session 🙂)\n\n"
+            f"Please complete payment using this link:\n{payment_link}"
+        )
+
+    else:
+        send_text(
+            wa_id,
+            "Please select a time slot from the list."
+        )
+    return
 
     # 6) Waiting payment – soft reminder
     if user.state == WAITING_PAYMENT:
