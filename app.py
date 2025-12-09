@@ -204,29 +204,59 @@ def handle_booking_flow(
         )
         return
 
-    # 4) Ask for date (interactive list reply)
-    if user.state == ASK_DATE:
-        if interactive_id and interactive_id.startswith("date_"):
-            user.temp_date = interactive_id.replace("date_", "", 1)
-            db.add(user)
-            db.commit()
+    # 5) Ask for slot (interactive list reply)
+if user.state == ASK_SLOT:
+    if interactive_id and interactive_id.startswith("slot_"):
+        user.temp_slot = interactive_id.replace("slot_", "", 1)
+        db.add(user)
+        db.commit()
 
-            rows = generate_slots_calendar(user.temp_date)
-            save_state(db, user, ASK_SLOT)
-            send_list_picker(
-                wa_id,
-                header=f"Select time slot for {user.temp_date}",
-                body="Available time slots (IST)",
-                rows=rows,
-                section_title="Time Slots",
-            )
-        else:
-            send_text(
-                wa_id,
-                "Please select a date from the list I sent. "
-                "If you didn't receive it, type *Book Consultation* to restart booking."
-            )
+        name = user.name
+        city = user.city
+        category = user.category
+        date = user.temp_date
+        slot = interactive_id
+
+        slot_code = slot.replace("slot_", "")
+        slot_map = {
+            "10_11": "10:00 AM – 11:00 AM",
+            "12_1": "12:00 PM – 1:00 PM",
+            "3_4": "3:00 PM – 4:00 PM",
+            "6_7": "6:00 PM – 7:00 PM",
+            "8_9": "8:00 PM – 9:00 PM",
+        }
+        slot_readable = slot_map.get(slot_code, slot_code)
+
+        booking, payment_link = create_booking_temp(
+            db=db,
+            user=user,
+            date_str=date,
+            slot_str=slot_readable
+        )
+
+        user.last_payment_link = payment_link
+        save_state(db, user, WAITING_PAYMENT)
+
+        send_text(
+            wa_id,
+            "✅ *Your appointment details:*\n"
+            f"*Name:* {name}\n"
+            f"*City:* {city}\n"
+            f"*Category:* {category}\n"
+            f"*Date:* {date}\n"
+            f"*Slot:* {slot_readable}\n"
+            f"*Fees:* ₹499 (single session only) 🙂\n\n"
+            f"Please complete payment using this link:\n{payment_link}"
+        )
+        return   # ✅ correct indentation
+
+    else:
+        send_text(
+            wa_id,
+            "Please select a time slot from the previous list."
+        )
         return
+
 
     # 5) Ask for slot (interactive list reply)
 if user.state == ASK_SLOT:
