@@ -1,54 +1,36 @@
-# services/booking_service.py
-
+import uuid
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional
 
-from db import get_db
-from models import Booking
-from services.whatsapp_service import send_buttons
-
-# Single fixed price – if you want to move to config, you can later.
-CONSULTATION_PRICE = 499
+from models import Booking, Rating
+from db import SessionLocal
 
 
-# ---------------------------------------------------------------------------
-# 1. DATE CALENDAR (for WhatsApp list picker)
-# ---------------------------------------------------------------------------
-def generate_dates_calendar(num_days: int = 7):
-    today = datetime.now().date()
+# ---------------------------------------------------------
+# Generate next 7 calendar days for WhatsApp list selector
+# ---------------------------------------------------------
+def generate_dates_calendar():
+    today = datetime.utcnow()
     rows = []
-    for i in range(num_days):
+
+    for i in range(7):
         d = today + timedelta(days=i)
+        date_str = d.strftime("%Y-%m-%d")
+        title = d.strftime("%d %b (%a)")
+
         rows.append({
-            "id": f"date_{d.isoformat()}",
-            "title": d.strftime("%d %b (%a)"),
+            "id": f"date_{date_str}",
+            "title": title,
             "description": "Select this date"
         })
+
     return rows
 
 
-
-def parse_date_selection(selection_id: str) -> str:
-    """
-    Convert row id like 'date_2025-12-07' → '2025-12-07' (ISO string).
-    """
-    if selection_id.startswith("date_"):
-        return selection_id[len("date_"):]
-    return selection_id
-
-
-# ---------------------------------------------------------------------------
-# 2. TIME SLOT CALENDAR (for WhatsApp list picker)
-# ---------------------------------------------------------------------------
-
-def generate_slots_calendar(selected_date: str):
-    """
-    Return time slot rows formatted for WhatsApp list picker.
-    Must match WhatsApp format: id, title, description.
-    """
-
-    # INDIA lawyer consultation realistic timing
-    slot_labels = [
+# ---------------------------------------------------------
+# Time-slots list for selected date
+# ---------------------------------------------------------
+def generate_slots_calendar(date_str):
+    slots = [
         ("slot_10_11", "10:00 AM – 11:00 AM"),
         ("slot_12_1", "12:00 PM – 1:00 PM"),
         ("slot_3_4", "3:00 PM – 4:00 PM"),
@@ -57,84 +39,81 @@ def generate_slots_calendar(selected_date: str):
     ]
 
     rows = []
-    for slot_id, label in slot_labels:
+    for slot_id, title in slots:
         rows.append({
             "id": slot_id,
-            "title": label,
-            "description": f"Available on {selected_date}"
+            "title": title,
+            "description": f"Available on {date_str}"
         })
-
     return rows
 
 
-def parse_slot_selection(selection_id: str) -> str:
+# ---------------------------------------------------------
+# Create booking (PENDING) + dummy payment URL
+# ---------------------------------------------------------
+def create_booking_temp(db, user, date, slot):
     """
-    Map row id (slot_xxx) → human-friendly label.
+    Only creates Booking entry that matches the DB model exactly.
+    Returns (booking, payment_link)
     """
-    mapping = {
-        "slot_morning": "10:00 – 11:00 AM",
-        "slot_afternoon": "2:00 – 3:00 PM",
-        "slot_evening": "6:00 – 7:00 PM",
-    }
-    return mapping.get(selection_id, selection_id)
+    payment_link = f"https://pay.nyaysetu.in/{uuid.uuid4().hex}"  # make unique pay link
 
-
-# ---------------------------------------------------------------------------
-# 3. BOOKING HELPERS (DB)
-# ---------------------------------------------------------------------------
-
-create_booking_temp
-def confirm_booking_after_payment(booking_id: int) -> Optional[Booking]:
-    """
-    Mark booking as 'paid' after successful payment.
-    """
-    from models import Booking  # local import
-    db = next(get_db())
-    try:
-        booking = db.query(Booking).filter(Booking.id == booking_id).first()
-        if not booking:
-            return None
-        booking.status = "paid"
-        booking.updated_at = datetime.utcnow()
-        db.commit()
-        db.refresh(booking)
-        return booking
-    finally:
-        db.close()
-
-def mark_booking_completed(booking_id: int) -> Optional[Booking]:
-    """
-    Mark booking as 'completed' after the consultation call.
-    """
-    from models import Booking  # local import
-    db = next(get_db())
-    try:
-        booking = db.query(Booking).filter(Booking.id == booking_id).first()
-        if not booking:
-            return None
-        booking.status = "completed"
-        booking.updated_at = datetime.utcnow()
-        db.commit()
-        db.refresh(booking)
-        return booking
-    finally:
-        db.close()
-
-
-# ---------------------------------------------------------------------------
-# 4. RATING FLOW
-# ---------------------------------------------------------------------------
-
-def ask_rating_buttons(wa_id: str) -> None:
-    """
-    Send rating options after the call is done.
-    """
-    send_buttons(
-        wa_id,
-        "How was your consultation? Please rate your experience:",
-        [
-            {"id": "rating_5", "title": "⭐⭐⭐⭐⭐ Excellent"},
-            {"id": "rating_4", "title": "⭐⭐⭐⭐ Good"},
-            {"id": "rating_3", "title": "⭐⭐⭐ Okay"},
-        ]
+    booking = Booking(
+        whatsapp_id=user.whatsapp_id,
+        date=date,
+        slot=slot,
+        status="PENDING",
+        payment_id=None
     )
+    db.add(booking)
+    db.commit()
+    db.refresh(booking)
+
+    return booking, payment_link
+
+
+# ---------------------------------------------------------
+# Mark payment completed (called from webhook later)
+# ---------------------------------------------------------
+def confirm_booking_after_payment(db, booking: Booking, payment_id: str):
+    booking.status = "PAID"
+    booking.payment_id = payment_id
+    db.add(booking)
+    db.commit()
+
+
+# ---------------------------------------------------------
+# After call completion
+# ---------------------------------------------------------
+def mark_booking_completed(db, booking: Booking):
+    booking.status = "COMPLETED"
+    db.add(booking)
+    db.commit()
+
+
+# ---------------------------------------------------------
+# Ask rating buttons text
+# ---------------------------------------------------------
+def ask_rating_buttons():
+    return (
+        "⭐ How was your consultation experience?\n"
+        "Please rate from 1–5 (just type a number):\n"
+        "1️⃣ Very Bad\n"
+        "2️⃣ Bad\n"
+        "3️⃣ Average\n"
+        "4️⃣ Good\n"
+        "5️⃣ Excellent"
+    )
+
+
+# ---------------------------------------------------------
+# Save rating
+# ---------------------------------------------------------
+def save_rating(db, user, booking: Booking, score: int):
+    rating = Rating(
+        whatsapp_id=user.whatsapp_id,
+        booking_id=booking.id,
+        score=score
+    )
+    db.add(rating)
+    db.commit()
