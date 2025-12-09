@@ -1,5 +1,11 @@
 import os
 
+# =========================
+# 🔐 OpenAI / AI Settings
+# =========================
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+PRIMARY_MODEL = os.getenv("PRIMARY_MODEL", "gpt-4.1-mini")
+
 # ------------------------------
 # WhatsApp API Credentials
 # ------------------------------
