@@ -15,6 +15,8 @@ WHATSAPP_VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "")
 # Accept both naming styles from Render / Meta
 WHATSAPP_PHONE_ID = os.getenv("WHATSAPP_PHONE_ID", "").strip() 
 
+print("DEBUG WHATSAPP_PHONE_ID =", repr(WHATSAPP_PHONE_ID))
+
 WHATSAPP_API_URL = f"https://graph.facebook.com/v19.0/{WHATSAPP_PHONE_ID}/messages"
 
 # =========================
