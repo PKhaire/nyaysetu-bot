@@ -13,18 +13,7 @@ WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN", "")
 WHATSAPP_VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "")
 
 # Accept both naming styles from Render / Meta
-WHATSAPP_PHONE_ID = (
-    os.getenv("WHATSAPP_PHONE_ID") or
-    os.getenv("WHATSAPP_PHONE_NUMBER_ID") or
-    os.getenv("PHONE_NUMBER_ID")
-)
-
-if not WHATSAPP_PHONE_ID:
-    raise RuntimeError(
-        "❌ WhatsApp Phone ID missing.\n"
-        "Please add environment variable WHATSAPP_PHONE_ID "
-        "(or PHONE_NUMBER_ID / WHATSAPP_PHONE_NUMBER_ID)."
-    )
+WHATSAPP_PHONE_ID = os.getenv("WHATSAPP_PHONE_ID", "").strip() 
 
 WHATSAPP_API_URL = f"https://graph.facebook.com/v19.0/{WHATSAPP_PHONE_ID}/messages"
 
