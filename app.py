@@ -235,11 +235,21 @@ def handle_booking_flow(
             db.add(user)
             db.commit()
 
-            name = getattr(user, "temp_name", "Client")
-            city = getattr(user, "temp_city", "NA")
-            category = getattr(user, "temp_category", "General")
-            date_str = getattr(user, "temp_date", "")
-            slot_str = getattr(user, "temp_slot", "")
+            name = user.temp_name
+            city = user.temp_city
+            category = user.temp_category
+            date_str = user.temp_date
+            slot_str = user.temp_slot
+
+            # Convert slot to readable format before sending
+            slot_map = {
+                "10_11": "10:00 AM – 11:00 AM",
+                "12_1": "12:00 PM – 1:00 PM",
+                "3_4": "3:00 PM – 4:00 PM",
+                "6_7": "6:00 PM – 7:00 PM",
+                "8_9": "8:00 PM – 9:00 PM",
+            }
+            slot_readable = slot_map.get(slot_str, slot_str)
 
             booking, payment_link = create_booking_temp(
                             db,
@@ -259,7 +269,7 @@ def handle_booking_flow(
                 f"*Category:* {category}\n"
                 f"*Date:* {date_str}\n"
                 f"*Slot:* {slot_str}\n"
-                f"*Fees:* ₹499 (one-time)\n\n"
+                f"*Fees:* ₹499 (single session only) 🙂\n\n"
                 f"Please complete payment using this link:\n{payment_link}"
             )
         else:
