@@ -1,141 +1,124 @@
+# services/booking_service.py
+import os
 import uuid
-import razorpay
 from datetime import datetime, timedelta
 
-from models import Booking, Rating
-from db import SessionLocal
-from config import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
+from models import Booking
+from sqlalchemy.orm import Session
 
-razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+# Payment base url used to generate a link. Replace with live integration later.
+PAY_BASE_URL = os.getenv("PAY_BASE_URL", "https://pay.nyaysetu.in")
 
-# ---------------------------------------------------------
-# Generate next 7 calendar days for WhatsApp list selector
-# ---------------------------------------------------------
-def generate_dates_calendar():
-    today = datetime.utcnow()
+def _make_booking_ref() -> str:
+    return "BK-" + uuid.uuid4().hex[:12].upper()
+
+def generate_dates_calendar(days=7):
+    """
+    Returns a list of rows for WhatsApp list picker for the next `days`.
+    Each row is dict: {'id': 'date_YYYY-MM-DD', 'title': 'DD Mon (Day)', 'description': 'Tap to select this date'}
+    """
     rows = []
-
-    for i in range(7):
+    today = datetime.utcnow().date()
+    for i in range(days):
         d = today + timedelta(days=i)
-        date_str = d.strftime("%Y-%m-%d")
+        id_ = f"date_{d.isoformat()}"
         title = d.strftime("%d %b (%a)")
-
         rows.append({
-            "id": f"date_{date_str}",
+            "id": id_,
             "title": title,
-            "description": "Select this date"
+            "description": "Tap to select this date"
         })
-
     return rows
 
-
-# ---------------------------------------------------------
-# Time-slots list for selected date
-# ---------------------------------------------------------
-def generate_slots_calendar(date_str):
+def generate_slots_calendar(date_str: str):
+    """
+    Given date string (YYYY-MM-DD) returns time-slot rows for that date.
+    Each row is dict: {'id': 'slot_8_9', 'title': '8:00 PM – 9:00 PM', 'description': 'Available on YYYY-MM-DD'}
+    """
+    # Basic fixed slots - update as needed
     slots = [
-        ("slot_10_11", "10:00 AM – 11:00 AM"),
-        ("slot_12_1", "12:00 PM – 1:00 PM"),
-        ("slot_3_4", "3:00 PM – 4:00 PM"),
-        ("slot_6_7", "6:00 PM – 7:00 PM"),
-        ("slot_8_9", "8:00 PM – 9:00 PM"),
+        ("10_11", "10:00 AM – 11:00 AM"),
+        ("12_1", "12:00 PM – 1:00 PM"),
+        ("3_4", "3:00 PM – 4:00 PM"),
+        ("6_7", "6:00 PM – 7:00 PM"),
+        ("8_9", "8:00 PM – 9:00 PM"),
     ]
-
     rows = []
-    for slot_id, title in slots:
+    for code, title in slots:
         rows.append({
-            "id": slot_id,
+            "id": f"slot_{code}",
             "title": title,
             "description": f"Available on {date_str}"
         })
     return rows
 
-
-# ---------------------------------------------------------
-# Create booking (PENDING) + dummy payment URL
-# ---------------------------------------------------------
-def create_booking_temp(db, user, date_str, slot_str):
+def create_booking_temp(db: Session, user, name: str, city: str, category: str, date: str, slot: str, price: float = 499.0):
+    """
+    Creates a booking row with status PENDING and returns (booking_obj, payment_link)
+    This function accepts SQLAlchemy session `db` and a `user` object (SQLAlchemy User).
+    """
+    # create booking DB object
+    booking_ref = _make_booking_ref()
+    # human readable slot (store code in slot)
+    slot_code = slot.replace("slot_", "") if slot else slot
     booking = Booking(
-        user_id=user.id,
-        name=user.name,
-        city=user.city,
-        category=user.category,
-        date=date_str,
-        slot=slot_str,
-        status="pending",
+        booking_ref=booking_ref,
+        whatsapp_id=user.whatsapp_id,
+        case_id=user.case_id,
+        name=name,
+        city=city,
+        category=category,
+        date=date,
+        slot=slot_code,
+        price=float(price),
+        status="PENDING",
     )
     db.add(booking)
     db.commit()
     db.refresh(booking)
 
-    # Create Razorpay Payment Link
-    payment = razorpay_client.payment_link.create({
-        "amount": 49900,  # ₹499 × 100
-        "currency": "INR",
-        "description": "NyaySetu Legal Consultation",
-        "reference_id": str(booking.id),
-        "customer": {
-            "name": user.name,
-            "contact": user.wa_id  # WhatsApp number
-        },
-        "notify": {
-            "sms": True,
-            "email": False
-        },
-        "callback_url": "https://api.nyaysetu.in/payment/success",
-        "callback_method": "get"
-    })
-
-    payment_link = payment["short_url"]
+    # generate a simple payment link (placeholder) - replace with Razorpay / real provider
+    payment_link = f"{PAY_BASE_URL}/{booking_ref}"
+    # save link
     booking.payment_link = payment_link
     db.add(booking)
     db.commit()
+    db.refresh(booking)
 
     return booking, payment_link
 
-
-# ---------------------------------------------------------
-# Mark payment completed (called from webhook later)
-# ---------------------------------------------------------
-def confirm_booking_after_payment(db, booking: Booking, payment_id: str):
+def confirm_booking_after_payment(db: Session, booking_ref: str, external_payment_id: str = None):
+    """
+    Mark booking as PAID/CONFIRMED. Returns booking or None.
+    This method should be invoked by payment webhook.
+    """
+    booking = db.query(Booking).filter_by(booking_ref=booking_ref).first()
+    if not booking:
+        return None
     booking.status = "PAID"
-    booking.payment_id = payment_id
+    if external_payment_id:
+        booking.payment_reference = external_payment_id
     db.add(booking)
     db.commit()
+    db.refresh(booking)
+    return booking
 
-
-# ---------------------------------------------------------
-# After call completion
-# ---------------------------------------------------------
-def mark_booking_completed(db, booking: Booking):
-    booking.status = "COMPLETED"
+def mark_booking_completed(db: Session, booking_ref: str):
+    booking = db.query(Booking).filter_by(booking_ref=booking_ref).first()
+    if not booking:
+        return None
+    booking.status = "CONFIRMED"
     db.add(booking)
     db.commit()
+    db.refresh(booking)
+    return booking
 
-
-# ---------------------------------------------------------
-# Ask rating buttons text
-# ---------------------------------------------------------
 def ask_rating_buttons():
-    return (
-        "⭐ How was your consultation experience?\n"
-        "Please rate from 1–5 (just type a number):\n"
-        "1️⃣ Very Bad\n"
-        "2️⃣ Bad\n"
-        "3️⃣ Average\n"
-        "4️⃣ Good\n"
-        "5️⃣ Excellent"
-    )
-
-
-# ---------------------------------------------------------
-# Save rating
-# ---------------------------------------------------------
-def save_rating(db, user, booking: Booking, score: int):
-    rating = Rating(
-        whatsapp_id=user.whatsapp_id,
-        booking_id=booking.id,
-        score=score
-    )
-    db.add(rating)
-    db.commit()
+    # Return sample buttons structure for whatsapp_service.send_buttons
+    return [
+        {"id": "rating_1", "title": "1"},
+        {"id": "rating_2", "title": "2"},
+        {"id": "rating_3", "title": "3"},
+        {"id": "rating_4", "title": "4"},
+        {"id": "rating_5", "title": "5"},
+    ]
