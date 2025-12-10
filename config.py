@@ -36,6 +36,13 @@ WHATSAPP_VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "").strip()
 # ------------------------------
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "").strip()
 
+# ------------------------------
+# Payment
+# ------------------------------
+
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
+
 
 # ------------------------------
 # Chat Logic Settings
