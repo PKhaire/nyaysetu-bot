@@ -3,21 +3,22 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./nyaysetu.db")
+from config import DATABASE_URL
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
-)
+# Create engine
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(DATABASE_URL, connect_args=connect_args, future=True)
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
 Base = declarative_base()
 
 def create_all():
-    from models import Base as ModelsBase  # local import to avoid circular imports
-    ModelsBase.metadata.create_all(bind=engine)
+    # import models lazily to avoid circular imports
+    from models import User, Booking, Rating  # noqa: F401
+    Base.metadata.create_all(bind=engine)
 
-# Optional generator-style helper (useful with frameworks or dependency injection)
+# get_db generator for optional usage
 def get_db():
     db = SessionLocal()
     try:
