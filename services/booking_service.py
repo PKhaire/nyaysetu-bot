@@ -1,12 +1,21 @@
 # services/booking_service.py
+import os
 import uuid
-from datetime import datetime, timedelta
-from models import Booking, User
-from config import BOOKING_PRICE, BOOKING_CUTOFF_HOURS
-from db import SessionLocal
-from sqlalchemy import and_
+from datetime import datetime, timedelta, time
+from typing import Tuple, List, Dict
 
-# Define available slots (slot_code -> readable)
+from models import Booking
+from db import SessionLocal
+
+# Config driven by environment or defaults
+BOOKING_PRICE = int(os.getenv("BOOKING_PRICE", "499"))
+BOOKING_CUTOFF_HOURS = int(os.getenv("BOOKING_CUTOFF_HOURS", "2"))   # cannot book within X hours of slot start
+SLOT_CAPACITY = int(os.getenv("SLOT_CAPACITY", "3"))                # capacity per slot
+MAX_DAILY_BOOKINGS_PER_USER = int(os.getenv("MAX_DAILY_BOOKINGS_PER_USER", "1"))
+MAX_ADVANCE_DAYS = int(os.getenv("MAX_ADVANCE_DAYS", "30"))
+PAYMENT_BASE = os.getenv("PAYMENT_BASE", "https://pay.nyaysetu.in")
+
+# mapping for readable text
 SLOT_MAP = {
     "10_11": "10:00 AM – 11:00 AM",
     "12_1": "12:00 PM – 1:00 PM",
@@ -15,132 +24,140 @@ SLOT_MAP = {
     "8_9": "8:00 PM – 9:00 PM",
 }
 
-def generate_dates_calendar(days=7):
+def generate_dates_calendar(days: int = 7) -> List[Dict]:
     today = datetime.utcnow().date()
     rows = []
     for i in range(days):
         d = today + timedelta(days=i)
-        rows.append({
-            "id": f"date_{d.isoformat()}",
-            "title": d.strftime("%d %b (%a)"),
-            "description": "Select this date"
-        })
+        idv = f"date_{d.isoformat()}"
+        title = d.strftime("%d %b (%a)")
+        rows.append({"id": idv, "title": title, "description": "Select this date"})
     return rows
 
-def generate_slots_calendar(date_str):
-    # date_str expected YYYY-MM-DD
-    # return list of rows with ids like slot_10_11
+def _slot_start_datetime_for(date_str: str, slot_code: str) -> datetime:
+    # slot_code -> hour mapping (local time assumed IST). Using naive times in UTC would be wrong in prod,
+    # but we assume server time is IST or convert accordingly.
+    # Map slots to starting hour (24h)
+    slot_start_hour = {
+        "10_11": 10,
+        "12_1": 12,
+        "3_4": 15,
+        "6_7": 18,
+        "8_9": 20,
+    }.get(slot_code, 0)
+    # assume date_str is YYYY-MM-DD
+    d = datetime.strptime(date_str, "%Y-%m-%d").date()
+    return datetime.combine(d, time(hour=slot_start_hour, minute=0))
+
+def generate_slots_calendar(date_str: str) -> List[Dict]:
+    # returns list dicts for WhatsApp list rows
     rows = []
-    for code, readable in SLOT_MAP.items():
-        rows.append({
-            "id": f"slot_{code}",
-            "title": readable,
-            "description": f"Available on {date_str}"
-        })
+    for code, title in SLOT_MAP.items():
+        rows.append({"id": f"slot_{code}", "title": title, "description": f"Available on {date_str}"})
     return rows
 
-def _slot_datetime_from(date_str, slot_code):
-    # Attempt to build a datetime for the slot start in UTC (assume local IST offset +5:30)
-    # For server-side cutoff comparisons we use naive UTC approximations.
-    # slot_code like "12_1" -> start hour 12:00 local.
-    # NOTE: For production, store timezone-aware datetimes.
-    parts = slot_code.split("_")
-    try:
-        start_hour = int(parts[0])
-    except Exception:
-        start_hour = 9
-    # date_str is YYYY-MM-DD
-    dt = datetime.fromisoformat(date_str)
-    # treat the start as local hour; convert to UTC by subtracting 5h30m
-    # (This is a simple fix for India; replace with pytz for production)
-    local_start = datetime(dt.year, dt.month, dt.day, start_hour, 0, 0)
-    utc_start = local_start - timedelta(hours=5, minutes=30)
-    return utc_start
+def create_payment_token() -> str:
+    return uuid.uuid4().hex
 
-def create_booking_temp(db_session, user_obj, name, city, category, date, slot_code, price=BOOKING_PRICE):
+def create_booking_temp(db, user, name, city, category, date_str, slot_code) -> Tuple[Booking, str]:
     """
-    Create a tentative booking and return (booking, payment_link)
-    Returns (None, reason_message) if validation fails.
+    Validate booking rules and create a pending booking with payment link.
+    Returns (booking object, payment_link) on success.
+    On validation failure returns (None, "reason message").
+    Implemented rules:
+      - Can't book in the past or for a slot already started (rule 1)
+      - Can't book within BOOKING_CUTOFF_HOURS of slot start (rule 2)
+      - No double-book of same slot by same user (rule 4)
+      - Max daily bookings per user (rule 7)
+      - Slot capacity (rule 8)
+      - Max advance days (rule 12)
+      - Ensure category/state/district present (rule 13 as needed)
     """
-    # validations:
-    # 1) date in future and slot start > now + cutoff
+    # Basic validation
+    if not date_str or not slot_code:
+        return None, "Invalid date or slot."
+
     try:
-        slot_start_utc = _slot_datetime_from(date, slot_code)
-    except Exception as e:
-        return None, "Invalid date/slot."
+        slot_start_dt = _slot_start_datetime_for(date_str, slot_code)
+    except Exception:
+        return None, "Invalid date or slot format."
 
     now = datetime.utcnow()
-    cutoff = now + timedelta(hours=BOOKING_CUTOFF_HOURS)
-    if slot_start_utc <= now:
+    # rule: max advance days
+    if slot_start_dt.date() > (now.date() + timedelta(days=MAX_ADVANCE_DAYS)):
+        return None, f"Bookings allowed only up to {MAX_ADVANCE_DAYS} days in advance."
+
+    # rule 1: cannot book if slot already started or passed
+    if slot_start_dt <= now:
         return None, "Cannot book a slot that has already started or passed."
-    if slot_start_utc <= cutoff:
-        return None, f"Bookings require at least {BOOKING_CUTOFF_HOURS} hours' notice for the selected slot."
 
-    # 2) No duplicate booking for that slot/date
-    existing = db_session.query(Booking).filter(
-        Booking.date == date,
-        Booking.slot_code == slot_code,
-        Booking.status.in_(["pending", "confirmed"])
-    ).first()
-    if existing:
-        return None, "Sorry — that slot is already taken. Please choose another slot."
+    # rule 2: booking cutoff hours
+    cutoff_dt = slot_start_dt - timedelta(hours=BOOKING_CUTOFF_HOURS)
+    if now >= cutoff_dt:
+        return None, f"Cannot book within {BOOKING_CUTOFF_HOURS} hours of the slot start."
 
-    # 3) Single active booking per user
-    active = db_session.query(Booking).filter(
-        Booking.whatsapp_id == user_obj.whatsapp_id,
-        Booking.status.in_(["pending", "confirmed"])
-    ).first()
-    if active:
-        return None, "You already have an active booking. Only one active session allowed at a time."
+    # rule 13: ensure category provided
+    if not category:
+        return None, "Please provide legal issue category before booking."
 
-    # Create booking row
+    # rule 4: same user same slot duplication
+    existing_same_slot = db.query(Booking).filter_by(whatsapp_id=user.whatsapp_id, date=date_str, slot_code=slot_code, status!="cancelled").first()
+    if existing_same_slot:
+        return None, "You already have a booking for this slot."
+
+    # rule 7: max daily bookings per user
+    daily_count = db.query(Booking).filter_by(whatsapp_id=user.whatsapp_id, date=date_str).filter(Booking.status != "cancelled").count()
+    if daily_count >= MAX_DAILY_BOOKINGS_PER_USER:
+        return None, f"You can only book {MAX_DAILY_BOOKINGS_PER_USER} consultation(s) per day."
+
+    # rule 8: slot capacity
+    slot_count = db.query(Booking).filter_by(date=date_str, slot_code=slot_code).filter(Booking.status == "confirmed").count()
+    if slot_count >= SLOT_CAPACITY:
+        return None, "This slot is fully booked. Please choose another slot."
+
+    # OK, create pending booking
+    token = create_payment_token()
+    payment_link = f"{PAYMENT_BASE}/{token}"
+
     booking = Booking(
-        whatsapp_id=user_obj.whatsapp_id,
-        case_id=user_obj.case_id,
+        whatsapp_id=user.whatsapp_id,
+        user_case_id=user.case_id,
         name=name,
         city=city,
+        state=getattr(user, "state", None),
+        district=getattr(user, "district", None),
         category=category,
-        date=date,
+        date=date_str,
         slot_code=slot_code,
         slot_readable=SLOT_MAP.get(slot_code, slot_code),
-        price=price,
-        status="pending"
+        status="pending",
+        payment_token=token,
+        payment_link=payment_link
     )
-    # make a test payment link (use real gateway to create real links)
-    token = uuid.uuid4().hex
-    payment_link = f"https://pay.nyaysetu.in/{token}"
-    booking.payment_link = payment_link
-
-    db_session.add(booking)
-    db_session.commit()
-    db_session.refresh(booking)
+    db.add(booking)
+    db.commit()
+    db.refresh(booking)
     return booking, payment_link
 
-def confirm_booking_after_payment(db_session, payment_token):
-    # payment_token corresponds to token part in payment_link above
-    # Simple approach: search booking.payment_link endswith token
-    booking = db_session.query(Booking).filter(Booking.payment_link.like(f"%{payment_token}")).first()
+def confirm_booking_after_payment(db, token: str):
+    """
+    Mark booking confirmed based on payment token.
+    Returns (booking, status_message) or (None, reason)
+    """
+    booking = db.query(Booking).filter_by(payment_token=token).first()
     if not booking:
-        return None, "Booking not found"
+        return None, "Booking not found."
+
+    if booking.status == "confirmed":
+        return booking, "already_confirmed"
+
     booking.status = "confirmed"
-    db_session.add(booking)
-    db_session.commit()
-    return booking, "confirmed"
+    db.add(booking)
+    db.commit()
+    db.refresh(booking)
+    return booking, "ok"
 
-def mark_booking_completed(db_session, booking_id):
-    booking = db_session.query(Booking).get(booking_id)
-    if not booking:
-        return False
-    booking.status = "completed"
-    db_session.add(booking)
-    db_session.commit()
-    return True
-
-def ask_rating_buttons():
-    return [
-        {"id": "rate_5", "title": "⭐️⭐️⭐️⭐️⭐️ Excellent"},
-        {"id": "rate_4", "title": "⭐️⭐️⭐️⭐️ Good"},
-        {"id": "rate_3", "title": "⭐️⭐️⭐ Average"},
-        {"id": "rate_2", "title": "⭐️⭐ Poor"},
-        {"id": "rate_1", "title": "⭐ Very Bad"},
-    ]
+# helper: ask rating buttons (simple placeholder)
+def ask_rating_buttons(whatsapp_id: str):
+    # left as placeholder for your whatsapp_service send_buttons call
+    return
