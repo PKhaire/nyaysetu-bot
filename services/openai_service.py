@@ -1,15 +1,34 @@
-import openai
+# services/openai_service.py
+import os, logging
 from config import OPENAI_API_KEY
+import httpx
 
-openai.api_key = OPENAI_API_KEY
+logger = logging.getLogger("services.openai_service")
 
-def ai_reply(message, lang):
-    system = "You are a legal advisor in India. Provide lawful general guidance, not legal representation."
-    prompt = f"User language: {lang}\nUser query: {message}\nReply politely and concisely."
-
-    res = openai.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "system", "content": system},
-                  {"role": "user", "content": prompt}]
-    )
-    return res.choices[0].message.content
+def ai_reply(prompt: str, user):
+    """
+    If OPENAI_API_KEY present, call ChatCompletion. Otherwise return a helpful canned reply.
+    """
+    if not prompt:
+        return "Hi — tell me your legal question and I'll try to help."
+    if not OPENAI_API_KEY:
+        # fallback short reply
+        return f"I can help with that. (AI is offline) — you said: {prompt[:200]}"
+    # call OpenAI
+    url = "https://api.openai.com/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
+    data = {
+        "model": "gpt-4o-mini",  # best-effort; change if you don't have access
+        "messages": [{"role":"system","content":"You are a concise legal assistant. Provide short actionable advice and ask if user wants a paid consult."},
+                     {"role":"user","content": prompt}],
+        "max_tokens": 300,
+        "temperature": 0.2,
+    }
+    try:
+        with httpx.Client(timeout=15) as client:
+            r = client.post(url, headers=headers, json=data)
+            j = r.json()
+            return j["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        logger.exception("OpenAI call failed")
+        return f"Sorry, I couldn't reach the AI service. ({e})"
