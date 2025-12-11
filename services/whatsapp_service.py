@@ -1,87 +1,54 @@
+# services/whatsapp_service.py
 import os
-import httpx
 import logging
+import requests
+import json
+from config import WHATSAPP_API_URL, WHATSAPP_TOKEN, TYPING_DELAY_SECONDS
 
-WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
-WHATSAPP_PHONE_ID = os.getenv("WHATSAPP_PHONE_ID")
-WHATSAPP_API_URL = f"https://graph.facebook.com/v19.0/{WHATSAPP_PHONE_ID}/messages"
+logger = logging.getLogger("services.whatsapp_service")
 
-logger = logging.getLogger(__name__)
+HEADERS = {
+    "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+    "Content-Type": "application/json"
+}
 
-
-# ----------------------------------------------------
-# Internal unified sender
-# ----------------------------------------------------
-def _send(data: dict):
-    headers = {
-        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    logger.info(f"WHATSAPP REQUEST: {data}")
-
+def _send(payload):
+    url = WHATSAPP_API_URL
     try:
-        resp = httpx.post(WHATSAPP_API_URL, json=data, headers=headers, timeout=20)
-        logger.info(f"WHATSAPP RESPONSE: {resp.text}")
-        return resp
+        resp = requests.post(url, headers=HEADERS, json=payload, timeout=10)
+        logger.info("WHATSAPP REQUEST: %s", json.dumps(payload))
+        logger.info("WhatsApp API response: %s %s", resp.status_code, resp.text)
+        return resp.json()
     except Exception as e:
-        logger.error(f"WHATSAPP SEND ERROR: {e}", exc_info=True)
-        return None
+        logger.exception("Failed sending whatsapp message: %s", e)
+        return {}
 
-
-# ----------------------------------------------------
-# Text message
-# ----------------------------------------------------
-def send_text(to, message):
+def send_text(to, body):
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
         "type": "text",
-        "text": {
-            "body": message
-        }
+        "text": {"body": body}
     }
     return _send(payload)
 
-
-# ----------------------------------------------------
-# Buttons
-# ----------------------------------------------------
-def send_buttons(to, text, buttons):
+def send_buttons(to, body, buttons):
+    # buttons is list of dicts {id,title}
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
         "type": "interactive",
         "interactive": {
             "type": "button",
-            "body": {"text": text},
-            "action": {
-                "buttons": [
-                    {"type": "reply", "reply": {"id": btn["id"], "title": btn["title"]}}
-                    for btn in buttons
-                ]
-            },
-        },
+            "body": {"text": body},
+            "action": {"buttons": [{"type":"reply","reply":{"id":b["id"],"title":b["title"]}} for b in buttons]}
+        }
     }
     return _send(payload)
 
-
-# ----------------------------------------------------
-# List Picker (Date & Slot Selection)
-# ----------------------------------------------------
 def send_list_picker(to, header, body, rows, section_title="Options"):
-    """
-    rows must be list of:
-    [ {"id": "date_2025-12-09", "title": "09 Dec (Tue)"} , ... ]
-    """
-
-    formatted_rows = []
-    for r in rows:
-        formatted_rows.append({
-            "id": r["id"],
-            "title": r["title"],
-            "description": r.get("description", "")[:70]  # optional
-        })
-
+    # rows: list of dict {id, title, description}
+    # WhatsApp list requires: interactive->action->button + sections -> rows
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
@@ -95,7 +62,10 @@ def send_list_picker(to, header, body, rows, section_title="Options"):
                 "sections": [
                     {
                         "title": section_title,
-                        "rows": formatted_rows
+                        "rows": [
+                            {"id": r["id"], "title": r["title"], "description": r.get("description", "")}
+                            for r in rows
+                        ]
                     }
                 ]
             }
@@ -103,13 +73,9 @@ def send_list_picker(to, header, body, rows, section_title="Options"):
     }
     return _send(payload)
 
-
-# ----------------------------------------------------
-# Simulated typing UX (not real WhatsApp typing)
-# ----------------------------------------------------
 def send_typing_on(to):
-    logger.info(f"SIMULATED_TYPING_ON for {to}")
-
+    # Not all accounts support typing indicators via API, but we leave a stub for logging
+    logger.info("SIMULATED_TYPING_ON for %s", to)
 
 def send_typing_off(to):
-    logger.info(f"SIMULATED_TYPING_OFF for {to}")
+    logger.info("SIMULATED_TYPING_OFF for %s", to)
