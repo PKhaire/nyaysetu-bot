@@ -1,81 +1,70 @@
 # services/whatsapp_service.py
 import os
 import logging
-import requests
-import json
-from config import WHATSAPP_API_URL, WHATSAPP_TOKEN, TYPING_DELAY_SECONDS
+import httpx
+from config import WHATSAPP_TOKEN, WHATSAPP_API_URL
 
 logger = logging.getLogger("services.whatsapp_service")
 
-HEADERS = {
-    "Authorization": f"Bearer {WHATSAPP_TOKEN}",
-    "Content-Type": "application/json"
-}
+HEADERS = {"Authorization": f"Bearer {WHATSAPP_TOKEN}"} if WHATSAPP_TOKEN else {}
 
-def _send(payload):
-    url = WHATSAPP_API_URL
+def _send(payload: dict):
+    if not WHATSAPP_API_URL or not WHATSAPP_TOKEN:
+        logger.warning("WHATSAPP_API_URL or WHATSAPP_TOKEN not configured. Skipping send.")
+        return {"error": "no_whatsapp_config"}
+    payload = payload.copy()
+    with httpx.Client(timeout=10) as client:
+        resp = client.post(WHATSAPP_API_URL, headers=HEADERS, json=payload)
+    logger.info("WHATSAPP REQUEST: %s", payload)
     try:
-        resp = requests.post(url, headers=HEADERS, json=payload, timeout=10)
-        logger.info("WHATSAPP REQUEST: %s", json.dumps(payload))
-        logger.info("WhatsApp API response: %s %s", resp.status_code, resp.text)
-        return resp.json()
-    except Exception as e:
-        logger.exception("Failed sending whatsapp message: %s", e)
-        return {}
+        j = resp.json()
+    except Exception:
+        j = {"status": resp.status_code, "text": resp.text}
+    logger.info("WHATSAPP RESPONSE: %s", j)
+    return j
 
-def send_text(to, body):
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "text",
-        "text": {"body": body}
-    }
+def send_text(wa_id: str, body: str):
+    payload = {"messaging_product": "whatsapp", "to": wa_id, "type": "text", "text": {"body": body}}
     return _send(payload)
 
-def send_buttons(to, body, buttons):
-    # buttons is list of dicts {id,title}
+def send_buttons(wa_id: str, body: str, buttons: list):
+    # buttons: list of {"id": "xxx", "title":"Title"}
     payload = {
         "messaging_product": "whatsapp",
-        "to": to,
+        "to": wa_id,
         "type": "interactive",
         "interactive": {
             "type": "button",
             "body": {"text": body},
-            "action": {"buttons": [{"type":"reply","reply":{"id":b["id"],"title":b["title"]}} for b in buttons]}
+            "action": {"buttons": [{"type":"reply","reply":{"id":b["id"],"title": b["title"]}} for b in buttons]}
         }
     }
     return _send(payload)
 
-def send_list_picker(to, header, body, rows, section_title="Options"):
-    # rows: list of dict {id, title, description}
-    # WhatsApp list requires: interactive->action->button + sections -> rows
+def send_typing_on(wa_id: str):
+    # We simulate typing — WhatsApp API doesn't support typing_state, so this is a no-op placeholder.
+    logger.info("SIMULATED_TYPING_ON for %s", wa_id)
+    return {"ok": True}
+
+def send_typing_off(wa_id: str):
+    logger.info("SIMULATED_TYPING_OFF for %s", wa_id)
+    return {"ok": True}
+
+def send_list_picker(wa_id: str, header: str, body: str, rows: list, section_title: str = "Options"):
+    """
+    rows: list of dicts with keys: id, title, description
+    Builds a WhatsApp interactive list payload.
+    """
+    sections = [{"title": section_title, "rows": [{"id": r["id"], "title": r["title"], "description": r.get("description", "")} for r in rows]}]
     payload = {
         "messaging_product": "whatsapp",
-        "to": to,
+        "to": wa_id,
         "type": "interactive",
         "interactive": {
             "type": "list",
             "header": {"type": "text", "text": header},
             "body": {"text": body},
-            "action": {
-                "button": "Select",
-                "sections": [
-                    {
-                        "title": section_title,
-                        "rows": [
-                            {"id": r["id"], "title": r["title"], "description": r.get("description", "")}
-                            for r in rows
-                        ]
-                    }
-                ]
-            }
+            "action": {"button": "Select", "sections": sections}
         }
     }
     return _send(payload)
-
-def send_typing_on(to):
-    # Not all accounts support typing indicators via API, but we leave a stub for logging
-    logger.info("SIMULATED_TYPING_ON for %s", to)
-
-def send_typing_off(to):
-    logger.info("SIMULATED_TYPING_OFF for %s", to)
