@@ -1,34 +1,32 @@
 # config.py
 import os
 
-# WhatsApp / Facebook Graph
-WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN", "")  # Your page token
+# WhatsApp / Facebook config
+WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN", "")
+# choose phone id env checking multiple names
 WHATSAPP_PHONE_ID = (
     os.getenv("WHATSAPP_PHONE_ID", "") or
     os.getenv("WHATSAPP_PHONE_NUMBER_ID", "") or
     os.getenv("PHONE_NUMBER_ID", "")
 )
-WHATSAPP_API_URL = os.getenv("WHATSAPP_API_URL",
-                             f"https://graph.facebook.com/v19.0/{WHATSAPP_PHONE_ID}/messages")
-WHATSAPP_VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "changeme_verify_token")
+WHATSAPP_API_URL = f"https://graph.facebook.com/v19.0/{WHATSAPP_PHONE_ID}/messages" if WHATSAPP_PHONE_ID else ""
+WHATSAPP_VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "")
 
-# App / Admin
-ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "admintoken")
+# OpenAI
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
-# OpenAI (optional; used for AI replies)
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")  # optional for ai_reply stub
-PRIMARY_MODEL = os.getenv("PRIMARY_MODEL", "gpt-4.1-mini")
-#check why PRIMARY_MODEL required
-
-# Razorpay keys (optional — used for webhook signature verification and real integration)
+# Razorpay (optional) — set both to enable real payments
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
 
-# Booking behavior
-BOOKING_PRICE = int(os.getenv("BOOKING_PRICE", "499"))  # in INR
-BOOKING_CUTOFF_HOURS = int(os.getenv("BOOKING_CUTOFF_HOURS", "4"))  # minimum hours before slot
-MAX_FREE_MESSAGES = int(os.getenv("MAX_FREE_MESSAGES", "20"))
-TYPING_DELAY_SECONDS = float(os.getenv("TYPING_DELAY_SECONDS", "0.6"))
+# Booking / business settings
+BOOKING_PRICE = int(os.getenv("BOOKING_PRICE", "499"))
+BOOKING_CUTOFF_HOURS = float(os.getenv("BOOKING_CUTOFF_HOURS", "2"))  # no booking within N hours of slot start
+BOOKING_MAX_AHEAD_DAYS = int(os.getenv("BOOKING_MAX_AHEAD_DAYS", "30"))
+BOOKING_MAX_PER_DAY = int(os.getenv("BOOKING_MAX_PER_DAY", "8"))  # optional capacity per day
 
-# Database URL (sqlite by default)
+# Admin
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
+
+# Database url (SQLAlchemy)
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./nyaysetu.db")
