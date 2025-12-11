@@ -33,6 +33,14 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+# Ensure DB tables exist on every startup (important for Render)
+with app.app_context():
+    try:
+        create_all()
+        logger.info("✅ Database tables created or already exist.")
+    except Exception as e:
+        logger.error(f"❌ DB initialization failed: {e}")
+
 # Conversation states
 NORMAL = "NORMAL"
 SUGGEST_CONSULT = "SUGGEST_CONSULT"
