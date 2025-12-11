@@ -1,20 +1,28 @@
-# app.py
+# app.py (full)
 import os
 import json
 import logging
-import random
-import string
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import Flask, request, jsonify, abort
 
-# DB & Models
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, scoped_session
+# DB & models
+from db import create_all, SessionLocal
+from models import User, Booking  # your models.py must define these
 
-from models import Base, User, Booking
+# Config - make sure config.py exposes needed variables
+from config import (
+    WHATSAPP_VERIFY_TOKEN,
+    WHATSAPP_TOKEN,
+    WHATSAPP_PHONE_ID,
+    WHATSAPP_API_URL,
+    OPENAI_API_KEY,
+    RAZORPAY_KEY_ID,
+    RAZORPAY_KEY_SECRET,
+    ADMIN_TOKEN,
+)
 
-# Services (assume these exist)
+# Services (assumed present)
 from services.whatsapp_service import (
     send_text,
     send_buttons,
@@ -24,32 +32,23 @@ from services.whatsapp_service import (
 )
 from services.openai_service import ai_reply
 
-from services.booking_service import (
-    generate_dates_calendar,
-    generate_slots_calendar,
-    create_booking_temp,
-    confirm_booking_after_payment,
-    mark_booking_completed,
-    ask_rating_buttons,
-)
+# Booking service (the file above)
+import booking_service as bs
 
-# Config (expect these env vars)
-WHATSAPP_VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "")
-WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN", "")
-WHATSAPP_PHONE_ID = os.getenv("WHATSAPP_PHONE_ID", "") or os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
-ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
-PAYMENT_WEBHOOK_SECRET = os.getenv("PAYMENT_WEBHOOK_SECRET", "")
-PAY_BASE_URL = os.getenv("PAY_BASE_URL", "https://pay.nyaysetu.in")
+# Razorpay client (optional)
+try:
+    import razorpay
+    razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+except Exception:
+    razorpay_client = None
 
-# DB setup
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./nyaysetu.db")
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {})
-SessionLocal = scoped_session(sessionmaker(autocommit=False, autoflush=False, bind=engine))
+# Scheduler
+from apscheduler.schedulers.background import BackgroundScheduler
 
 # Flask & logging
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
-logger = logging.getLogger("nyaysetu")
+logger = logging.getLogger(__name__)
 
 # Conversation states
 NORMAL = "NORMAL"
@@ -62,30 +61,78 @@ ASK_SLOT = "ASK_SLOT"
 WAITING_PAYMENT = "WAITING_PAYMENT"
 ASK_RATING = "ASK_RATING"
 
-def create_all():
-    Base.metadata.create_all(bind=engine)
+# Helper DB session
+def get_db_session():
+    return SessionLocal()
 
-# helper: case id
-def generate_case_id(length=6):
-    suffix = "".join(random.choices(string.hexdigits.upper(), k=length))
-    return f"NS-{suffix}"
+# create DB tables at startup
+with app.app_context():
+    try:
+        logger.info("🔧 Running DB migrations...")
+        create_all()
+        logger.info("✅ DB tables ready.")
+    except Exception as e:
+        logger.exception("DB migration failed: %s", e)
 
-# get or create user
-def get_or_create_user(db, wa_id: str):
+# Scheduler jobs: auto-cancel + reminders
+scheduler = BackgroundScheduler()
+scheduler.start()
+
+def job_auto_cancel_and_remind():
+    db = get_db_session()
+    try:
+        # auto cancel unpaid older than 15 minutes
+        canceled = bs.auto_cancel_unpaid_bookings(db)
+        if canceled:
+            logger.info("Auto-cancelled %d unpaid bookings", canceled)
+
+        # reminders: simple approach - check confirmed bookings for near times
+        now = datetime.now()
+        three_hours = now + timedelta(hours=3)
+        thirty_mins = now + timedelta(minutes=30)
+
+        confirmed = db.query(Booking).filter(Booking.status == "CONFIRMED").all()
+        for b in confirmed:
+            slot_dt = bs.parse_slot_to_datetime(b.date_str, b.slot_str)
+            if not slot_dt:
+                continue
+            # 3 hours window
+            if 0 <= (slot_dt - three_hours).total_seconds() < 120:
+                # notify user
+                u = db.query(User).filter(User.id == b.user_id).first()
+                if u:
+                    send_text(u.whatsapp_id, f"⏰ Reminder: Your consultation is in ~3 hours ({b.date_str} {b.slot_str}).")
+            # 30 minutes window
+            if 0 <= (slot_dt - thirty_mins).total_seconds() < 120:
+                u = db.query(User).filter(User.id == b.user_id).first()
+                if u:
+                    send_text(u.whatsapp_id, f"⏰ Reminder: Your consultation is in ~30 minutes ({b.date_str} {b.slot_str}).")
+    except Exception:
+        logger.exception("Error in scheduler job")
+    finally:
+        db.close()
+
+# schedule every 2 minutes for reminders + every 5 minutes for cancels: combined function above
+scheduler.add_job(job_auto_cancel_and_remind, "interval", minutes=2)
+
+# ---------------------------
+# Helper functions used inside webhook
+# ---------------------------
+def get_or_create_user(db, wa_id: str) -> User:
     user = db.query(User).filter_by(whatsapp_id=wa_id).first()
     if not user:
         user = User(
             whatsapp_id=wa_id,
-            case_id=generate_case_id(),
-            language="English",
-            query_count=0,
+            name=None,
+            city=None,
+            category=None,
             state=NORMAL,
             created_at=datetime.utcnow()
         )
         db.add(user)
         db.commit()
         db.refresh(user)
-        logger.info(f"Created new user {wa_id} with case_id={user.case_id}")
+        logger.info(f"Created new user {wa_id} id={user.id}")
     return user
 
 def save_state(db, user: User, state: str):
@@ -93,50 +140,46 @@ def save_state(db, user: User, state: str):
     db.add(user)
     db.commit()
 
-# language change
-def handle_language_change(db, user: User, wa_id: str, msg_id: str) -> bool:
-    language_map = {
-        "lang_en": "English",
-        "lang_hinglish": "Hinglish",
-        "lang_mar": "Marathi",
-    }
-    if msg_id not in language_map:
-        return False
-    user.language = language_map[msg_id]
-    save_state(db, user, NORMAL)
-    send_text(wa_id, f"Language updated to *{user.language}*.\n\nPlease type your legal issue.")
-    return True
+# language handler stub
+def handle_language_change(db, user, wa_id, msg_id):
+    return False
 
-# booking flow helpers
-def start_booking_flow(db, user: User, wa_id: str):
+# start booking flow
+def start_booking_flow(db, user, wa_id):
+    # Rule 4: prevent double booking
+    if bs.user_has_active_booking(db, user.id):
+        send_text(wa_id, "⚠️ You already have an active booking. Type *cancel booking* to cancel it or *change date* to reschedule.")
+        return
+    # Rule 12: anti spam unpaid
+    if bs.user_unpaid_count_last_24h(db, user.id) >= 2:
+        send_text(wa_id, "⚠️ You have too many unpaid bookings. Please complete payment for previous booking(s) or try after 24 hours.")
+        return
     save_state(db, user, ASK_NAME)
     send_text(wa_id, "Great! Let's schedule your legal consultation call (₹499).\n\nFirst, please tell me your *full name*.")
 
-def handle_booking_flow(db, user: User, wa_id: str, text: str, interactive_id: str | None):
+# booking state machine
+def handle_booking_flow(db, user, wa_id, text, interactive_id):
     t = (text or "").strip()
 
-    # 1) Ask for name
     if user.state == ASK_NAME:
-        user.temp_name = t
-        db.add(user); db.commit(); db.refresh(user)
+        user.name = t or user.name or "Client"
+        db.add(user); db.commit()
         save_state(db, user, ASK_CITY)
         send_text(wa_id, "Thanks! 🙏\nNow please tell me your *city*.")
         return
 
-    # 2) city
     if user.state == ASK_CITY:
-        user.temp_city = t
-        db.add(user); db.commit(); db.refresh(user)
+        user.city = t or user.city or "NA"
+        db.add(user); db.commit()
         save_state(db, user, ASK_CATEGORY)
         send_text(wa_id, "Got it 👍\nPlease choose your *legal issue category* (e.g., FIR, Police, Property, Family, Job, Business, Other).")
         return
 
-    # 3) category
     if user.state == ASK_CATEGORY:
-        user.temp_category = t
-        db.add(user); db.commit(); db.refresh(user)
-        # Send date list
-        rows = generate_dates_calendar()
+        user.category = t or user.category or "General"
+        db.add(user); db.commit()
+        # show dates
+        rows = bs.generate_dates_calendar()
         save_state(db, user, ASK_DATE)
         send_list_picker(
             wa_id,
@@ -147,63 +190,78 @@ def handle_booking_flow(db, user: User, wa_id: str, text: str, interactive_id: s
         )
         return
 
-    # 4) Ask for date
     if user.state == ASK_DATE:
+        # interactive list reply expected
         if interactive_id and interactive_id.startswith("date_"):
-            user.temp_date = interactive_id.replace("date_", "", 1)
-            db.add(user); db.commit(); db.refresh(user)
+            date_str = interactive_id.replace("date_", "", 1)
+            # validate (Rule 2)
+            if not bs.validate_date_str(date_str):
+                send_text(wa_id, "⚠️ Invalid date selected. Please pick again.")
+                return
+            user.temp_date = date_str
+            db.add(user); db.commit()
 
-            rows = generate_slots_calendar(user.temp_date)
+            rows = bs.generate_slots_calendar(user.temp_date)
+            if not rows:
+                send_text(wa_id, "No slots available for that date. Please pick another date.")
+                return
             save_state(db, user, ASK_SLOT)
             send_list_picker(
                 wa_id,
                 header=f"Select time slot for {user.temp_date}",
                 body="Available time slots (IST)",
                 rows=rows,
-                section_title="Time Slots",
+                section_title="Time Slots"
             )
+            return
         else:
             send_text(wa_id, "Please select a date from the list I sent. If you didn't receive it, type *Book Consultation* to restart booking.")
-        return
+            return
 
-    # 5) Ask for slot
     if user.state == ASK_SLOT:
         if interactive_id and interactive_id.startswith("slot_"):
-            # store raw code as temp_slot (slot_code without prefix)
-            slot_code = interactive_id.replace("slot_", "", 1)
+            # save code and readable slot
+            slot_code = interactive_id.replace("slot_", "", 1)  # e.g. "8_9"
+            slot_readable = bs.slot_code_to_readable(slot_code)
             user.temp_slot = slot_code
-            db.add(user); db.commit(); db.refresh(user)
+            db.add(user); db.commit()
 
-            # read persisted fields
-            name = user.temp_name or "Client"
-            city = user.temp_city or "NA"
-            category = user.temp_category or "General"
-            date_str = user.temp_date or ""
-            slot_code_readable = slot_code
+            # Gather details for booking creation
+            name = user.name or "Client"
+            city = user.city or "NA"
+            category = user.category or "General"
+            date_str = getattr(user, "temp_date", None)
+            if not date_str:
+                send_text(wa_id, "Date missing. Please restart booking by typing *Book Consultation*.")
+                save_state(db, user, NORMAL)
+                return
 
-            # convert to readable
-            slot_map = {
-                "10_11": "10:00 AM – 11:00 AM",
-                "12_1": "12:00 PM – 1:00 PM",
-                "3_4": "3:00 PM – 4:00 PM",
-                "6_7": "6:00 PM – 7:00 PM",
-                "8_9": "8:00 PM – 9:00 PM",
-            }
-            slot_readable = slot_map.get(slot_code_readable, slot_code_readable)
+            # Check again double booking before create (Rule 4)
+            if bs.user_has_active_booking(db, user.id):
+                send_text(wa_id, "⚠️ You already have an active booking. If you want a new one cancel existing booking first.")
+                save_state(db, user, NORMAL)
+                return
 
-            # Create booking entry and get a payment link
-            booking, payment_link = create_booking_temp(
-                db=db,
-                user=user,
-                name=name,
-                city=city,
-                category=category,
-                date=date_str,
-                slot=interactive_id,  # keep full id (create_booking_temp will normalize)
-                price=499.0,
-            )
+            # create booking (pending)
+            try:
+                booking, payment_link = bs.create_booking_temp(
+                    db=db,
+                    user=user,
+                    name=name,
+                    city=city,
+                    category=category,
+                    date=date_str,
+                    slot=slot_code,
+                    price=499
+                )
+            except Exception as e:
+                logger.exception("Failed to create booking: %s", e)
+                send_text(wa_id, "⚠️ Could not create booking. Please try again.")
+                save_state(db, user, NORMAL)
+                return
 
             user.last_payment_link = payment_link
+            db.add(user); db.commit()
             save_state(db, user, WAITING_PAYMENT)
 
             send_text(
@@ -217,21 +275,20 @@ def handle_booking_flow(db, user: User, wa_id: str, text: str, interactive_id: s
                 f"*Fees:* ₹499 (single session only) 🙂\n\n"
                 f"Please complete payment using this link:\n{payment_link}"
             )
+            return
         else:
-            send_text(wa_id, "Please select a time slot from the list I sent. If you didn't receive it, type *Book Consultation* to restart booking.")
-        return
+            send_text(wa_id, "Please select a time slot from the list I sent.")
+            return
 
-    # 6) waiting payment
     if user.state == WAITING_PAYMENT:
-        send_text(wa_id, "💳 Your payment link is still active. Once payment is done, our team will confirm your consultation. If lost, type *Book Consultation*.")
+        send_text(wa_id, "💳 Your payment is still pending. If you completed payment, wait a minute for confirmation. If not, complete it using the last link.")
         return
 
-    # 7) rating
     if user.state == ASK_RATING:
         try:
             rating_val = int(t)
             if 1 <= rating_val <= 5:
-                # For brevity, just thank
+                # create rating model if exists (skipped here)
                 save_state(db, user, NORMAL)
                 send_text(wa_id, "🙏 Thank you for your feedback! 🙂")
             else:
@@ -240,39 +297,12 @@ def handle_booking_flow(db, user: User, wa_id: str, text: str, interactive_id: s
             send_text(wa_id, "Please send a number between 1 and 5 for rating 🌟.")
         return
 
-CONSULT_KEYWORDS = [
-    "fir", "police", "zero fir", "e-fir", "efir",
-    "domestic", "violence", "harassment",
-    "theft", "stolen", "robbery",
-    "dowry", "498a",
-    "custody", "divorce", "maintenance",
-    "property", "sale deed", "agreement", "possession",
-    "fraud", "cheated", "scam",
-    "arrest", "bail", "charge sheet",
-]
-
-YES_WORDS = {"yes", "y", "ok", "okay", "sure", "book", "book now", "book call", "need lawyer", "want lawyer", "talk to lawyer", "consult now", "help me"}
-NO_WORDS = {"no", "not now", "later", "dont want", "don't want", "no thanks"}
-
-def maybe_suggest_consult(db, user: User, wa_id: str, text: str):
-    lower = (text or "").lower()
-    if user.state != NORMAL:
-        return
-    if any(word in lower for word in CONSULT_KEYWORDS):
-        save_state(db, user, SUGGEST_CONSULT)
-        send_buttons(
-            wa_id,
-            "Your issue looks important. I can connect you to a qualified lawyer on call for *₹499*.\n\nWould you like to book a consultation?",
-            [
-                {"id": "book_consult_now", "title": "Yes — Book Call"},
-                {"id": "consult_later", "title": "Not now"},
-            ],
-        )
-
-# Flask routes
+# ---------------------------
+# Webhook endpoints
+# ---------------------------
 @app.route("/", methods=["GET"])
 def index():
-    return "NyaySetu backend is running.", 200
+    return "NyaySetu backend running", 200
 
 @app.route("/webhook", methods=["GET"])
 def verify():
@@ -280,25 +310,22 @@ def verify():
     token = request.args.get("hub.verify_token")
     challenge = request.args.get("hub.challenge")
     if mode == "subscribe" and token == WHATSAPP_VERIFY_TOKEN:
-        logger.info("Webhook verified successfully.")
+        logger.info("Webhook verified")
         return challenge, 200
-    logger.warning("Webhook verification failed.")
     return "Verification failed", 403
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
     payload = request.get_json(force=True, silent=True) or {}
-    logger.info(f"INCOMING WHATSAPP PAYLOAD: {json.dumps(payload)}")
-
+    logger.info("INCOMING WHATSAPP PAYLOAD: %s", json.dumps(payload))
     try:
         entry = payload["entry"][0]
         change = entry["changes"][0]
         value = change["value"]
-    except (KeyError, IndexError):
-        logger.error("Malformed payload")
+    except Exception:
+        logger.warning("Malformed payload")
         return jsonify({"status": "ignored"}), 200
 
-    # messages present?
     messages = value.get("messages")
     if not messages:
         logger.info("No user message — system event ignored")
@@ -307,7 +334,7 @@ def webhook():
     message = messages[0]
     wa_id = value["contacts"][0]["wa_id"]
 
-    db = SessionLocal()
+    db = get_db_session()
     try:
         user = get_or_create_user(db, wa_id)
 
@@ -326,114 +353,124 @@ def webhook():
                 interactive_id = message["interactive"]["list_reply"]["id"]
                 text_body = interactive_id
         else:
-            send_text(wa_id, "Sorry, I currently support text and simple button/list replies only.")
+            send_text(wa_id, "Sorry, I support text and simple button/list replies only.")
             return jsonify({"status": "ok"}), 200
 
-        logger.info(f"Parsed text_body='{text_body}', interactive_id='{interactive_id}', state={user.state}")
+        logger.info("Parsed text_body='%s', interactive_id='%s', state=%s", text_body, interactive_id, user.state)
 
-        # language change
+        # intercept commands
+        lower = (text_body or "").lower().strip()
+        if lower in ["book", "book consultation", "book consultation"]:
+            start_booking_flow(db, user, wa_id)
+            return jsonify({"status": "ok"}), 200
+
+        if lower in ["cancel booking", "cancel"]:
+            booking = bs.latest_user_booking(db, user.id)
+            if not booking:
+                send_text(wa_id, "No active booking to cancel.")
+            else:
+                booking.status = "CANCELLED"
+                db.add(booking); db.commit()
+                send_text(wa_id, "Your booking has been cancelled.")
+            save_state(db, user, NORMAL)
+            return jsonify({"status": "ok"}), 200
+
+        # language change (if interactive_id startswith lang_)
         if interactive_id and interactive_id.startswith("lang_"):
             if handle_language_change(db, user, wa_id, interactive_id):
                 return jsonify({"status": "ok"}), 200
 
-        # book now button
+        # booking suggestion button handling
         if interactive_id == "book_consult_now":
             start_booking_flow(db, user, wa_id)
             return jsonify({"status": "ok"}), 200
 
-        if interactive_id == "consult_later":
-            save_state(db, user, NORMAL)
-            send_text(wa_id, "No problem 👍 You can type *Book Consultation* anytime to speak with a lawyer.")
-            return jsonify({"status": "ok"}), 200
-
-        # explicit booking keywords
-        lower_text = (text_body or "").lower()
-        if user.state in [NORMAL, SUGGEST_CONSULT] and any(kw in lower_text for kw in ["book", "consultation", "lawyer call", "appointment"]):
-            start_booking_flow(db, user, wa_id)
-            return jsonify({"status": "ok"}), 200
-
-        # if booking states
+        # booking flow states handled
         if user.state in {ASK_NAME, ASK_CITY, ASK_CATEGORY, ASK_DATE, ASK_SLOT, WAITING_PAYMENT, ASK_RATING}:
             handle_booking_flow(db, user, wa_id, text_body, interactive_id)
             return jsonify({"status": "ok"}), 200
 
-        # SUGGEST_CONSULT text yes/no
-        if user.state == SUGGEST_CONSULT:
-            if lower_text in YES_WORDS:
-                start_booking_flow(db, user, wa_id)
-                return jsonify({"status": "ok"}), 200
-            if lower_text in NO_WORDS:
-                save_state(db, user, NORMAL)
-                send_text(wa_id, "Sure, we can continue chatting. Ask me anything related to law.")
-                return jsonify({"status": "ok"}), 200
-
-        # Normal AI chat
+        # default: AI reply + maybe suggest consult
         send_typing_on(wa_id)
         reply = ai_reply(text_body, user)
         send_typing_off(wa_id)
         send_text(wa_id, reply)
 
-        maybe_suggest_consult(db, user, wa_id, text_body)
-        return jsonify({"status": "ok"}), 200
+        # after AI reply, maybe suggest consult
+        lower_text = (text_body or "").lower()
+        consult_keywords = ["fir", "police", "divorce", "fraud", "arrest", "bail", "custody", "property"]
+        if any(k in lower_text for k in consult_keywords):
+            send_buttons(
+                wa_id,
+                "Your issue looks important. I can connect you to a lawyer on call for ₹499. Book now?",
+                [
+                    {"id": "book_consult_now", "title": "Yes — Book Call"},
+                    {"id": "consult_later", "title": "Not now"}
+                ]
+            )
 
+        return jsonify({"status": "ok"}), 200
     except Exception as e:
-        logger.error("Error:", exc_info=True)
+        logger.exception("Error in webhook: %s", e)
         return jsonify({"error": str(e)}), 500
     finally:
         db.close()
 
-# Payment webhook endpoint
-# This endpoint is intended to be called by your payment provider (or by admin for testing).
-@app.route("/payment/webhook", methods=["POST"])
+# ---------------------------
+# Payment webhook to confirm booking (Razorpay example skeleton)
+# ---------------------------
+@app.route("/payment_webhook", methods=["POST"])
 def payment_webhook():
     """
-    Expected JSON (example):
-    {
-      "booking_ref": "BK-XXXX",
-      "status": "PAID",
-      "payment_id": "razorpay_order_xxx",
-      "secret": "webhook_secret"   # we validate against PAYMENT_WEBHOOK_SECRET
-    }
+    Endpoint to be called by payment provider after payment.
+    Expecting JSON payload containing 'booking_id' (our DB id) and 'payment_id' or provider signature.
+    This is a simple skeleton — adapt to your provider's webhook structure.
     """
     payload = request.get_json(force=True, silent=True) or {}
-    logger.info(f"PAYMENT WEBHOOK: {json.dumps(payload)}")
-    secret = payload.get("secret")
-    if PAYMENT_WEBHOOK_SECRET and secret != PAYMENT_WEBHOOK_SECRET:
-        logger.warning("Payment webhook secret mismatch")
-        return jsonify({"error": "unauthorized"}), 403
+    logger.info("Payment webhook received: %s", payload)
 
-    booking_ref = payload.get("booking_ref")
-    status = payload.get("status")
+    # Basic verification placeholder: replace with signature verification for production
+    booking_id = payload.get("booking_id")
     payment_id = payload.get("payment_id")
+    status = payload.get("status", "paid")
 
-    if not booking_ref:
-        return jsonify({"error": "missing booking_ref"}), 400
-
-    db = SessionLocal()
+    db = get_db_session()
     try:
-        if status and status.upper() in ("PAID", "SUCCESS"):
-            booking = confirm_booking_after_payment(db, booking_ref, external_payment_id=payment_id)
-            if booking:
-                # Optionally notify user
-                send_text(booking.whatsapp_id, f"✅ Payment received. Your booking {booking.booking_ref} is confirmed. 🙂")
-                return jsonify({"status": "ok", "booking_ref": booking_ref}), 200
-        # others: just record
-        return jsonify({"status": "ignored"}), 200
-    except Exception as e:
-        logger.exception("Payment webhook error")
-        return jsonify({"error": str(e)}), 500
+        if not booking_id or not payment_id:
+            logger.warning("Missing booking_id or payment_id in webhook")
+            return jsonify({"ok": False}), 400
+
+        b = db.query(Booking).filter(Booking.id == int(booking_id)).first()
+        if not b:
+            return jsonify({"ok": False, "reason": "booking_not_found"}), 404
+
+        # Mark booking confirmed if payment succeeded
+        if status in ("paid", "successful", "captured"):
+            b.status = "CONFIRMED"
+            b.payment_id = payment_id
+            db.add(b); db.commit()
+
+            # notify user
+            u = db.query(User).filter(User.id == b.user_id).first()
+            if u:
+                send_text(u.whatsapp_id, f"✅ Payment received. Your consultation on {b.date_str} at {bs.slot_code_to_readable(b.slot_str)} is confirmed. 🙂")
+            return jsonify({"ok": True}), 200
+        else:
+            # payment failed
+            b.status = "CANCELLED"
+            db.add(b); db.commit()
+            u = db.query(User).filter(User.id == b.user_id).first()
+            if u:
+                send_text(u.whatsapp_id, "⚠️ Payment failed or was cancelled. Please try again.")
+            return jsonify({"ok": True}), 200
+    except Exception:
+        logger.exception("Error handling payment webhook")
+        return jsonify({"ok": False}), 500
     finally:
         db.close()
 
-# DB init at startup
-with app.app_context():
-    try:
-        logger.info("🔧 Running DB migrations...")
-        create_all()
-        logger.info("✅ DB tables ready.")
-    except Exception as e:
-        logger.exception("DB migrations failed")
-
+# ---------------------------
+# run server locally
+# ---------------------------
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
