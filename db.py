@@ -1,35 +1,26 @@
-import os
+# db.py
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
-
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///database.db")
+from config import DATABASE_URL
 
 engine = create_engine(
     DATABASE_URL,
     connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 )
 
-SessionLocal = sessionmaker(
-    bind=engine,
-    autoflush=False,
-    autocommit=False,
-    expire_on_commit=False 
-)
-
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 Base = declarative_base()
 
 
-def create_all():
-    from models import User, Booking, Rating
-    Base.metadata.create_all(bind=engine)
-
-
 def get_db():
+    """Reusable DB session generator."""
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
-        
-from models import User, Booking, Rating
-Base.metadata.create_all(bind=engine)
+
+
+def create_all():
+    import models  # ensures table registration
+    Base.metadata.create_all(bind=engine)
