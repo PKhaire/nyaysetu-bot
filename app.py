@@ -4,9 +4,9 @@ import json
 import logging
 from datetime import datetime
 from flask import Flask, request, jsonify
-from db import create_all, SessionLocal
 
-from models import User, Booking, Rating
+from db import create_all, SessionLocal, get_db
+from models import User
 from config import (
     WHATSAPP_VERIFY_TOKEN,
     BOOKING_PRICE,
@@ -15,6 +15,7 @@ from config import (
     RAZORPAY_KEY_ID,
     RAZORPAY_KEY_SECRET,
 )
+
 from services.whatsapp_service import (
     send_text, send_buttons, send_typing_on, send_typing_off, send_list_picker
 )
@@ -24,7 +25,6 @@ from services.booking_service import (
     generate_slots_calendar,
     create_booking_temp,
     confirm_booking_after_payment,
-    ask_rating_buttons,
     SLOT_MAP
 )
 
@@ -33,32 +33,30 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# Ensure DB tables exist on every startup (important for Render)
-with app.app_context():
-    try:
-        create_all()
-        logger.info("✅ Database tables created or already exist.")
-    except Exception as e:
-        logger.error(f"❌ DB initialization failed: {e}")
-
 # Conversation states
 NORMAL = "NORMAL"
 SUGGEST_CONSULT = "SUGGEST_CONSULT"
 ASK_NAME = "ASK_NAME"
-ASK_CITY = "ASK_CITY"
 ASK_CATEGORY = "ASK_CATEGORY"
+ASK_STATE = "ASK_STATE"
+ASK_DISTRICT = "ASK_DISTRICT"
+ASK_CITY = "ASK_CITY"
 ASK_DATE = "ASK_DATE"
 ASK_SLOT = "ASK_SLOT"
 WAITING_PAYMENT = "WAITING_PAYMENT"
 ASK_RATING = "ASK_RATING"
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# load districts file
+DISTRICTS_JSON_PATH = os.path.join(os.path.dirname(__file__), "data", "india_districts.json")
+try:
+    with open(DISTRICTS_JSON_PATH, "r", encoding="utf-8") as fh:
+        INDIA_DISTRICTS = json.load(fh)  # expect {"State Name": ["District1", "District2", ...], ...}
+except Exception:
+    INDIA_DISTRICTS = {}
+    logger.warning("india_districts.json not found or invalid. State/district features will be limited.")
 
+def get_db_session():
+    return SessionLocal()
 
 def generate_case_id(length=6):
     import random, string
@@ -109,7 +107,7 @@ def maybe_suggest_consult(db, user: User, wa_id: str, text: str):
         save_state(db, user, SUGGEST_CONSULT)
         send_buttons(
             wa_id,
-            "Your issue looks important. I can connect you to a qualified lawyer on call for *₹499*.\n\nWould you like to book a consultation?",
+            "Looks important. I can connect you with a lawyer on call for ₹499. Want to book?",
             [
                 {"id": "book_consult_now", "title": "Yes — Book Call"},
                 {"id": "consult_later", "title": "Not now"},
@@ -150,7 +148,7 @@ def webhook():
     message = messages[0]
     wa_id = value["contacts"][0]["wa_id"]
 
-    db = next(get_db())
+    db = get_db_session()
     try:
         user = get_or_create_user(db, wa_id)
         msg_type = message.get("type")
@@ -168,12 +166,12 @@ def webhook():
                 interactive_id = message["interactive"]["list_reply"]["id"]
                 text_body = interactive_id
         else:
-            send_text(wa_id, "Sorry, I currently support text and simple button/list replies only.")
+            send_text(wa_id, "Sorry, I support text and simple button/list replies only.")
             return jsonify({"status": "ok"}), 200
 
         logger.info("Parsed text_body='%s', interactive_id='%s', state=%s", text_body, interactive_id, user.state)
 
-        # Handle language buttons
+        # Language change
         if interactive_id and interactive_id.startswith("lang_"):
             lang_map = {"lang_en":"English","lang_hinglish":"Hinglish","lang_mar":"Marathi"}
             if interactive_id in lang_map:
@@ -182,10 +180,10 @@ def webhook():
                 send_text(wa_id, f"Language updated to *{user.language}*.\n\nPlease type your legal issue.")
                 return jsonify({"status":"ok"}), 200
 
-        # Suggestion buttons
+        # suggestion buttons
         if interactive_id == "book_consult_now":
             save_state(db, user, ASK_NAME)
-            send_text(wa_id, "Great! Let's schedule your legal consultation call (₹499).\n\nFirst, please tell me your *full name*.")
+            send_text(wa_id, "Great! Let's schedule your legal consultation call (₹499).\n\nPlease tell your *full name*.")
             return jsonify({"status":"ok"}), 200
         if interactive_id == "consult_later":
             save_state(db, user, NORMAL)
@@ -193,29 +191,71 @@ def webhook():
             return jsonify({"status":"ok"}), 200
 
         lower_text = (text_body or "").lower()
+        # quick booking keywords
         if user.state in [NORMAL, SUGGEST_CONSULT] and any(kw in lower_text for kw in ["book", "consultation", "lawyer call", "appointment"]):
             save_state(db, user, ASK_NAME)
-            send_text(wa_id, "Great! Let's schedule your legal consultation call (₹499).\n\nFirst, please tell me your *full name*.")
+            send_text(wa_id, "Great! Let's schedule your legal consultation call (₹499).\n\nPlease tell your *full name*.")
             return jsonify({"status":"ok"}), 200
 
-        # Booking flow states
+        # booking flow states: NAME -> CATEGORY -> STATE -> DISTRICT -> CITY -> DATE -> SLOT
         if user.state == ASK_NAME:
             user.name = text_body.strip()
             db.add(user); db.commit()
-            save_state(db, user, ASK_CITY)
-            send_text(wa_id, "Thanks! 🙏\nNow please tell me your *city*.")
-            return jsonify({"status":"ok"}), 200
-
-        if user.state == ASK_CITY:
-            user.city = text_body.strip()
-            db.add(user); db.commit()
             save_state(db, user, ASK_CATEGORY)
-            send_text(wa_id, "Got it 👍\nPlease choose your *legal issue category* (e.g., FIR, Police, Property, Family, Job, Business, Other).")
+            send_text(wa_id, "Thanks! 🙏\nPlease choose your *legal issue category* (e.g., FIR, Police, Property, Family, Job, Business, Other).")
             return jsonify({"status":"ok"}), 200
 
         if user.state == ASK_CATEGORY:
             user.category = text_body.strip()
             db.add(user); db.commit()
+            if INDIA_DISTRICTS:
+                save_state(db, user, ASK_STATE)
+                # prepare a small list of states (WhatsApp lists have limits; pick top-level states)
+                rows = [{"id": f"state_{s}", "title": s, "description": "Select state"} for s in sorted(INDIA_DISTRICTS.keys())[:30]]
+                send_list_picker(wa_id, header="Select your state 👇", body="State list", rows=rows, section_title="States")
+            else:
+                save_state(db, user, ASK_CITY)
+                send_text(wa_id, "Please tell me your *city*.")
+            return jsonify({"status":"ok"}), 200
+
+        if user.state == ASK_STATE:
+            if interactive_id and interactive_id.startswith("state_"):
+                state_name = interactive_id.replace("state_", "", 1)
+                user.state = state_name
+                db.add(user); db.commit()
+                # prepare districts for this state
+                districts = INDIA_DISTRICTS.get(state_name, [])
+                # If too many districts, limit and instruct user to type district
+                if len(districts) <= 30:
+                    rows = [{"id": f"district_{d}", "title": d, "description": "Select district"} for d in districts]
+                    save_state(db, user, ASK_DISTRICT)
+                    send_list_picker(wa_id, header=f"Select district in {state_name}", body="Districts", rows=rows, section_title="Districts")
+                else:
+                    save_state(db, user, ASK_DISTRICT)
+                    send_text(wa_id, f"{state_name} has many districts. Please type your district name.")
+            else:
+                send_text(wa_id, "Please select your state from the list I sent.")
+            return jsonify({"status":"ok"}), 200
+
+        if user.state == ASK_DISTRICT:
+            if interactive_id and interactive_id.startswith("district_"):
+                district = interactive_id.replace("district_", "", 1)
+                user.district = district
+                db.add(user); db.commit()
+                save_state(db, user, ASK_CITY)
+                send_text(wa_id, "Thanks — now please tell me your *city* (or nearest city).")
+            else:
+                # user typed district
+                user.district = text_body.strip()
+                db.add(user); db.commit()
+                save_state(db, user, ASK_CITY)
+                send_text(wa_id, "Thanks — now please tell me your *city* (or nearest city).")
+            return jsonify({"status":"ok"}), 200
+
+        if user.state == ASK_CITY:
+            user.city = text_body.strip()
+            db.add(user); db.commit()
+            # show dates
             rows = generate_dates_calendar()
             save_state(db, user, ASK_DATE)
             send_list_picker(wa_id, header="Select appointment date 👇", body="Available Dates", rows=rows, section_title="Next 7 days")
@@ -229,16 +269,15 @@ def webhook():
                 save_state(db, user, ASK_SLOT)
                 send_list_picker(wa_id, header=f"Select time slot for {user.temp_date}", body="Available time slots (IST)", rows=rows, section_title="Time Slots")
             else:
-                send_text(wa_id, "Please select a date from the list I sent. If you didn't receive it, type *Book Consultation* to restart booking.")
+                send_text(wa_id, "Please select a date from the list I sent. Type *Book Consultation* to restart.")
             return jsonify({"status":"ok"}), 200
 
         if user.state == ASK_SLOT:
             if interactive_id and interactive_id.startswith("slot_"):
-                # store code-only
+                # store slot code only (e.g. "8_9")
                 user.temp_slot = interactive_id.replace("slot_", "", 1)
                 db.add(user); db.commit()
 
-                # Build booking
                 name = user.name or "Client"
                 city = user.city or "NA"
                 category = user.category or "General"
@@ -267,14 +306,14 @@ def webhook():
                           f"Please complete payment using this link:\n{payment_link}"
                           )
             else:
-                send_text(wa_id, "Please select a time slot from the list I sent. If you didn't receive it, type *Book Consultation* to restart booking.")
+                send_text(wa_id, "Please select a time slot from the list I sent.")
             return jsonify({"status":"ok"}), 200
 
         if user.state == WAITING_PAYMENT:
             send_text(wa_id, f"💳 Your payment link is still active: {user.last_payment_link or 'not found'}")
             return jsonify({"status":"ok"}), 200
 
-        # Suggest consult case: simple yes/no detection
+        # Suggest consult simple yes/no
         if user.state == SUGGEST_CONSULT:
             if lower_text in YES_WORDS:
                 save_state(db, user, ASK_NAME)
@@ -282,10 +321,10 @@ def webhook():
                 return jsonify({"status":"ok"}), 200
             if lower_text in NO_WORDS:
                 save_state(db, user, NORMAL)
-                send_text(wa_id, "Sure. You can type anything to continue chatting.")
+                send_text(wa_id, "Sure. You can continue chatting.")
                 return jsonify({"status":"ok"}), 200
 
-        # Normal chat
+        # Default: AI reply
         send_typing_on(wa_id)
         reply = ai_reply(text_body, user)
         send_typing_off(wa_id)
@@ -299,28 +338,25 @@ def webhook():
     finally:
         db.close()
 
-# Payment webhook (simple)
 @app.route("/payment_webhook", methods=["POST"])
 def payment_webhook():
     data = request.get_json(force=True, silent=True) or {}
-    # In our simple flow we expect {"payment_token": "..."}
-    token = data.get("payment_token") or data.get("token") or ""
+    token = data.get("payment_token") or data.get("token") or data.get("razorpay_payment_id")
     if not token:
         return jsonify({"error": "missing token"}), 400
 
-    db = next(get_db())
+    db = get_db_session()
     try:
         booking, status = confirm_booking_after_payment(db, token)
         if not booking:
             return jsonify({"error": status}), 404
-        # Optionally send WhatsApp message via send_text here (requires whatsapp id)
+        # notify user
         send_text(booking.whatsapp_id, f"✅ Your booking for {booking.date} {booking.slot_readable} is confirmed. See you then 🙂")
         return jsonify({"status": "confirmed", "booking_id": booking.id}), 200
     finally:
         db.close()
 
 if __name__ == "__main__":
-    # Run DB migrations
     with app.app_context():
         try:
             print("🔧 Running DB migrations...")
