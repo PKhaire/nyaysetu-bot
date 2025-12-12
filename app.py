@@ -32,13 +32,13 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
- with app.app_context():
-        try:
-            print("🔧 Running DB migrations...")
-            create_all()
-            print("✅ DB tables ready.")
-        except Exception as e:
-            print("⚠️ DB migration failed:", e)
+with app.app_context():
+    try:
+        print("🔧 Running DB migrations...")
+        create_all()
+        print("✅ DB tables ready.")
+    except Exception as e:
+        print("⚠️ DB migration failed:", e)
 # Conversation states
 NORMAL = "NORMAL"
 SUGGEST_CONSULT = "SUGGEST_CONSULT"
