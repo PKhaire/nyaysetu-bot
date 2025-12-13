@@ -1,27 +1,29 @@
 # db.py
 import os
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import sessionmaker
 
-from config import DATABASE_URL
+from models import Base
 
-# Create engine
-connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
-engine = create_engine(DATABASE_URL, connect_args=connect_args, future=True)
+# SQLite DB path (Render-safe)
+DB_PATH = os.getenv("SQLITE_PATH", "nyaysetu.db")
+DATABASE_URL = f"sqlite:///{DB_PATH}"
 
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False},  # required for SQLite
+)
 
-Base = declarative_base()
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine,
+)
+
 
 def create_all():
-    # import models lazily to avoid circular imports
-    from models import User, Booking, Rating  # noqa: F401
+    """
+    Creates all tables.
+    Call ONCE at app startup.
+    """
     Base.metadata.create_all(bind=engine)
-
-# get_db generator for optional usage
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
