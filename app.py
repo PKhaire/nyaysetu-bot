@@ -47,7 +47,15 @@ logger = logging.getLogger("app")
 # Flask App
 # -------------------------------------------------
 app = Flask(__name__)
-
+# -------------------------------------------------
+# Ensure DB tables exist (IMPORTANT for Render/Gunicorn)
+# -------------------------------------------------
+with app.app_context():
+    try:
+        create_all()
+        logger.info("✅ Database tables ensured")
+    except Exception as e:
+        logger.error("❌ DB init failed", exc_info=e)
 # -------------------------------------------------
 # Conversation States
 # -------------------------------------------------
@@ -68,13 +76,8 @@ ASK_RATING = "ASK_RATING"
 # DB Helpers
 # -------------------------------------------------
 def get_db():
-    db = SessionLocal()
-    try:
-        return db
-    except Exception:
-        db.close()
-        raise
-
+    return SessionLocal()
+    
 def save_state(db, user, state):
     user.state = state
     db.add(user)
