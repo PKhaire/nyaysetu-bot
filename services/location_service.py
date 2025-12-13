@@ -1,104 +1,113 @@
 # services/location_service.py
+"""
+Location Service
+----------------
+Handles India State & District logic:
+- Loads india_districts.json once (cached)
+- Detects state/district from free text
+- Builds WhatsApp list picker rows
+"""
 
 import json
+import os
 import re
-from functools import lru_cache
+from typing import Dict, List, Optional, Tuple
 
-# Path to JSON
-JSON_PATH = "data/india_districts.json"
-
-
-@lru_cache(maxsize=1)
-def load_locations():
-    """Loads states and districts from JSON only once (cached)."""
-    with open(JSON_PATH, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    states = list(data.keys())
-
-    # Flatten district mapping
-    district_map = {}
-    for state, districts in data.items():
-        for d in districts:
-            district_map[d.lower()] = state
-
-    return data, states, district_map
+# Cache (loaded once)
+_INDIA_DATA: Dict[str, List[str]] | None = None
 
 
-# -------------------------------------------------------------------
-# STATE DETECTION
-# -------------------------------------------------------------------
-def detect_state(text):
-    """AI-like fuzzy detection of state from user text."""
-    text = text.lower().strip()
-    _, states, district_map = load_locations()
+def _load_india_data() -> Dict[str, List[str]]:
+    """
+    Load india_districts.json only once and cache it.
+    """
+    global _INDIA_DATA
+    if _INDIA_DATA is not None:
+        return _INDIA_DATA
 
-    # direct match
-    for s in states:
-        if s.lower() == text:
-            return s
+    base_dir = os.path.dirname(os.path.dirname(__file__))
+    json_path = os.path.join(base_dir, "india_districts.json")
 
-    # match inside sentence (e.g., "I live in Maharashtra")
-    for s in states:
-        if s.lower() in text:
-            return s
+    with open(json_path, "r", encoding="utf-8") as f:
+        _INDIA_DATA = json.load(f)
 
-    # district-based detection (user typed district only)
-    for district_lower, state in district_map.items():
-        if district_lower in text:
+    return _INDIA_DATA
+
+
+# ----------------------------
+# Public helpers
+# ----------------------------
+
+def get_all_states() -> List[str]:
+    data = _load_india_data()
+    return sorted(data.keys())
+
+
+def get_districts_for_state(state: str) -> List[str]:
+    data = _load_india_data()
+    return sorted(data.get(state, []))
+
+
+def detect_state_from_text(text: str) -> Optional[str]:
+    """
+    Try to detect state from free text.
+    Example: "I am from Maharashtra"
+    """
+    text = text.lower()
+    data = _load_india_data()
+
+    for state in data.keys():
+        if state.lower() in text:
             return state
-
     return None
 
 
-# -------------------------------------------------------------------
-# DISTRICT DETECTION
-# -------------------------------------------------------------------
-def detect_district(state, text):
-    """Detect district within a state."""
-    text = text.lower().strip()
-    data, _, _ = load_locations()
-    
-    if state not in data:
-        return None
+def detect_district_from_text(text: str) -> Optional[Tuple[str, str]]:
+    """
+    Try to detect district and infer state.
+    Returns (state, district) if found.
+    """
+    text = text.lower()
+    data = _load_india_data()
 
-    for d in data[state]:
-        if d.lower() == text:
-            return d
-        if d.lower() in text:
-            return d
-
+    for state, districts in data.items():
+        for district in districts:
+            if district.lower() in text:
+                return state, district
     return None
 
 
-# -------------------------------------------------------------------
-# LIST PICKER HELPERS
-# -------------------------------------------------------------------
-def list_states():
-    """WhatsApp-friendly list picker rows for states."""
-    _, states, _ = load_locations()
-    return [
-        {
-            "id": f"state_{s}",
-            "title": s,
+# ----------------------------
+# WhatsApp UI helpers
+# ----------------------------
+
+def build_state_list_rows(limit: int = 20) -> List[dict]:
+    """
+    WhatsApp list picker rows for states.
+    """
+    states = get_all_states()[:limit]
+    rows = []
+
+    for state in states:
+        rows.append({
+            "id": f"state_{state}",
+            "title": state,
             "description": ""
-        }
-        for s in states
-    ]
+        })
+    return rows
 
 
-def list_districts(state):
-    """List picker rows for districts of a given state."""
-    data, _, _ = load_locations()
+def build_district_list_rows(state: str, limit: int = 20) -> List[dict]:
+    """
+    WhatsApp list picker rows for districts of a state.
+    """
+    districts = get_districts_for_state(state)[:limit]
+    rows = []
 
-    if state not in data:
-        return []
-
-    return [
-        {
-            "id": f"district_{state}_{d}",
-            "title": d,
+    for district in districts:
+        rows.append({
+            "id": f"district_{state}_{district}",
+            "title": district,
             "description": ""
-        }
-        for d in data[state]
-    ]
+        })
+    return rows
