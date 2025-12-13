@@ -1,48 +1,64 @@
 # models.py
+from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy.orm import declarative_base
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Float
-from sqlalchemy.orm import relationship
-from db import Base
+
+Base = declarative_base()
 
 class User(Base):
     __tablename__ = "users"
+
     id = Column(Integer, primary_key=True, index=True)
-    whatsapp_id = Column(String, unique=True, index=True, nullable=False)
-    case_id = Column(String, nullable=True)
-    name = Column(String, nullable=True)
-    city = Column(String, nullable=True)
-    category = Column(String, nullable=True)
+    whatsapp_id = Column(String, unique=True, index=True)
+    case_id = Column(String)
+
+    # Personal information
+    name = Column(String)
+    state_name = Column(String)
+    district_name = Column(String)
+    category = Column(String)
+
+    # Conversation state
     language = Column(String, default="English")
     query_count = Column(Integer, default=0)
     state = Column(String, default="NORMAL")
-    temp_date = Column(String, nullable=True)
-    temp_slot = Column(String, nullable=True)  # code like "8_9"
-    last_payment_link = Column(String, nullable=True)
+
+    # Booking temp storage
+    temp_date = Column(String)
+    temp_slot = Column(String)
+
+    # Payment
+    last_payment_link = Column(String)
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    bookings = relationship("Booking", back_populates="user")
 
 class Booking(Base):
     __tablename__ = "bookings"
+
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    whatsapp_id = Column(String, nullable=False)
-    name = Column(String, nullable=False)
-    city = Column(String, nullable=True)
-    category = Column(String, nullable=True)
-    date = Column(String, nullable=False)  # YYYY-MM-DD
-    slot_code = Column(String, nullable=False)  # e.g., "8_9"
-    slot_readable = Column(String, nullable=False)  # "8:00 PM – 9:00 PM"
-    price = Column(Float, nullable=False)
-    status = Column(String, default="pending")  # pending/confirmed/cancelled
-    payment_token = Column(String, unique=True, nullable=False)
+    whatsapp_id = Column(String, index=True)
+
+    name = Column(String)
+    state = Column(String)
+    district = Column(String)
+    category = Column(String)
+
+    date = Column(String)
+    slot_code = Column(String)
+    slot_readable = Column(String)
+
+    payment_token = Column(String, unique=True)
+    paid = Column(Boolean, default=False)
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    user = relationship("User", back_populates="bookings")
 
 class Rating(Base):
     __tablename__ = "ratings"
-    id = Column(Integer, primary_key=True, index=True)
-    whatsapp_id = Column(String, nullable=False)
-    score = Column(Integer, nullable=False)
+
+    id = Column(Integer, primary_key=True)
+    whatsapp_id = Column(String)
+    rating = Column(Integer)
+    feedback = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
