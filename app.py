@@ -3,6 +3,7 @@ import os
 import json
 import logging
 from datetime import datetime
+
 from flask import Flask, request, jsonify
 
 from db import create_all, SessionLocal
@@ -10,33 +11,49 @@ from models import User, Booking, Rating
 from config import (
     WHATSAPP_VERIFY_TOKEN,
     BOOKING_PRICE,
-    BOOKING_CUTOFF_HOURS,
 )
 
-# SERVICES
 from services.whatsapp_service import (
-    send_text, send_typing_on, send_typing_off, send_list_picker, send_buttons
+    send_text,
+    send_buttons,
+    send_typing_on,
+    send_typing_off,
+    send_list_picker,
 )
+
 from services.openai_service import ai_reply
-from services.location_service import (
-    detect_state, detect_district, list_states, list_districts
-)
 from services.booking_service import (
     generate_dates_calendar,
     generate_slots_calendar,
     create_booking_temp,
     confirm_booking_after_payment,
-    SLOT_MAP
+    SLOT_MAP,
 )
 
-# Logging
-logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
-logger = logging.getLogger(__name__)
+from services.location_service import (
+    detect_state_from_text,
+    detect_district_from_text,
+    build_state_list_rows,
+    build_district_list_rows,
+)
 
+# -------------------------------------------------
+# Logging
+# -------------------------------------------------
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("app")
+
+# -------------------------------------------------
+# Flask App
+# -------------------------------------------------
 app = Flask(__name__)
 
-# Conversation states
+# -------------------------------------------------
+# Conversation States
+# -------------------------------------------------
 NORMAL = "NORMAL"
+ASK_LANGUAGE = "ASK_LANGUAGE"
+
 SUGGEST_CONSULT = "SUGGEST_CONSULT"
 ASK_NAME = "ASK_NAME"
 ASK_STATE = "ASK_STATE"
@@ -45,64 +62,50 @@ ASK_CATEGORY = "ASK_CATEGORY"
 ASK_DATE = "ASK_DATE"
 ASK_SLOT = "ASK_SLOT"
 WAITING_PAYMENT = "WAITING_PAYMENT"
+ASK_RATING = "ASK_RATING"
 
-
-# -------------------------------------------------------------------------
-# DB session helper
-# -------------------------------------------------------------------------
+# -------------------------------------------------
+# DB Helpers
+# -------------------------------------------------
 def get_db():
     db = SessionLocal()
     try:
-        yield db
-    finally:
+        return db
+    except Exception:
         db.close()
-
-
-def get_db_session():
-    return SessionLocal()
-
-
-# -------------------------------------------------------------------------
-# Create or fetch user
-# -------------------------------------------------------------------------
-def make_case_id():
-    import random, string
-    return "NS-" + "".join(random.choices(string.hexdigits.upper(), k=6))
-
-
-def get_or_create_user(db, wa_id):
-    user = db.query(User).filter_by(whatsapp_id=wa_id).first()
-    if not user:
-        user = User(
-            whatsapp_id=wa_id,
-            case_id=make_case_id(),
-            language="English",
-            state=NORMAL,
-            query_count=0,
-            created_at=datetime.utcnow(),
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-        logger.info(f"Created new user {wa_id} → case_id {user.case_id}")
-    return user
-
+        raise
 
 def save_state(db, user, state):
     user.state = state
     db.add(user)
     db.commit()
 
+def generate_case_id():
+    import random, string
+    return "NS-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
-# -------------------------------------------------------------------------
+def get_or_create_user(db, wa_id):
+    user = db.query(User).filter_by(whatsapp_id=wa_id).first()
+    if not user:
+        user = User(
+            whatsapp_id=wa_id,
+            case_id=generate_case_id(),
+            language="English",
+            state=NORMAL,
+            created_at=datetime.utcnow(),
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    return user
+# -------------------------------------------------
+# Routes
+# -------------------------------------------------
 @app.route("/", methods=["GET"])
 def index():
-    return "NyaySetu backend is running.", 200
+    return "NyaySetu backend running", 200
 
 
-# -------------------------------------------------------------------------
-# WhatsApp verification
-# -------------------------------------------------------------------------
 @app.route("/webhook", methods=["GET"])
 def verify():
     mode = request.args.get("hub.mode")
@@ -111,274 +114,303 @@ def verify():
 
     if mode == "subscribe" and token == WHATSAPP_VERIFY_TOKEN:
         return challenge, 200
+
     return "Verification failed", 403
 
 
-# -------------------------------------------------------------------------
-# Main WhatsApp message handler
-# -------------------------------------------------------------------------
 @app.route("/webhook", methods=["POST"])
 def webhook():
     payload = request.get_json(force=True, silent=True) or {}
-    logger.info("INCOMING WHATSAPP PAYLOAD: %s", json.dumps(payload))
+    logger.info("INCOMING PAYLOAD: %s", json.dumps(payload))
 
     try:
-        entry = payload["entry"][0]
-        change = entry["changes"][0]["value"]
+        value = payload["entry"][0]["changes"][0]["value"]
+        messages = value.get("messages")
+        if not messages:
+            return jsonify({"status": "ignored"}), 200
+
+        message = messages[0]
+        wa_id = value["contacts"][0]["wa_id"]
     except Exception:
-        logger.error("Malformed payload")
         return jsonify({"status": "ignored"}), 200
 
-    messages = change.get("messages")
-    if not messages:
-        logger.info("No user message — system event ignored")
-        return jsonify({"status": "ignored"}), 200
-
-    message = messages[0]
-    wa_id = change["contacts"][0]["wa_id"]
-
-    db = get_db_session()
+    db = get_db()
     try:
         user = get_or_create_user(db, wa_id)
 
-        msg_type = message.get("type")
         text_body = ""
         interactive_id = None
 
-        # Extract text
-        if msg_type == "text":
-            text_body = message["text"]["body"].strip()
-        elif msg_type == "interactive":
+        if message["type"] == "text":
+            text_body = message["text"]["body"]
+        elif message["type"] == "interactive":
             itype = message["interactive"]["type"]
             if itype == "button_reply":
                 interactive_id = message["interactive"]["button_reply"]["id"]
                 text_body = interactive_id
-            else:
+            elif itype == "list_reply":
                 interactive_id = message["interactive"]["list_reply"]["id"]
                 text_body = interactive_id
-        else:
-            send_text(wa_id, "Sorry, I support only text and quick replies.")
-            return jsonify({"ok": True})
 
-        logger.info(f"Parsed → text_body='{text_body}', id='{interactive_id}', state={user.state}")
+        lower_text = text_body.lower().strip()
 
+        logger.info(
+            "User=%s State=%s Text=%s",
+            wa_id, user.state, text_body
+        )
 
-        # ---------------------------------------------------------------------
-        # BOOKING FLOW
-        # ---------------------------------------------------------------------
+        # -------------------------------
+        # Language Selection (FIRST TIME)
+        # -------------------------------
+        if user.state == NORMAL and not user.language:
+            save_state(db, user, ASK_LANGUAGE)
+            send_buttons(
+                wa_id,
+                "Welcome to *NyaySetu* ⚖️\nPlease select your language:",
+                [
+                    {"id": "lang_en", "title": "English"},
+                    {"id": "lang_hi", "title": "Hinglish"},
+                    {"id": "lang_mr", "title": "Marathi"},
+                ],
+            )
+            return jsonify({"status": "ok"}), 200
 
-        # Step 1: Ask Name
+        if user.state == ASK_LANGUAGE:
+            lang_map = {
+                "lang_en": "English",
+                "lang_hi": "Hinglish",
+                "lang_mr": "Marathi",
+            }
+            if interactive_id in lang_map:
+                user.language = lang_map[interactive_id]
+                save_state(db, user, NORMAL)
+                send_text(
+                    wa_id,
+                    f"✅ Language set to *{user.language}*\n\nPlease tell me your legal issue."
+                )
+            return jsonify({"status": "ok"}), 200
+        # -------------------------------
+        # Start booking
+        # -------------------------------
+        if lower_text in ["book consultation", "book consult", "consult", "lawyer"]:
+            save_state(db, user, ASK_NAME)
+            send_text(wa_id, "Great 👍\nPlease tell me your *full name*.")
+            return jsonify({"status": "ok"}), 200
+
+        # -------------------------------
+        # Ask Name
+        # -------------------------------
         if user.state == ASK_NAME:
             user.name = text_body
             db.commit()
+
             save_state(db, user, ASK_STATE)
-            send_text(wa_id, "Thanks! 🙏\nWhich *state* are you from?")
-            return jsonify({"ok": True})
+            send_text(
+                wa_id,
+                "Thanks 🙏\nWhich *state* are you in?\n"
+                "You can type or select from the list 👇"
+            )
+            send_list_picker(
+                wa_id,
+                header="Select State",
+                body="Choose your state",
+                rows=build_state_list_rows(),
+                section_title="Indian States",
+            )
+            return jsonify({"status": "ok"}), 200
 
-        # Step 2: Ask State
+        # -------------------------------
+        # Ask State
+        # -------------------------------
         if user.state == ASK_STATE:
-            detected = detect_state(text_body)
+            state_name = None
 
-            if detected:
-                user.state_name = detected
-                db.commit()
-                save_state(db, user, ASK_DISTRICT)
+            if interactive_id and interactive_id.startswith("state_"):
+                state_name = interactive_id.replace("state_", "")
 
-                districts = list_districts(detected)
-                send_list_picker(
-                    wa_id,
-                    header=f"Select district in {detected}",
-                    body="Choose district",
-                    rows=districts,
-                    section_title=f"{detected} districts",
-                )
-                return jsonify({"ok": True})
+            if not state_name:
+                state_name = detect_state_from_text(text_body)
 
-            # Fallback: show all states
+            if not state_name:
+                send_text(wa_id, "Please select or type your *state*.")
+                return jsonify({"status": "ok"}), 200
+
+            user.state_name = state_name
+            db.commit()
+
+            save_state(db, user, ASK_DISTRICT)
             send_list_picker(
                 wa_id,
-                header="Select your State",
-                body="Choose from list",
-                rows=list_states(),
-                section_title="Indian States"
+                header=f"Select district in {state_name}",
+                body="Choose district",
+                rows=build_district_list_rows(state_name),
+                section_title=f"{state_name} districts",
             )
-            return jsonify({"ok": True})
+            return jsonify({"status": "ok"}), 200
 
-        # Step 3: District selection from picker
+        # -------------------------------
+        # Ask District
+        # -------------------------------
         if user.state == ASK_DISTRICT:
+            district = None
+
             if interactive_id and interactive_id.startswith("district_"):
-                parts = interactive_id.split("_")
-                state = parts[1]
-                district = parts[2]
+                district = interactive_id.split("_")[-1]
 
-                user.state_name = state
-                user.district_name = district
-                db.commit()
+            if not district:
+                detected = detect_district_from_text(text_body)
+                if detected:
+                    user.state_name, district = detected
 
-                save_state(db, user, ASK_CATEGORY)
-                send_text(wa_id, "Got it 👍\nNow select your *legal issue category* (FIR, Police, Property, Family, Job, Business, Other).")
-                return jsonify({"ok": True})
+            if not district:
+                send_text(wa_id, "Please select your *district* from the list.")
+                return jsonify({"status": "ok"}), 200
 
-            # Auto-detect district if typed
-            detected = detect_district(user.state_name, text_body)
-            if detected:
-                user.district_name = detected
-                db.commit()
-                save_state(db, user, ASK_CATEGORY)
+            user.district_name = district
+            db.commit()
 
-                send_text(wa_id, "Great 👍\nPlease tell your *legal issue category*.")
-                return jsonify({"ok": True})
-
-            # Re-ask district
-            send_list_picker(
+            save_state(db, user, ASK_CATEGORY)
+            send_text(
                 wa_id,
-                header=f"Select district in {user.state_name}",
-                body="Choose from list",
-                rows=list_districts(user.state_name),
-                section_title=f"{user.state_name} Districts",
+                "Got it 👍\nChoose your *legal category* "
+                "(FIR, Police, Property, Family, Job, Business, Other)."
             )
-            return jsonify({"ok": True})
-
-        # Step 4: Category → Ask Date
+            return jsonify({"status": "ok"}), 200
+        # -------------------------------
+        # Category
+        # -------------------------------
         if user.state == ASK_CATEGORY:
             user.category = text_body
             db.commit()
-            save_state(db, user, ASK_DATE)
 
-            rows = generate_dates_calendar()
+            save_state(db, user, ASK_DATE)
             send_list_picker(
                 wa_id,
                 header="Select appointment date 👇",
                 body="Available Dates",
-                rows=rows,
-                section_title="Next 7 days"
+                rows=generate_dates_calendar(),
+                section_title="Next 7 days",
             )
-            return jsonify({"ok": True})
+            return jsonify({"status": "ok"}), 200
 
-        # Step 5: Date → Ask Slot
+        # -------------------------------
+        # Date
+        # -------------------------------
         if user.state == ASK_DATE:
-            if interactive_id and interactive_id.startswith("date_"):
-                user.temp_date = interactive_id.replace("date_", "")
-                db.commit()
+            if not interactive_id or not interactive_id.startswith("date_"):
+                send_text(wa_id, "Please select a date from the list.")
+                return jsonify({"status": "ok"}), 200
 
-                rows = generate_slots_calendar(user.temp_date)
-                save_state(db, user, ASK_SLOT)
+            user.temp_date = interactive_id.replace("date_", "")
+            db.commit()
 
-                send_list_picker(
-                    wa_id,
-                    header=f"Select time slot for {user.temp_date}",
-                    body="Available time slots (IST)",
-                    rows=rows,
-                    section_title="Time Slots"
-                )
-                return jsonify({"ok": True})
+            save_state(db, user, ASK_SLOT)
+            send_list_picker(
+                wa_id,
+                header=f"Select time slot for {user.temp_date}",
+                body="Available time slots (IST)",
+                rows=generate_slots_calendar(user.temp_date),
+                section_title="Time Slots",
+            )
+            return jsonify({"status": "ok"}), 200
 
-            send_text(wa_id, "Please select a date from the list.")
-            return jsonify({"ok": True})
-
-        # Step 6: Slot → Payment
+        # -------------------------------
+        # Slot
+        # -------------------------------
         if user.state == ASK_SLOT:
-            if interactive_id and interactive_id.startswith("slot_"):
-                slot_code = interactive_id.replace("slot_", "")
+            if not interactive_id or not interactive_id.startswith("slot_"):
+                send_text(wa_id, "Please select a time slot from the list.")
+                return jsonify({"status": "ok"}), 200
 
-                booking, result = create_booking_temp(
-                    db,
-                    user,
-                    user.name,
-                    user.state_name,
-                    user.district_name,
-                    user.category,
-                    user.temp_date,
-                    slot_code
-                )
+            slot_code = interactive_id.replace("slot_", "")
+            user.temp_slot = slot_code
+            db.commit()
 
-                if not booking:
-                    send_text(wa_id, f"⚠️ {result}")
-                    return jsonify({"ok": True})
+            booking, payment_link = create_booking_temp(
+                db=db,
+                user=user,
+                name=user.name,
+                city=user.district_name,
+                category=user.category,
+                date_str=user.temp_date,
+                slot_code=slot_code,
+            )
 
-                # Success → show payment link
-                payment_link = result
-                user.last_payment_link = payment_link
-                db.commit()
-                save_state(db, user, WAITING_PAYMENT)
+            if not booking:
+                send_text(wa_id, f"⚠️ {payment_link}")
+                return jsonify({"status": "ok"}), 200
 
-                send_text(
-                    wa_id,
-                    "✅ *Your appointment details:*\n"
-                    f"*Name:* {user.name}\n"
-                    f"*State:* {user.state_name}\n"
-                    f"*District:* {user.district_name}\n"
-                    f"*Category:* {user.category}\n"
-                    f"*Date:* {user.temp_date}\n"
-                    f"*Slot:* {SLOT_MAP.get(slot_code)}\n"
-                    f"*Fees:* ₹{BOOKING_PRICE}\n\n"
-                    f"Please complete payment:\n{payment_link}"
-                )
-                return jsonify({"ok": True})
+            user.last_payment_link = payment_link
+            save_state(db, user, WAITING_PAYMENT)
 
-            send_text(wa_id, "Please select a slot from the list.")
-            return jsonify({"ok": True})
-
-        # Step 7: Waiting for payment
+            send_text(
+                wa_id,
+                "✅ *Your appointment details:*\n"
+                f"*Name:* {user.name}\n"
+                f"*State:* {user.state_name}\n"
+                f"*District:* {user.district_name}\n"
+                f"*Category:* {user.category}\n"
+                f"*Date:* {user.temp_date}\n"
+                f"*Slot:* {SLOT_MAP[slot_code]}\n"
+                f"*Fees:* ₹{BOOKING_PRICE} (one-time session) 🙂\n\n"
+                f"Please complete payment:\n{payment_link}"
+            )
+            return jsonify({"status": "ok"}), 200
+        # -------------------------------
+        # Waiting payment
+        # -------------------------------
         if user.state == WAITING_PAYMENT:
-            send_text(wa_id, f"💳 Your payment link is still active:\n{user.last_payment_link}")
-            return jsonify({"ok": True})
+            send_text(
+                wa_id,
+                f"💳 Your payment link is active:\n{user.last_payment_link}"
+            )
+            return jsonify({"status": "ok"}), 200
 
-        # ---------------------------------------------------------------------
-        # DEFAULT → AI NATURAL CHAT
-        # ---------------------------------------------------------------------
+        # -------------------------------
+        # AI Chat (Fallback)
+        # -------------------------------
         send_typing_on(wa_id)
         reply = ai_reply(text_body, user)
         send_typing_off(wa_id)
         send_text(wa_id, reply)
-        return jsonify({"ok": True})
+        return jsonify({"status": "ok"}), 200
 
     except Exception as e:
-        logger.exception("Error in webhook")
+        logger.exception("Webhook error")
         return jsonify({"error": str(e)}), 500
     finally:
         db.close()
 
 
-# -------------------------------------------------------------------------
-# PAYMENT WEBHOOK
-# -------------------------------------------------------------------------
+# -------------------------------------------------
+# Payment Webhook
+# -------------------------------------------------
 @app.route("/payment_webhook", methods=["POST"])
 def payment_webhook():
-    data = request.get_json(force=True, silent=True) or {}
-    token = data.get("token") or data.get("payment_token")
+    data = request.get_json(force=True) or {}
+    token = data.get("payment_token")
 
     if not token:
         return jsonify({"error": "missing token"}), 400
 
-    db = get_db_session()
+    db = get_db()
     try:
-        booking, status = confirm_booking_after_payment(db, token)
-
+        booking, msg = confirm_booking_after_payment(db, token)
         if not booking:
-            return jsonify({"error": status}), 404
+            return jsonify({"error": msg}), 404
 
-        # Notify user
         send_text(
             booking.whatsapp_id,
-            f"✅ Your booking for {booking.date} at {booking.slot_readable} is confirmed!"
+            f"✅ Your booking on {booking.date} at {booking.slot_readable} is confirmed 🙂"
         )
         return jsonify({"status": "confirmed"}), 200
-
     finally:
         db.close()
 
 
-# -------------------------------------------------------------------------
-# STARTUP — Run migrations
-# -------------------------------------------------------------------------
+# -------------------------------------------------
+# Startup
+# -------------------------------------------------
 if __name__ == "__main__":
-    with app.app_context():
-        try:
-            print("🔧 Running DB migrations...")
-            create_all()
-            print("✅ DB tables ready.")
-        except Exception as e:
-            print("DB init failed:", e)
-
+    create_all()
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
