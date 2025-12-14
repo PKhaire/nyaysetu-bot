@@ -41,6 +41,7 @@ from services.location_service import (
     detect_district_from_text,
     build_state_list_rows,
     build_district_list_rows,
+    detect_country_from_wa_id,
 )
 
 # -------------------------------------------------
@@ -220,7 +221,10 @@ def webhook():
                 wa_id,
                 header="Select State",
                 body="Choose your state or tap More",
-                rows=build_state_list_rows(page=1),
+                rows=build_state_list_rows(
+                    page=1,
+                    preferred_state=user.state_name or detect_state_from_text(text_body)
+                ),
                 section_title="Indian States",
             )
             return jsonify({"status": "ok"}), 200
@@ -236,8 +240,11 @@ def webhook():
                 send_list_picker(
                     wa_id,
                     header="Select State",
-                    body="More states",
-                    rows=build_state_list_rows(page=page),
+                    body="Choose your state",
+                    rows=build_state_list_rows(
+                        page=page,
+                        preferred_state=user.state_name
+                    ),
                     section_title="Indian States",
                 )
                 return jsonify({"status": "ok"}), 200
@@ -278,7 +285,11 @@ def webhook():
                     wa_id,
                     header=f"Select district in {user.state_name}",
                     body="Choose your district",
-                    rows=build_district_list_rows(user.state_name, page=page),
+                    rows=build_district_list_rows(
+                                user.state_name,
+                                page=page,
+                                preferred_district=user.district_name
+                    ),                    
                     section_title=f"{user.state_name} districts",
                 )
                 return jsonify({"status": "ok"}), 200
