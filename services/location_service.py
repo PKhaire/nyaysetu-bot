@@ -81,7 +81,7 @@ def detect_district_from_text(text: str) -> Optional[Tuple[str, str]]:
 # WhatsApp UI helpers
 # ----------------------------
 
-def build_state_list_rows(limit: int = 20) -> List[dict]:
+def build_state_list_rows(limit: int = 10) -> List[dict]:
     """
     WhatsApp list picker rows for states.
     """
