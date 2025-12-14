@@ -452,8 +452,7 @@ def webhook():
                 section_title="Next 7 days",
             )
             return jsonify({"status": "ok"}), 200
-
-
+        
         # -------------------------------
         # Date
         # -------------------------------
@@ -461,10 +460,10 @@ def webhook():
             if not interactive_id or not interactive_id.startswith("date_"):
                 send_text(wa_id, "Please select a date from the list.")
                 return jsonify({"status": "ok"}), 200
-
+        
             user.temp_date = interactive_id.replace("date_", "")
             db.commit()
-
+        
             save_state(db, user, ASK_SLOT)
             send_list_picker(
                 wa_id,
@@ -474,7 +473,8 @@ def webhook():
                 section_title="Time Slots",
             )
             return jsonify({"status": "ok"}), 200
-
+        
+        
         # -------------------------------
         # Slot
         # -------------------------------
@@ -482,11 +482,11 @@ def webhook():
             if not interactive_id or not interactive_id.startswith("slot_"):
                 send_text(wa_id, "Please select a time slot from the list.")
                 return jsonify({"status": "ok"}), 200
-
+        
             slot_code = interactive_id.replace("slot_", "")
             user.temp_slot = slot_code
             db.commit()
-
+        
             booking, payment_link = create_booking_temp(
                 db=db,
                 user=user,
@@ -496,14 +496,14 @@ def webhook():
                 date_str=user.temp_date,
                 slot_code=slot_code,
             )
-
+        
             if not booking:
                 send_text(wa_id, f"⚠️ {payment_link}")
                 return jsonify({"status": "ok"}), 200
-
+        
             user.last_payment_link = payment_link
             save_state(db, user, WAITING_PAYMENT)
-
+        
             send_text(
                 wa_id,
                 "✅ *Your appointment details:*\n"
@@ -517,8 +517,10 @@ def webhook():
                 f"Please complete payment:\n{payment_link}"
             )
             return jsonify({"status": "ok"}), 200
+        
+        
         # -------------------------------
-        # Waiting payment
+        # Waiting payment (AI LOCKED)
         # -------------------------------
         if user.state == WAITING_PAYMENT:
             send_text(
@@ -526,38 +528,33 @@ def webhook():
                 f"💳 Your payment link is active:\n{user.last_payment_link}"
             )
             return jsonify({"status": "ok"}), 200
-
-            # -------------------------------
-            # AI Chat (ONLY AFTER PAYMENT)
-            # -------------------------------
-            if user.state == PAYMENT_CONFIRMED:
-                if not text_body:
-                    send_text(
-                        wa_id,
-                        "Please describe your legal issue in a few lines."
-                    )
-                    return jsonify({"status": "ok"}), 200
-            
-                send_typing_on(wa_id)
-                reply = ai_reply(text_body, user)
-                send_typing_off(wa_id)
-                send_text(wa_id, reply)
-            
-                # Optional: lock conversation after AI
-                save_state(db, user, "COMPLETED")
-            
+        
+        
+        # -------------------------------
+        # AI Chat (ONLY AFTER PAYMENT)
+        # -------------------------------
+        if user.state == PAYMENT_CONFIRMED:
+            if not text_body:
+                send_text(
+                    wa_id,
+                    "Please describe your legal issue.\n"
+                    "Our legal expert will call you at the scheduled date and time."
+                )
                 return jsonify({"status": "ok"}), 200
-            
-            # 🚫 AI blocked for all other states
+        
+            send_typing_on(wa_id)
+            reply = ai_reply(text_body, user)
+            send_typing_off(wa_id)
+            send_text(wa_id, reply)
+        
+            save_state(db, user, "COMPLETED")
             return jsonify({"status": "ok"}), 200
-
-
-    except Exception as e:
-        logger.exception("Webhook error")
-        return jsonify({"error": str(e)}), 500
-    finally:
-        db.close()
-
+        
+        
+        # -------------------------------
+        # Default fallback (safe)
+        # -------------------------------
+        return jsonify({"status": "ignored"}), 200
 
 # -------------------------------------------------
 # Payment Webhook
