@@ -66,7 +66,6 @@ except Exception as e:
 # -------------------------------------------------
 NORMAL = "NORMAL"
 ASK_LANGUAGE = "ASK_LANGUAGE"
-
 SUGGEST_CONSULT = "SUGGEST_CONSULT"
 ASK_NAME = "ASK_NAME"
 ASK_STATE = "ASK_STATE"
@@ -77,6 +76,7 @@ ASK_SLOT = "ASK_SLOT"
 WAITING_PAYMENT = "WAITING_PAYMENT"
 ASK_RATING = "ASK_RATING"
 ASK_SUBCATEGORY = "ASK_SUBCATEGORY"
+PAYMENT_CONFIRMED = "PAYMENT_CONFIRMED"
 CATEGORY_SUBCATEGORIES = {
     "FIR": [
         "Delay in FIR",
@@ -527,14 +527,30 @@ def webhook():
             )
             return jsonify({"status": "ok"}), 200
 
-        # -------------------------------
-        # AI Chat (Fallback)
-        # -------------------------------
-        send_typing_on(wa_id)
-        reply = ai_reply(text_body, user)
-        send_typing_off(wa_id)
-        send_text(wa_id, reply)
-        return jsonify({"status": "ok"}), 200
+            # -------------------------------
+            # AI Chat (ONLY AFTER PAYMENT)
+            # -------------------------------
+            if user.state == PAYMENT_CONFIRMED:
+                if not text_body:
+                    send_text(
+                        wa_id,
+                        "Please describe your legal issue in a few lines."
+                    )
+                    return jsonify({"status": "ok"}), 200
+            
+                send_typing_on(wa_id)
+                reply = ai_reply(text_body, user)
+                send_typing_off(wa_id)
+                send_text(wa_id, reply)
+            
+                # Optional: lock conversation after AI
+                save_state(db, user, "COMPLETED")
+            
+                return jsonify({"status": "ok"}), 200
+            
+            # 🚫 AI blocked for all other states
+            return jsonify({"status": "ok"}), 200
+
 
     except Exception as e:
         logger.exception("Webhook error")
@@ -560,9 +576,14 @@ def payment_webhook():
         if not booking:
             return jsonify({"error": msg}), 404
 
+        # ✅ Move user to PAYMENT_CONFIRMED
+        save_state(db, booking.user, PAYMENT_CONFIRMED)
+            
         send_text(
             booking.whatsapp_id,
-            f"✅ Your booking on {booking.date} at {booking.slot_readable} is confirmed 🙂"
+            "💳 Payment successful!\n\n"
+            "Your booking is confirmed 🙂\n"
+            "Our legal expert will call you at the scheduled date and time."
         )
         return jsonify({"status": "confirmed"}), 200
     finally:
