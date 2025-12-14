@@ -53,6 +53,12 @@ logger = logging.getLogger("app")
 # Flask App
 # -------------------------------------------------
 app = Flask(__name__)
+# Initialize DB & run migrations ONCE
+try:
+    init_db()
+    print("✅ Database initialized and migrated")
+except Exception as e:
+    print("❌ DB init failed:", e)
 # -------------------------------------------------
 # Conversation States
 # -------------------------------------------------
