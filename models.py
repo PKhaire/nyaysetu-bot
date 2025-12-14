@@ -18,7 +18,8 @@ class User(Base):
     state_name = Column(String)
     district_name = Column(String)
     category = Column(String)
-
+    subcategory = Column(String)
+    
     language = Column(String, default="English")
 
     state = Column(String, default="NORMAL")
@@ -49,3 +50,12 @@ class Booking(Base):
     status = Column(String, default="PENDING")
 
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class CategoryAnalytics(Base):
+    __tablename__ = "category_analytics"
+
+    id = Column(Integer, primary_key=True)
+    category = Column(String, index=True)
+    subcategory = Column(String, index=True)
+    count = Column(Integer, default=0)
+
