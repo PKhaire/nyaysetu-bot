@@ -80,32 +80,44 @@ def detect_district_from_text(text: str) -> Optional[Tuple[str, str]]:
 # ----------------------------
 # WhatsApp UI helpers
 # ----------------------------
-
 STATE_SHORT_NAMES = {
     "Andaman and Nicobar Islands": "Andaman & Nicobar",
-    "Dadra and Nagar Haveli and Daman and Diu": "DNH & Daman-Diu",
+    "Dadra and Nagar Haveli and Daman and Diu": "Diu and Daman",
     "Jammu and Kashmir": "Jammu & Kashmir",
 }
 
-def build_state_list_rows(limit: int = 10):
-    states = get_all_states()[:limit]
+def build_state_list_rows(page: int = 1, page_size: int = 9):
+    """
+    Returns max 10 rows:
+    - 9 states
+    - 1 'More states…' if remaining
+    """
+    states = get_all_states()
+    start = (page - 1) * page_size
+    end = start + page_size
+
     rows = []
 
-    for state in states:
-        title = STATE_SHORT_NAMES.get(state, state)
-
-        # Safety trim (hard guard)
-        title = title[:24]
-
+    for state in states[start:end]:
+        title = STATE_SHORT_NAMES.get(state, state)[:24]
         rows.append({
-            "id": f"state_{state}",   # full name preserved
+            "id": f"state_{state}",
             "title": title,
+            "description": ""
+        })
+
+    # Add "More states…" button if remaining
+    if end < len(states):
+        rows.append({
+            "id": f"state_page_{page + 1}",
+            "title": "More states…",
             "description": ""
         })
 
     return rows
 
-def build_district_list_rows(state: str, limit: int = 20) -> List[dict]:
+
+def build_district_list_rows(state: str, limit: int = 10) -> List[dict]:
     """
     WhatsApp list picker rows for districts of a state.
     """
