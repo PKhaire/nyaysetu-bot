@@ -4,7 +4,7 @@ import json
 import logging
 
 # ⚠️ TEMPORARY DEV RESET (REMOVE AFTER USE)
-RESET_DB = False  # set to False after first successful run
+RESET_DB = True  # set to False after first successful run
 
 if RESET_DB:
     if os.path.exists("nyaysetu.db"):
