@@ -13,7 +13,7 @@ if RESET_DB:
 
 from datetime import datetime
 from flask import Flask, request, jsonify
-from db import create_all, SessionLocal, init_db
+from db import SessionLocal, init_db
 # 🔧 Initialize DB + migrations ON STARTUP
 init_db()
 from models import User, Booking, Rating
@@ -53,15 +53,6 @@ logger = logging.getLogger("app")
 # Flask App
 # -------------------------------------------------
 app = Flask(__name__)
-# -------------------------------------------------
-# Ensure DB tables exist (IMPORTANT for Render/Gunicorn)
-# -------------------------------------------------
-with app.app_context():
-    try:
-        create_all()
-        logger.info("✅ Database tables ensured")
-    except Exception as e:
-        logger.error("❌ DB init failed", exc_info=e)
 # -------------------------------------------------
 # Conversation States
 # -------------------------------------------------
@@ -421,5 +412,4 @@ def payment_webhook():
 # Startup
 # -------------------------------------------------
 if __name__ == "__main__":
-    create_all()
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
