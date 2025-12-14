@@ -405,9 +405,43 @@ def webhook():
             send_category_list(wa_id)
 
             return jsonify({"status": "ok"}), 200
-
         # -------------------------------
         # Category
+        # -------------------------------
+        if user.state == ASK_CATEGORY:
+            category = None
+        
+            # ---------------------------------
+            # Category selected from list
+            # ---------------------------------
+            if interactive_id and interactive_id.startswith("cat_"):
+                category = interactive_id.replace("cat_", "")
+        
+            # ---------------------------------
+            # Still not detected
+            # ---------------------------------
+            if not category:
+                send_text(
+                    wa_id,
+                    "Please select a legal category from the list 👇"
+                )
+                send_category_list(wa_id)
+                return jsonify({"status": "ok"}), 200
+        
+            # ---------------------------------
+            # Save category & move forward
+            # ---------------------------------
+            user.category = category
+            db.commit()
+        
+            save_state(db, user, ASK_SUBCATEGORY)
+        
+            send_subcategory_list(wa_id, category)
+        
+            return jsonify({"status": "ok"}), 200
+
+        # -------------------------------
+        # Sub Category
         # -------------------------------
         if user.state == ASK_SUBCATEGORY:
             if not interactive_id or not interactive_id.startswith("subcat_"):
