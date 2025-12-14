@@ -81,21 +81,29 @@ def detect_district_from_text(text: str) -> Optional[Tuple[str, str]]:
 # WhatsApp UI helpers
 # ----------------------------
 
-def build_state_list_rows(limit: int = 10) -> List[dict]:
-    """
-    WhatsApp list picker rows for states.
-    """
+STATE_SHORT_NAMES = {
+    "Andaman and Nicobar Islands": "Andaman & Nicobar",
+    "Dadra and Nagar Haveli and Daman and Diu": "DNH & Daman-Diu",
+    "Jammu and Kashmir": "Jammu & Kashmir",
+}
+
+def build_state_list_rows(limit: int = 10):
     states = get_all_states()[:limit]
     rows = []
 
     for state in states:
+        title = STATE_SHORT_NAMES.get(state, state)
+
+        # Safety trim (hard guard)
+        title = title[:24]
+
         rows.append({
-            "id": f"state_{state}",
-            "title": state,
+            "id": f"state_{state}",   # full name preserved
+            "title": title,
             "description": ""
         })
-    return rows
 
+    return rows
 
 def build_district_list_rows(state: str, limit: int = 20) -> List[dict]:
     """
