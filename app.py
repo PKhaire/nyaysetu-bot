@@ -60,6 +60,7 @@ try:
     print("✅ Database initialized and migrated")
 except Exception as e:
     print("❌ DB init failed:", e)
+
 # -------------------------------------------------
 # Conversation States
 # -------------------------------------------------
@@ -75,6 +76,40 @@ ASK_DATE = "ASK_DATE"
 ASK_SLOT = "ASK_SLOT"
 WAITING_PAYMENT = "WAITING_PAYMENT"
 ASK_RATING = "ASK_RATING"
+ASK_SUBCATEGORY = "ASK_SUBCATEGORY"
+CATEGORY_SUBCATEGORIES = {
+    "FIR": [
+        "Delay in FIR",
+        "Police not registering FIR",
+        "False FIR",
+    ],
+    "Police": [
+        "Police harassment",
+        "Illegal detention",
+        "No action by police",
+    ],
+    "Property": [
+        "Land dispute",
+        "Builder fraud",
+        "Illegal possession",
+    ],
+    "Family": [
+        "Divorce",
+        "Domestic violence",
+        "Child custody",
+    ],
+    "Job": [
+        "Wrongful termination",
+        "Salary not paid",
+        "Workplace harassment",
+    ],
+    "Business": [
+        "Partnership dispute",
+        "Cheque bounce",
+        "Fraud",
+    ],
+    "Other": [],
+}
 
 # -------------------------------------------------
 # DB Helpers
@@ -105,6 +140,47 @@ def get_or_create_user(db, wa_id):
         db.commit()
         db.refresh(user)
     return user
+
+def send_category_list(wa_id):
+    send_list_picker(
+        wa_id,
+        header="Select Legal Category",
+        body="Choose the category that best matches your issue",
+        section_title="Legal Categories",
+        rows=[
+            {"id": "cat_FIR", "title": "FIR"},
+            {"id": "cat_Police", "title": "Police"},
+            {"id": "cat_Property", "title": "Property"},
+            {"id": "cat_Family", "title": "Family"},
+            {"id": "cat_Job", "title": "Job"},
+            {"id": "cat_Business", "title": "Business"},
+            {"id": "cat_Other", "title": "Other"},
+        ],
+    )
+
+def send_subcategory_list(wa_id, category):
+    subcats = CATEGORY_SUBCATEGORIES.get(category, []).copy()
+
+    # ✅ Ensure General legal query for every category
+    if "General legal query" not in subcats:
+        subcats.insert(0, "General legal query")
+
+    rows = [
+        {
+            "id": f"subcat_{category}_{sub}",
+            "title": sub[:24],   # WhatsApp limit
+        }
+        for sub in subcats
+    ]
+
+    send_list_picker(
+        wa_id,
+        header=f"{category} – Select Sub-Category",
+        body="Choose the issue type",
+        section_title="Sub-Categories",
+        rows=rows,
+    )
+
 # -------------------------------------------------
 # Routes
 # -------------------------------------------------
@@ -336,19 +412,50 @@ def webhook():
         # -------------------------------
         # Category
         # -------------------------------
-        if user.state == ASK_CATEGORY:
-            user.category = text_body
+        if user.state == ASK_SUBCATEGORY:
+            if not interactive_id or not interactive_id.startswith("subcat_"):
+                send_text(wa_id, "Please select a sub-category from the list 👇")
+                send_subcategory_list(wa_id, user.category)
+                return jsonify({"status": "ok"}), 200
+        
+            # Extract sub-category
+            _, category, subcategory = interactive_id.split("_", 2)
+        
+            user.subcategory = subcategory
             db.commit()
-
+        
+            # 📊 Analytics
+            from models import CategoryAnalytics
+        
+            record = (
+                db.query(CategoryAnalytics)
+                .filter_by(category=category, subcategory=subcategory)
+                .first()
+            )
+        
+            if record:
+                record.count += 1
+            else:
+                record = CategoryAnalytics(
+                    category=category,
+                    subcategory=subcategory,
+                    count=1,
+                )
+                db.add(record)
+        
+            db.commit()
+        
             save_state(db, user, ASK_DATE)
+        
             send_list_picker(
                 wa_id,
                 header="Select appointment date 👇",
-                body="Available Dates",
+                body="Available dates",
                 rows=generate_dates_calendar(),
                 section_title="Next 7 days",
             )
             return jsonify({"status": "ok"}), 200
+
 
         # -------------------------------
         # Date
