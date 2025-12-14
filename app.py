@@ -233,15 +233,14 @@ def webhook():
 
             if interactive_id and interactive_id.startswith("state_page_"):
                 page = int(interactive_id.replace("state_page_", ""))
-
-                    send_list_picker(
-                        wa_id,
-                        header="Select State",
-                        body="More states",
-                        rows=build_state_list_rows(page=page),
-                        section_title="Indian States",
-                    )
-                    return jsonify({"status": "ok"}), 200
+                send_list_picker(
+                    wa_id,
+                    header="Select State",
+                    body="More states",
+                    rows=build_state_list_rows(page=page),
+                    section_title="Indian States",
+                )
+                return jsonify({"status": "ok"}), 200
 
             if not state_name:
                 state_name = detect_state_from_text(text_body)
