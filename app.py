@@ -2,17 +2,25 @@
 import os
 import json
 import logging
+
+# ⚠️ TEMPORARY DEV RESET (REMOVE AFTER USE)
+RESET_DB = True  # set to False after first successful run
+
+if RESET_DB:
+    if os.path.exists("nyaysetu.db"):
+        os.remove("nyaysetu.db")
+        print("⚠️ DEV MODE: Existing SQLite DB removed")
+
 from datetime import datetime
-
 from flask import Flask, request, jsonify
-
-from db import create_all, SessionLocal
+from db import create_all, SessionLocal, init_db
+# 🔧 Initialize DB + migrations ON STARTUP
+init_db()
 from models import User, Booking, Rating
 from config import (
     WHATSAPP_VERIFY_TOKEN,
     BOOKING_PRICE,
 )
-
 from services.whatsapp_service import (
     send_text,
     send_buttons,
@@ -20,7 +28,6 @@ from services.whatsapp_service import (
     send_typing_off,
     send_list_picker,
 )
-
 from services.openai_service import ai_reply
 from services.booking_service import (
     generate_dates_calendar,
@@ -29,7 +36,6 @@ from services.booking_service import (
     confirm_booking_after_payment,
     SLOT_MAP,
 )
-
 from services.location_service import (
     detect_state_from_text,
     detect_district_from_text,
