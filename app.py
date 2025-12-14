@@ -555,6 +555,11 @@ def webhook():
         # Default fallback (safe)
         # -------------------------------
         return jsonify({"status": "ignored"}), 200
+    except Exception as e:
+        logger.exception("Webhook error")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
 
 # -------------------------------------------------
 # Payment Webhook
