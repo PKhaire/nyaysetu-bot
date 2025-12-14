@@ -116,18 +116,33 @@ def build_state_list_rows(page: int = 1, page_size: int = 9):
 
     return rows
 
+def build_district_list_rows(state: str, page: int = 1, page_size: int = 9):
+    """
+    WhatsApp-safe paginated district list.
+    - Max 10 rows
+    - Max 24 chars title
+    """
+    districts = get_districts_for_state(state)
 
-def build_district_list_rows(state: str, limit: int = 10) -> List[dict]:
-    """
-    WhatsApp list picker rows for districts of a state.
-    """
-    districts = get_districts_for_state(state)[:limit]
+    start = (page - 1) * page_size
+    end = start + page_size
+
     rows = []
 
-    for district in districts:
+    for district in districts[start:end]:
         rows.append({
-            "id": f"district_{state}_{district}",
-            "title": district,
+            "id": f"district_{district}",
+            "title": district[:24],   # WhatsApp limit
             "description": ""
         })
+
+    # Add pagination row if more districts exist
+    if end < len(districts):
+        rows.append({
+            "id": f"district_page_{page + 1}",
+            "title": "More districts…",
+            "description": ""
+        })
+
     return rows
+
