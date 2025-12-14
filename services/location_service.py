@@ -25,8 +25,8 @@ def _load_india_data() -> Dict[str, List[str]]:
     if _INDIA_DATA is not None:
         return _INDIA_DATA
 
-    base_dir = os.path.dirname(os.path.dirname(__file__))
-    json_path = os.path.join(base_dir, "india_districts.json")
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    json_path = os.path.join(project_root, "data", "india_districts.json")
 
     with open(json_path, "r", encoding="utf-8") as f:
         _INDIA_DATA = json.load(f)
