@@ -16,7 +16,7 @@ from flask import Flask, request, jsonify
 from db import SessionLocal, init_db
 # 🔧 Initialize DB + migrations ON STARTUP
 init_db()
-from models import User, Booking, Rating
+from models import User, Booking
 from config import (
     WHATSAPP_VERIFY_TOKEN,
     BOOKING_PRICE,
@@ -417,5 +417,4 @@ def payment_webhook():
 # -------------------------------------------------
 # Startup
 # -------------------------------------------------
-if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
