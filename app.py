@@ -4,7 +4,7 @@ import json
 import logging
 
 # ⚠️ TEMPORARY DEV RESET (REMOVE AFTER USE)
-RESET_DB = True  # set to False after first successful run
+RESET_DB = False  # set to False after first successful run
 
 if RESET_DB:
     if os.path.exists("nyaysetu.db"):
@@ -268,28 +268,60 @@ def webhook():
         if user.state == ASK_DISTRICT:
             district = None
 
-            if interactive_id and interactive_id.startswith("district_"):
-                district = interactive_id.split("_")[-1]
+            # ---------------------------------
+            # Pagination: "More districts..."
+            # ---------------------------------
+            if interactive_id and interactive_id.startswith("district_page_"):
+                page = int(interactive_id.replace("district_page_", ""))
 
+                send_list_picker(
+                    wa_id,
+                    header=f"Select district in {user.state_name}",
+                    body="Choose your district",
+                    rows=build_district_list_rows(user.state_name, page=page),
+                    section_title=f"{user.state_name} districts",
+                )
+                return jsonify({"status": "ok"}), 200
+
+            # ---------------------------------
+            # District selected from list
+            # ---------------------------------
+            if interactive_id and interactive_id.startswith("district_"):
+                district = interactive_id.replace("district_", "")
+
+            # ---------------------------------
+            # Typed district fallback
+            # ---------------------------------
             if not district:
                 detected = detect_district_from_text(text_body)
                 if detected:
-                    user.state_name, district = detected
+                    _, district = detected
 
+            # ---------------------------------
+            # Still not detected
+            # ---------------------------------
             if not district:
-                send_text(wa_id, "Please select your *district* from the list.")
+                send_text(
+                    wa_id,
+                    "Please select a district from the list or *type your district name*."
+                )
                 return jsonify({"status": "ok"}), 200
 
+            # ---------------------------------
+            # Save district & move forward
+            # ---------------------------------
             user.district_name = district
             db.commit()
 
             save_state(db, user, ASK_CATEGORY)
+
             send_text(
                 wa_id,
                 "Got it 👍\nChoose your *legal category* "
                 "(FIR, Police, Property, Family, Job, Business, Other)."
             )
             return jsonify({"status": "ok"}), 200
+
         # -------------------------------
         # Category
         # -------------------------------
