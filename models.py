@@ -10,7 +10,6 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-
     whatsapp_id = Column(String, unique=True, index=True, nullable=False)
 
     case_id = Column(String, unique=True, index=True)
@@ -28,7 +27,6 @@ class User(Base):
     last_payment_link = Column(String)
 
     query_count = Column(Integer, default=0)
-
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
