@@ -401,12 +401,9 @@ def webhook():
             db.commit()
 
             save_state(db, user, ASK_CATEGORY)
+            
+            send_category_list(wa_id)
 
-            send_text(
-                wa_id,
-                "Got it 👍\nChoose your *legal category* "
-                "(FIR, Police, Property, Family, Job, Business, Other)."
-            )
             return jsonify({"status": "ok"}), 200
 
         # -------------------------------
