@@ -13,7 +13,7 @@ if RESET_DB:
 
 FREE_AI_LIMIT = 5
 FREE_AI_SOFT_PROMPT_AT = 4
-
+WELCOME_KEYWORDS = ["hi", "hello", "hey", "start"]
 from datetime import datetime
 from flask import Flask, request, jsonify
 from db import SessionLocal, init_db
@@ -71,6 +71,7 @@ except Exception as e:
 # -------------------------------------------------
 NORMAL = "NORMAL"
 ASK_LANGUAGE = "ASK_LANGUAGE"
+ASK_AI_OR_BOOK = "ASK_AI_OR_BOOK"
 SUGGEST_CONSULT = "SUGGEST_CONSULT"
 ASK_NAME = "ASK_NAME"
 ASK_STATE = "ASK_STATE"
@@ -116,6 +117,20 @@ CATEGORY_SUBCATEGORIES = {
     "Other": [],
 }
 
+RESTART_KEYWORDS = {
+    "restart",
+    "reset",
+    "start over",
+    "begin again",
+    "help",
+    "menu",
+    "main menu",
+    "home",
+    "cancel",
+    "stop",
+    "exit",
+}
+
 # -------------------------------------------------
 # DB Helpers
 # -------------------------------------------------
@@ -137,7 +152,7 @@ def get_or_create_user(db, wa_id):
         user = User(
             whatsapp_id=wa_id,
             case_id=generate_case_id(),
-            language="English",
+            language="None",
             state=NORMAL,
             created_at=datetime.utcnow(),
         )
@@ -241,11 +256,59 @@ def webhook():
                 text_body = interactive_id
 
         lower_text = text_body.lower().strip()
-
-        logger.info(
-            "User=%s State=%s Text=%s",
-            wa_id, user.state, text_body
-        )
+        
+        # -------------------------------
+        # Restart / Reset / Help command
+        # -------------------------------
+        if lower_text in RESTART_KEYWORDS:
+        
+            # ⛔ Block reset during payment
+            if user.state == WAITING_PAYMENT:
+                send_text(
+                    wa_id,
+                    "⚠️ *Payment is in progress.*\n\n"
+                    "Please complete the payment or wait for confirmation.\n"
+                    "If payment fails, you can restart after that."
+                )
+                return jsonify({"status": "ok"}), 200
+        
+            # ✅ Safe to reset
+            user.state = NORMAL
+            user.free_ai_count = 0
+        
+            # Clear temporary booking data
+            user.temp_date = None
+            user.temp_slot = None
+            user.last_payment_link = None
+        
+            db.commit()
+        
+            send_text(
+                wa_id,
+                "🔄 *Session reset successfully.*\n\n"
+                "Type *Hi* to start again."
+            )
+            return jsonify({"status": "ok"}), 200
+            
+        
+        # -------------------------------
+        # Welcome Screen on Hi / Hello
+        # -------------------------------
+        if user.state == NORMAL and lower_text in WELCOME_KEYWORDS:
+            save_state(db, user, ASK_LANGUAGE)
+        
+            send_buttons(
+                wa_id,
+                "👋 *Welcome to NyaySetu — The Bridge to Justice* ⚖️\n\n"
+                f"🆔 *Your Case ID:* {user.case_id}\n\n"
+                "Please select your preferred language:",
+                [
+                    {"id": "lang_en", "title": "English"},
+                    {"id": "lang_hi", "title": "Hinglish"},
+                    {"id": "lang_mr", "title": "Marathi"},
+                ],
+            )
+            return jsonify({"status": "ok"}), 200
 
         # -------------------------------
         # Language Selection (FIRST TIME)
@@ -271,12 +334,47 @@ def webhook():
             }
             if interactive_id in lang_map:
                 user.language = lang_map[interactive_id]
-                save_state(db, user, NORMAL)
-                send_text(
+                save_state(db, user, ASK_AI_OR_BOOK)
+                send_buttons(
                     wa_id,
-                    f"✅ Language set to *{user.language}*\n\nPlease tell me your legal issue."
+                    f"✅ Language set to *{user.language}*\n\n"
+                    "How would you like to proceed?",
+                    [
+                        {"id": "opt_ai", "title": "Ask AI Legal Assistant"},
+                        {"id": "opt_book", "title": "Book Consultation"},
+                    ],
                 )
             return jsonify({"status": "ok"}), 200
+            
+        # -------------------------------
+        # Handle AI vs Book Selection
+        # -------------------------------
+        if user.state == ASK_AI_OR_BOOK:
+        
+            # User chose AI Assistant
+            if interactive_id == "opt_ai":
+                save_state(db, user, NORMAL)
+        
+                send_text(
+                    wa_id,
+                    "🤖 You can now ask your legal question.\n"
+                    "I’ll provide general legal guidance (up to 5 messages)."
+                )
+                return jsonify({"status": "ok"}), 200
+        
+            # User chose Booking
+            if interactive_id == "opt_book":
+                save_state(db, user, ASK_NAME)
+        
+                send_text(
+                    wa_id,
+                    "Great 👍\nPlease tell me your *full name*."
+                )
+                return jsonify({"status": "ok"}), 200
+        
+            # Safety fallback
+            return jsonify({"status": "ignored"}), 200
+
         # -------------------------------
         # FREE AI CHAT (BEFORE BOOKING)
         # -------------------------------
@@ -298,15 +396,21 @@ def webhook():
                 return jsonify({"status": "ignored"}), 200
         
             # Hard limit reached
+            # -------------------------------
+            # Hard stop after free AI limit
+            # -------------------------------
             if user.free_ai_count >= FREE_AI_LIMIT:
-                send_text(
+                send_buttons(
                     wa_id,
-                    "I’ve shared general legal guidance so far.\n\n"
-                    "For personalised advice specific to your case, "
-                    "please book a consultation with our legal expert.\n\n"
-                    "👉 Type *Book Consultation* to continue."
+                    "🚫 I’ve shared general legal guidance so far.\n\n"
+                    "For personalised advice specific to *your case*, "
+                    "please book a consultation with our legal expert.",
+                    [
+                        {"id": "book_now", "title": "Book Consultation"},
+                    ],
                 )
                 return jsonify({"status": "ok"}), 200
+
         
             # Free AI reply
             send_typing_on(wa_id)
@@ -327,16 +431,34 @@ def webhook():
             db.commit()
         
             # Soft CTA after 4th reply
-            if user.free_ai_count >= FREE_AI_SOFT_PROMPT_AT:
+            # -------------------------------
+            # Soft booking suggestion (after 4 AI replies)
+            # -------------------------------
+            if user.free_ai_count == FREE_AI_SOFT_PROMPT_AT:
                 reply += (
-                    "\n\nℹ️ *Want personalised legal advice?*\n"
-                    "You can book a consultation anytime.\n"
-                    "👉 Type *Book Consultation*"
+                    "\n\n⚖️ *Need personalised legal advice?*\n"
+                    "You can speak with a legal expert over a call.\n"
+                    "👉 Type *Book Consultation* anytime."
                 )
-        
+
             send_text(wa_id, reply)
             return jsonify({"status": "ok"}), 200
-            
+
+        # -------------------------------
+        # Handle Book Consultation button (hard stop)
+        # -------------------------------
+        if interactive_id == "book_now":
+            user.free_ai_count = 0
+            db.commit()
+        
+            save_state(db, user, ASK_NAME)
+        
+            send_text(
+                wa_id,
+                "Great 👍\nPlease tell me your *full name*."
+            )
+            return jsonify({"status": "ok"}), 200
+
         # -------------------------------
         # Start booking
         # -------------------------------
