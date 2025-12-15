@@ -279,7 +279,7 @@ def webhook():
         # -------------------------------
         # FREE AI CHAT (BEFORE BOOKING)
         # -------------------------------
-        if user.state in ["NORMAL", None]:
+        if user.state == "NORMAL":
             # Booking keyword always allowed
             if lower_text in ["book consultation", "book consult", "consult", "lawyer"]:
                 user.free_ai_count = 0
