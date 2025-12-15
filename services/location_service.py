@@ -203,3 +203,35 @@ def build_district_list_rows(
         })
 
     return rows
+
+def detect_district_in_state(
+    state: str,
+    text: str,
+    cutoff: float = 0.75
+):
+    """
+    Detect district ONLY inside the given state.
+    ❌ No cross-state detection
+    ❌ No global fuzzy guessing
+    ✅ Safe fuzzy + auto-correction
+    """
+    if not state or not text:
+        return None
+
+    text = text.lower().strip()
+    districts = get_districts_for_state(state)
+
+    # -----------------------------
+    # Exact / substring match
+    # -----------------------------
+    for d in districts:
+        d_lower = d.lower()
+        if d_lower == text or text in d_lower:
+            return d
+
+    # -----------------------------
+    # Fuzzy match (STRICT)
+    # -----------------------------
+    match = _fuzzy_match(text, districts, cutoff=cutoff)
+    return match
+
