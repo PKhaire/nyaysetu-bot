@@ -39,3 +39,14 @@ def user_message_count(whatsapp_id):
         return db.query(Conversation).filter_by(user_whatsapp_id=whatsapp_id, direction='user').count()
     finally:
         db.close()
+
+def format_date_readable(date_str):
+    """
+    Converts YYYY-MM-DD -> 16 Dec 2025 (Tuesday)
+    """
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        return dt.strftime("%d %b %Y (%A)")
+    except Exception:
+        return date_str  # fallback safety
+
