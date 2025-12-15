@@ -2,8 +2,8 @@
 
 from datetime import datetime, date, time, timedelta
 import uuid
-import pytz
-IST = pytz.timezone("Asia/Kolkata")
+from zoneinfo import ZoneInfo
+IST = ZoneInfo("Asia/Kolkata")
 
 from config import BOOKING_PRICE, BOOKING_CUTOFF_HOURS
 from models import Booking   # ✅ REQUIRED IMPORT
