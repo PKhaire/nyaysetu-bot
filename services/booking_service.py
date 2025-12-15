@@ -62,36 +62,44 @@ def generate_slots_calendar(date_str: str):
 
 
 # --------------------
-# Slot validation (FIXED)
+# Time slot validation
 # --------------------
-def validate_slot(date_str: str, slot_code: str):
-    if slot_code not in SLOT_START_HOUR:
-        return False, "Invalid slot selected."
+from datetime import datetime, date, time, timedelta
+
+SLOT_BUFFER_HOURS = 2  # Minimum buffer from current time
+
+def validate_slot(date_str, slot_code):
+    """
+    Reject past slots and enforce minimum 2-hour buffer.
+    """
+    try:
+        booking_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except Exception:
+        return False, "Invalid booking date."
+
+    if slot_code not in SLOT_MAP:
+        return False, "Invalid time slot."
 
     now = datetime.now()
-    booking_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-    slot_hour = SLOT_START_HOUR[slot_code]
+    today = date.today()
 
-    slot_dt = datetime.combine(
-        booking_date,
-        datetime.min.time()
-    ).replace(hour=slot_hour)
+    # Past date not allowed
+    if booking_date < today:
+        return False, "This date has already passed."
 
-    # ❌ Slot already started
-    if booking_date == now.date() and slot_dt <= now:
-        return False, "Cannot book a slot that has already started or passed."
+    # Today → enforce buffer
+    if booking_date == today:
+        slot_start_hour = int(slot_code.split("_")[0])
+        slot_start_dt = datetime.combine(
+            today, time(slot_start_hour, 0)
+        )
 
-    # ⏳ Cutoff applies ONLY for same day
-    if booking_date == now.date():
-        cutoff_time = now + timedelta(hours=BOOKING_CUTOFF_HOURS)
-        if slot_dt <= cutoff_time:
-            return False, (
-                f"Slot must be booked at least "
-                f"{BOOKING_CUTOFF_HOURS} hours in advance."
-            )
+        min_allowed_time = now + timedelta(hours=SLOT_BUFFER_HOURS)
+
+        if slot_start_dt < min_allowed_time:
+            return False, "Please select a time slot at least 2 hours from now."
 
     return True, None
-
 
 # --------------------
 # Booking creation
