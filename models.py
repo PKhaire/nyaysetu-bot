@@ -26,7 +26,7 @@ class User(Base):
     temp_date = Column(String)
     temp_slot = Column(String)
     last_payment_link = Column(String)
-
+    session_started = Column(Boolean, default=False)
     query_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
