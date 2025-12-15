@@ -521,16 +521,16 @@ def webhook():
             user.temp_slot = slot_code
             db.commit()
         
-               booking, payment_link = create_booking_temp(
-                    db=db,
-                    user=user,
-                    name=user.name,
-                    state=user.state_name,
-                    district=user.district_name,
-                    category=user.category,
-                    date=user.temp_date,
-                    slot_code=slot_code,
-                )
+            booking, payment_link = create_booking_temp(
+                db=db,
+                user=user,
+                name=user.name,
+                state=user.state_name,
+                district=user.district_name,
+                category=user.category,
+                date=user.temp_date,
+                slot_code=slot_code,
+            )
 
             if not booking:
                 send_text(wa_id, f"⚠️ {payment_link}")
