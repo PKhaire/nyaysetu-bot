@@ -1,10 +1,13 @@
 # services/booking_service.py
 
-from datetime import datetime, timedelta
+from datetime import datetime, date, time, timedelta
 import uuid
 
 from config import BOOKING_PRICE, BOOKING_CUTOFF_HOURS
 from models import Booking   # ✅ REQUIRED IMPORT
+
+SLOT_BUFFER_HOURS = 2  # Same buffer as backend
+
 
 # --------------------
 # Slot configuration
@@ -49,16 +52,32 @@ def generate_dates_calendar():
 
     return rows
 
+def generate_slots_calendar(date_str):
+    today = date.today()
+    now = datetime.now()
 
-def generate_slots_calendar(date_str: str):
-    return [
-        {
+    booking_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    min_allowed_time = now + timedelta(hours=SLOT_BUFFER_HOURS)
+
+    rows = []
+
+    for code, label in SLOT_MAP.items():
+        slot_start_hour = int(code.split("_")[0])
+        slot_start_dt = datetime.combine(
+            booking_date, time(slot_start_hour, 0)
+        )
+
+        # Hide slots violating buffer for today
+        if booking_date == today and slot_start_dt < min_allowed_time:
+            continue
+
+        rows.append({
             "id": f"slot_{code}",
-            "title": readable,
-            "description": f"Available on {date_str}"
-        }
-        for code, readable in SLOT_MAP.items()
-    ]
+            "title": label,
+            "description": f"Available on {date_str}",
+        })
+
+    return rows
 
 
 # --------------------
