@@ -344,67 +344,86 @@ def webhook():
                 section_title=f"{state_name} districts",
             )
             return jsonify({"status": "ok"}), 200
-
+            
         # -------------------------------
-        # Ask District
+        # Ask District (STRICT & SAFE)
         # -------------------------------
         if user.state == ASK_DISTRICT:
             district = None
-
+        
             # ---------------------------------
             # Pagination: "More districts..."
             # ---------------------------------
             if interactive_id and interactive_id.startswith("district_page_"):
                 page = int(interactive_id.replace("district_page_", ""))
-
+        
                 send_list_picker(
                     wa_id,
                     header=f"Select district in {user.state_name}",
                     body="Choose your district",
                     rows=build_district_list_rows(
-                                user.state_name,
-                                page=page,
-                                preferred_district=user.district_name
-                    ),                    
+                        user.state_name,
+                        page=page,
+                        preferred_district=user.district_name,
+                    ),
                     section_title=f"{user.state_name} districts",
                 )
                 return jsonify({"status": "ok"}), 200
-
+        
             # ---------------------------------
             # District selected from list
             # ---------------------------------
             if interactive_id and interactive_id.startswith("district_"):
                 district = interactive_id.replace("district_", "")
-
+        
             # ---------------------------------
-            # Typed district fallback
+            # Typed district (FUZZY + STATE ONLY)
             # ---------------------------------
-            if not district:
-                detected = detect_district_from_text(text_body)
-                if detected:
-                    _, district = detected
-
+            if not district and text_body:
+                from services.location_service import detect_district_in_state
+        
+                matched = detect_district_in_state(user.state_name, text_body)
+        
+                if matched:
+                    district = matched
+        
+                    # Auto-correction notice
+                    if matched.lower() != text_body.lower():
+                        send_text(
+                            wa_id,
+                            f"ℹ️ Interpreted *{text_body}* as *{matched}*."
+                        )
+        
             # ---------------------------------
-            # Still not detected
+            # Still invalid → force list
             # ---------------------------------
             if not district:
                 send_text(
                     wa_id,
-                    "Please select a district from the list or *type your district name*."
+                    f"❌ Could not identify district *{text_body}* in {user.state_name}.\n"
+                    "Please select from the list below 👇"
+                )
+                send_list_picker(
+                    wa_id,
+                    header=f"Select district in {user.state_name}",
+                    body="Choose district",
+                    rows=build_district_list_rows(user.state_name),
+                    section_title=f"{user.state_name} districts",
                 )
                 return jsonify({"status": "ok"}), 200
-
+        
             # ---------------------------------
-            # Save district & move forward
+            # Save & move forward
             # ---------------------------------
             user.district_name = district
             db.commit()
-
+        
             save_state(db, user, ASK_CATEGORY)
-            
             send_category_list(wa_id)
-
+        
             return jsonify({"status": "ok"}), 200
+
+
         # -------------------------------
         # Category
         # -------------------------------
