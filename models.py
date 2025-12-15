@@ -11,7 +11,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     whatsapp_id = Column(String, unique=True, index=True, nullable=False)
-
+    free_ai_count = Column(Integer, default=0)
     case_id = Column(String, unique=True, index=True)
 
     name = Column(String)
