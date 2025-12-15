@@ -2,11 +2,14 @@
 
 from datetime import datetime, date, time, timedelta
 import uuid
+import pytz
+IST = pytz.timezone("Asia/Kolkata")
 
 from config import BOOKING_PRICE, BOOKING_CUTOFF_HOURS
 from models import Booking   # ✅ REQUIRED IMPORT
 
 SLOT_BUFFER_HOURS = 2  # Same buffer as backend
+
 
 
 # --------------------
@@ -38,16 +41,20 @@ def create_token():
 # --------------------
 # Calendar generators
 # --------------------
-def generate_dates_calendar():
-    today = datetime.now().date()
+def generate_dates_calendar(skip_today=False):
+    today = datetime.now(IST).date()
     rows = []
 
-    for i in range(7):
+    # Skip today if required (late-evening buffer case)
+    start_offset = 1 if skip_today else 0
+
+    for i in range(start_offset, 7):
         d = today + timedelta(days=i)
+
         rows.append({
             "id": f"date_{d.isoformat()}",
             "title": d.strftime("%d %b (%a)"),
-            "description": "Select this date"
+            "description": "Select this date",
         })
 
     return rows
