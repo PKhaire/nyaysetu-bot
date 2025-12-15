@@ -20,6 +20,7 @@ from db import SessionLocal, init_db
 # 🔧 Initialize DB + migrations ON STARTUP
 init_db()
 from models import User, Booking
+from utils import format_date_readable
 from config import (
     WHATSAPP_VERIFY_TOKEN,
     BOOKING_PRICE,
@@ -668,7 +669,7 @@ def webhook():
                 wa_id,
                 header="Select appointment date 👇",
                 body="Available dates",
-                rows=generate_dates_calendar(),
+                rows=generate_dates_calendar(skip_today=True),
                 section_title="Next 7 days",
             )
             return jsonify({"status": "ok"}), 200
@@ -698,16 +699,33 @@ def webhook():
             # ---------------------------------
             # Validate date format
             # ---------------------------------
-            from datetime import datetime
         
             try:
-                datetime.strptime(date_str, "%Y-%m-%d")
+                selected_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+                today = datetime.now().date()
+            
+                if selected_date <= today:
+                    send_text(
+                        wa_id,
+                        "⚠️ You cannot select a past or same-day appointment.\n"
+                        "Please choose a future date 👇"
+                    )
+                    send_list_picker(
+                        wa_id,
+                        header="Select appointment date 👇",
+                        body="Available dates",
+                        rows=generate_dates_calendar(skip_today=True),
+                        section_title="Next available days",
+                    )
+                    return jsonify({"status": "ok"}), 200
+            
             except ValueError:
                 send_text(
                     wa_id,
                     "Invalid date selected. Please choose again 👇"
                 )
                 return jsonify({"status": "ok"}), 200
+
         
             # ---------------------------------
             # Save date & move forward
@@ -743,7 +761,7 @@ def webhook():
             save_state(db, user, ASK_SLOT)
             send_list_picker(
                 wa_id,
-                header=f"Select time slot for {date_str}",
+                header=f"Select time slot for {format_date_readable(date_str)}",
                 body="Available time slots (IST)",
                 rows=slots,
                 section_title="Time Slots",
@@ -790,7 +808,7 @@ def webhook():
                 )
                 send_list_picker(
                     wa_id,
-                    header=f"Select time slot for {user.temp_date}",
+                    header=f"Select time slot for {format_date_readable(user.temp_date)}",
                     body="Available time slots (IST)",
                     rows=generate_slots_calendar(user.temp_date),
                     section_title="Time Slots",
@@ -853,7 +871,7 @@ def webhook():
                 f"*State:* {user.state_name}\n"
                 f"*District:* {user.district_name}\n"
                 f"*Category:* {user.category}\n"
-                f"*Date:* {user.temp_date}\n"
+                f"*Date:* {format_date_readable(user.temp_date)}\n"
                 f"*Slot:* {SLOT_MAP[slot_code]}\n"
                 f"*Fees:* ₹{BOOKING_PRICE} (one-time session) 🙂\n\n"
                 f"Please complete payment:\n{payment_link}"
