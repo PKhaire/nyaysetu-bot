@@ -11,6 +11,9 @@ if RESET_DB:
         os.remove("nyaysetu.db")
         print("⚠️ DEV MODE: Existing SQLite DB removed")
 
+FREE_AI_LIMIT = 5
+FREE_AI_SOFT_PROMPT_AT = 4
+
 from datetime import datetime
 from flask import Flask, request, jsonify
 from db import SessionLocal, init_db
@@ -274,13 +277,79 @@ def webhook():
                 )
             return jsonify({"status": "ok"}), 200
         # -------------------------------
+        # FREE AI CHAT (BEFORE BOOKING)
+        # -------------------------------
+        if user.state in ["NORMAL", None]:
+            # Booking keyword always allowed
+            if lower_text in ["book consultation", "book consult", "consult", "lawyer"]:
+                user.free_ai_count = 0
+                db.commit()
+        
+                save_state(db, user, ASK_NAME)
+                send_text(
+                    wa_id,
+                    "Great 👍\nPlease tell me your *full name*."
+                )
+                return jsonify({"status": "ok"}), 200
+        
+            # Ignore empty / status events
+            if not text_body:
+                return jsonify({"status": "ignored"}), 200
+        
+            # Hard limit reached
+            if user.free_ai_count >= FREE_AI_LIMIT:
+                send_text(
+                    wa_id,
+                    "I’ve shared general legal guidance so far.\n\n"
+                    "For personalised advice specific to your case, "
+                    "please book a consultation with our legal expert.\n\n"
+                    "👉 Type *Book Consultation* to continue."
+                )
+                return jsonify({"status": "ok"}), 200
+        
+            # Free AI reply
+            send_typing_on(wa_id)
+            try:
+                reply = ai_reply(text_body, user)
+            except Exception:
+                send_typing_off(wa_id)
+                send_text(
+                    wa_id,
+                    "⚠️ Sorry, I’m having trouble responding right now.\n"
+                    "Please try again."
+                )
+                return jsonify({"status": "ok"}), 200
+        
+            send_typing_off(wa_id)
+        
+            user.free_ai_count += 1
+            db.commit()
+        
+            # Soft CTA after 4th reply
+            if user.free_ai_count >= FREE_AI_SOFT_PROMPT_AT:
+                reply += (
+                    "\n\nℹ️ *Want personalised legal advice?*\n"
+                    "You can book a consultation anytime.\n"
+                    "👉 Type *Book Consultation*"
+                )
+        
+            send_text(wa_id, reply)
+            return jsonify({"status": "ok"}), 200
+            
+        # -------------------------------
         # Start booking
         # -------------------------------
         if lower_text in ["book consultation", "book consult", "consult", "lawyer"]:
+            user.free_ai_count = 0
+            db.commit()
+        
             save_state(db, user, ASK_NAME)
-            send_text(wa_id, "Great 👍\nPlease tell me your *full name*.")
+            send_text(
+                wa_id,
+                "Great 👍\nPlease tell me your *full name*."
+            )
             return jsonify({"status": "ok"}), 200
-            
+
         # -------------------------------
         # Ask Name 
         # -------------------------------
@@ -645,7 +714,7 @@ def webhook():
             # ---------------------------------
             user.temp_date = date_str
             db.commit()
-        
+
             save_state(db, user, ASK_SLOT)
         
             slots = generate_slots_calendar(date_str)
@@ -671,6 +740,9 @@ def webhook():
             # ---------------------------------
             # Show slots
             # ---------------------------------
+            user.temp_date = date_str
+            db.commit()
+            save_state(db, user, ASK_SLOT)
             send_list_picker(
                 wa_id,
                 header=f"Select time slot for {date_str}",
@@ -690,6 +762,13 @@ def webhook():
             # ---------------------------------
             if not interactive_id:
                 return jsonify({"status": "ignored"}), 200
+
+            # ---------------------------------
+            # SAFETY: User clicked a DATE again
+            # ---------------------------------
+            if interactive_id and interactive_id.startswith("date_"):
+                save_state(db, user, ASK_DATE)
+                return jsonify({"status": "ok"}), 200
         
             # ---------------------------------
             # Validate slot selection
@@ -799,9 +878,7 @@ def webhook():
         # AI Chat (ONLY AFTER PAYMENT)
         # -------------------------------
         if user.state == PAYMENT_CONFIRMED:
-            # ---------------------------------
-            # Send session start message ONCE
-            # ---------------------------------
+            # Send session intro ONCE
             if not user.session_started:
                 send_text(
                     wa_id,
@@ -809,23 +886,14 @@ def webhook():
                     "You may now ask your legal questions here.\n"
                     "Our legal expert will also call you at the scheduled date and time."
                 )
-        
                 user.session_started = True
                 db.commit()
-        
                 return jsonify({"status": "ok"}), 200
         
-            # ---------------------------------
-            # Ignore empty / status events
-            # ---------------------------------
             if not text_body:
                 return jsonify({"status": "ignored"}), 200
         
-            # ---------------------------------
-            # AI response
-            # ---------------------------------
             send_typing_on(wa_id)
-        
             try:
                 reply = ai_reply(text_body, user)
             except Exception:
@@ -833,13 +901,12 @@ def webhook():
                 send_text(
                     wa_id,
                     "⚠️ Sorry, I’m having trouble responding right now.\n"
-                    "Please try again in a moment."
+                    "Please try again."
                 )
                 return jsonify({"status": "ok"}), 200
         
             send_typing_off(wa_id)
             send_text(wa_id, reply)
-        
             return jsonify({"status": "ok"}), 200
 
         # -------------------------------
