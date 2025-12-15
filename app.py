@@ -712,10 +712,6 @@ def webhook():
             # ---------------------------------
             # Save date & move forward
             # ---------------------------------
-            user.temp_date = date_str
-            db.commit()
-
-            save_state(db, user, ASK_SLOT)
         
             slots = generate_slots_calendar(date_str)
         
@@ -728,12 +724,14 @@ def webhook():
                     "⚠️ No available time slots for this date.\n"
                     "Please select another date 👇"
                 )
+                save_state(db, user, ASK_DATE)
+        
                 send_list_picker(
                     wa_id,
                     header="Select appointment date 👇",
                     body="Available dates",
-                    rows=generate_dates_calendar(),
-                    section_title="Next 7 days",
+                    rows=generate_dates_calendar(skip_today=True),
+                    section_title="Next available days",
                 )
                 return jsonify({"status": "ok"}), 200
         
@@ -766,7 +764,7 @@ def webhook():
             # ---------------------------------
             # SAFETY: User clicked a DATE again
             # ---------------------------------
-            if interactive_id and interactive_id.startswith("date_"):
+            if interactive_id.startswith("date_"):
                 save_state(db, user, ASK_DATE)
                 return jsonify({"status": "ok"}), 200
         
