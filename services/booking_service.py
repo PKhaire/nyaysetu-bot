@@ -113,7 +113,7 @@ def create_booking_temp(db, user, name, state, district, category, date, slot_co
         slot_code=slot_code,
         slot_readable=SLOT_MAP[slot_code],
         payment_token=token,
-        paid=False,
+        status="PENDING",
         created_at=datetime.utcnow()
     )
 
@@ -131,8 +131,8 @@ def confirm_booking_after_payment(db, token):
     booking = db.query(Booking).filter_by(payment_token=token).first()
     if not booking:
         return None, "Booking not found."
-
-    booking.paid = True
+        
+    booking.status = "PAID"
     db.commit()
 
     return booking, "confirmed"
