@@ -42,6 +42,7 @@ from services.location_service import (
     build_state_list_rows,
     build_district_list_rows,
     detect_country_from_wa_id,
+    get_safe_section_title,
 )
 
 # -------------------------------------------------
@@ -366,7 +367,7 @@ def webhook():
                         page=page,
                         preferred_district=user.district_name,
                     ),
-                    section_title=f"{user.state_name} districts",
+                    section_title=get_safe_section_title(user.state_name),
                 )
                 return jsonify({"status": "ok"}), 200
         
@@ -408,7 +409,7 @@ def webhook():
                     header=f"Select district in {user.state_name}",
                     body="Choose district",
                     rows=build_district_list_rows(user.state_name),
-                    section_title=f"{user.state_name} districts",
+                    section_title=get_safe_section_title(user.state_name),
                 )
                 return jsonify({"status": "ok"}), 200
         
