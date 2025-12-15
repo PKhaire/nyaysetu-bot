@@ -235,3 +235,12 @@ def detect_district_in_state(
     match = _fuzzy_match(text, districts, cutoff=cutoff)
     return match
 
+def get_safe_section_title(state_name: str) -> str:
+    """
+    WhatsApp section.title max length = 24 chars
+    """
+    short = STATE_SHORT_NAMES.get(state_name, state_name)
+    title = f"{short} districts"
+    return title[:24]
+
+
