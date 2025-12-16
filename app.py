@@ -886,23 +886,21 @@ def webhook():
                     "Invalid date selected. Please choose again 👇"
                 )
                 return jsonify({"status": "ok"}), 200
-
-        
             # ---------------------------------
             # Save date & move forward
             # ---------------------------------
-        
+            
             slots = generate_slots_calendar(date_str)
-                
-                readable_date = format_date_readable(date_str)
-                for slot in slots:
-                    if "description" in slot and slot["description"]:
-                        slot["description"] = f"Available on {readable_date}"
-
-        
+            
+            readable_date = format_date_readable(date_str)
+            for slot in slots:
+                if "description" in slot and slot["description"]:
+                    slot["description"] = f"Available on {readable_date}"
+            
             # ---------------------------------
             # No slots available (buffer case)
             # ---------------------------------
+     
             if not slots:
                 send_text(
                     wa_id,
