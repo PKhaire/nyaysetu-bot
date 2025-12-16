@@ -13,7 +13,7 @@ class User(Base):
     whatsapp_id = Column(String, unique=True, index=True, nullable=False)
     free_ai_count = Column(Integer, default=0)
     case_id = Column(String, unique=True, index=True)
-
+    ai_enabled = Column(Boolean, default=False)
     name = Column(String)
     state_name = Column(String)
     district_name = Column(String)
