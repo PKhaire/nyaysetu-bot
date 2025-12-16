@@ -309,7 +309,18 @@ def send_subcategory_list(wa_id, category):
         rows=rows,
     )
 
-
+ def normalize_category(value):
+            """
+            Normalizes category values for safe comparison
+            Example:
+            'Banking & Finance' -> 'banking_and_finance'
+            """
+            return (
+                value.lower()
+                .replace("&", "and")
+                .replace(" ", "_")
+                .strip()
+            )
 # ===============================
 # ROUTES
 # ===============================
@@ -718,7 +729,12 @@ def webhook():
             # ---------------------------------
             # Save category & move forward
             # ---------------------------------
-            user.category = category
+            user.category = (
+                category
+                .replace("_and_", " & ")
+                .replace("_", " ")
+                .title()
+            )
             db.commit()
         
             save_state(db, user, ASK_SUBCATEGORY)
@@ -727,7 +743,8 @@ def webhook():
             return jsonify({"status": "ok"}), 200
         # -------------------------------
         # Sub Category (STRICT & SAFE)
-        # -------------------------------
+        # -------------------------------       
+
         if user.state == ASK_SUBCATEGORY:
             # ---------------------------------
             # Ignore empty / status events
@@ -761,14 +778,14 @@ def webhook():
             # ---------------------------------
             # Validate category consistency
             # ---------------------------------
-            if category != user.category:
+            if normalize_category(category) != normalize_category(user.category):
                 send_text(
                     wa_id,
                     "Selected sub-category does not match your category. Please try again 👇"
                 )
                 send_subcategory_list(wa_id, user.category)
                 return jsonify({"status": "ok"}), 200
-        
+                    
             # ---------------------------------
             # Save sub-category
             # ---------------------------------
@@ -866,6 +883,12 @@ def webhook():
             # ---------------------------------
         
             slots = generate_slots_calendar(date_str)
+                
+                readable_date = format_date_readable(date_str)
+                for slot in slots:
+                    if "description" in slot and slot["description"]:
+                        slot["description"] = f"Available on {readable_date}"
+
         
             # ---------------------------------
             # No slots available (buffer case)
