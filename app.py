@@ -170,6 +170,105 @@ def is_global_rate_limited():
     global_request_times.append(now)
     return False
 
+# =================================================
+# CATEGORY & SUB-CATEGORY HELPERS
+# =================================================
+
+def send_category_list(wa_id):
+    """
+    Sends the main legal category list to the user
+    """
+    categories = [
+        ("cat_family", "Family Law"),
+        ("cat_criminal", "Criminal Law"),
+        ("cat_civil", "Civil / Property"),
+        ("cat_corporate", "Corporate / Business"),
+        ("cat_labour", "Labour & Employment"),
+        ("cat_consumer", "Consumer Protection"),
+        ("cat_other", "Other Legal Issues"),
+    ]
+
+    rows = []
+    for cid, title in categories:
+        rows.append({
+            "id": cid,
+            "title": title,
+            "description": ""
+        })
+
+    send_list_picker(
+        wa_id,
+        header="Select Legal Category",
+        body="Choose the type of legal issue",
+        rows=rows,
+        section_title="Legal Categories",
+    )
+
+# =================================================
+# SUB-CATEGORY HELPER (WITH GENERAL OPTION ALWAYS)
+# =================================================
+
+def send_subcategory_list(wa_id, category):
+    """
+    Sends sub-category list based on selected category.
+    Always appends 'General Legal Query' as the last option.
+    """
+    subcategories_map = {
+        "family": [
+            ("subcat_divorce", "Divorce"),
+            ("subcat_maintenance", "Maintenance / Alimony"),
+            ("subcat_custody", "Child Custody"),
+            ("subcat_domestic", "Domestic Violence"),
+        ],
+        "criminal": [
+            ("subcat_bail", "Bail"),
+            ("subcat_fir", "FIR / Police Case"),
+            ("subcat_trial", "Criminal Trial"),
+        ],
+        "civil": [
+            ("subcat_property", "Property Dispute"),
+            ("subcat_agreement", "Agreement / Contract"),
+            ("subcat_injunction", "Injunction"),
+        ],
+        "corporate": [
+            ("subcat_company", "Company Matters"),
+            ("subcat_compliance", "Compliance & Filings"),
+            ("subcat_contract", "Business Contracts"),
+        ],
+        "labour": [
+            ("subcat_termination", "Termination"),
+            ("subcat_salary", "Salary Dispute"),
+            ("subcat_hr", "Workplace / HR Issues"),
+        ],
+        "consumer": [
+            ("subcat_complaint", "Consumer Complaint"),
+            ("subcat_refund", "Refund / Deficiency"),
+        ],
+        "other": [],
+    }
+
+    # category value example: "cat_family"
+    key = category.replace("cat_", "")
+    items = subcategories_map.get(key, [])
+
+    # ✅ Always add General Legal Query at the bottom
+    items = items + [("subcat_general", "General Legal Query")]
+
+    rows = []
+    for sid, title in items:
+        rows.append({
+            "id": sid,
+            "title": title,
+            "description": ""
+        })
+
+    send_list_picker(
+        wa_id,
+        header="Select Sub-Category",
+        body="Choose the specific issue",
+        rows=rows,
+        section_title="Legal Sub-Categories",
+    )
 
 # ===============================
 # ROUTES
