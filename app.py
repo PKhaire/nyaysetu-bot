@@ -313,6 +313,7 @@ def webhook():
         # -------------------------------
         # Global rate limiting
         # -------------------------------
+        if message["type"] in ("text", "interactive"):
         if is_global_rate_limited():
             return jsonify({"status": "rate_limited"}), 200
                
@@ -586,7 +587,6 @@ def webhook():
             send_category_list(wa_id)
             return jsonify({"status": "ok"}), 200
         
-        
         # -------------------------------
         # Ask Sub-Category
         # -------------------------------
@@ -596,7 +596,12 @@ def webhook():
                 send_subcategory_list(wa_id, user.category)
                 return jsonify({"status": "ok"}), 200
         
-            _, _, subcategory = interactive_id.split("_", 2)
+            # interactive_id examples:
+            # subcat_complaint
+            # subcat_refund
+            # subcat_general
+            subcategory = interactive_id.replace("subcat_", "")
+        
             user.subcategory = subcategory
             save_state(db, user, ASK_DATE)
         
@@ -608,7 +613,7 @@ def webhook():
                 section_title="Next 7 days",
             )
             return jsonify({"status": "ok"}), 200
-        
+
         
         # -------------------------------
         # Ask Date
