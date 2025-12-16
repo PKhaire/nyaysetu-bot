@@ -308,19 +308,29 @@ def send_subcategory_list(wa_id, category):
         section_title="Sub-Categories",
         rows=rows,
     )
+    
+def normalize_category(value):
+    """
+    Normalizes category values for safe comparison
+    Example:
+    'Banking & Finance' -> 'banking_and_finance'
+    """
+    return (
+        value.lower()
+        .replace("&", "and")
+        .replace(" ", "_")
+        .strip()
+    )
 
- def normalize_category(value):
-            """
-            Normalizes category values for safe comparison
-            Example:
-            'Banking & Finance' -> 'banking_and_finance'
-            """
-            return (
-                value.lower()
-                .replace("&", "and")
-                .replace(" ", "_")
-                .strip()
-            )
+# ===============================
+# ROUTES
+# ===============================
+@app.route("/webhook", methods=["GET"])
+def verify():
+    if request.args.get("hub.verify_token") == WHATSAPP_VERIFY_TOKEN:
+        return request.args.get("hub.challenge"), 200
+    return "Invalid token", 403
+
 # ===============================
 # ROUTES
 # ===============================
