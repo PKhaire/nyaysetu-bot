@@ -38,13 +38,90 @@ WELCOME_KEYWORDS = {"hi", "hello", "hey", "start"}
 
 RESTART_KEYWORDS = {
     "restart", "reset", "start over", "begin again",
-    "help", "menu", "main menu", "home",
+    "help", "menu", "main menu", "home", "start",
     "cancel", "stop", "exit"
 }
 
 BOOKING_KEYWORDS = {
     "book consultation", "book consult", "consult", "lawyer"
 }
+
+CATEGORY_SUBCATEGORIES = {
+    "Family": [
+        "Divorce",
+        "Maintenance / Alimony",
+        "Child Custody",
+        "Domestic Violence",
+        "Dowry Harassment",
+        "Other Family Issue",
+    ],
+
+    "Criminal": [
+        "FIR / Police Case",
+        "Bail",
+        "False FIR",
+        "Theft / Assault",
+        "Cyber Crime",
+        "Police Harassment",
+    ],
+
+    "Accident": [
+        "Road Accident",
+        "Motor Accident Claim (MACT)",
+        "Hit and Run",
+        "Injury Compensation",
+        "Death Due to Accident",
+    ],
+
+    "Property": [
+        "Property / Land Dispute",
+        "Illegal Possession",
+        "Builder Delay / Fraud",
+        "Partition / Inheritance",
+        "Agreement / Sale Deed Issue",
+        "Injunction",
+    ],
+
+    "Business": [
+        "Cheque Bounce (Section 138)",
+        "Partnership Dispute",
+        "Recovery of Money",
+        "Business Fraud",
+        "Contract Dispute",
+    ],
+
+    "Job": [
+        "Wrongful Termination",
+        "Salary Not Paid",
+        "Workplace Harassment",
+        "Employment Contract Issue",
+        "PF / Gratuity Issue",
+    ],
+
+    "Consumer": [
+        "Consumer Complaint",
+        "Refund / Deficiency",
+        "Service Deficiency",
+        "Online Fraud / Scam",
+        "Warranty Issue",
+    ],
+
+    "Banking & Finance": [
+        "Loan Recovery Harassment",
+        "Credit Card Issue",
+        "Bank Account Freeze",
+        "Fraudulent Transaction",
+        "Insurance Claim Dispute",
+    ],
+
+    "Other": [
+        "General Legal Query",
+        "Legal Notice Drafting",
+        "Agreement Drafting",
+        "Document Verification",
+    ],
+}
+
 
 # ===============================
 # INIT
@@ -176,98 +253,60 @@ def is_global_rate_limited():
 
 def send_category_list(wa_id):
     """
-    Sends the main legal category list to the user
+    Sends legal categories strictly from CATEGORY_SUBCATEGORIES
     """
-    categories = [
-        ("cat_family", "Family Law"),
-        ("cat_criminal", "Criminal Law"),
-        ("cat_civil", "Civil / Property"),
-        ("cat_corporate", "Corporate / Business"),
-        ("cat_labour", "Labour & Employment"),
-        ("cat_consumer", "Consumer Protection"),
-        ("cat_other", "Other Legal Issues"),
+    rows = [
+        {
+            "id": f"cat_{category.lower().replace(' ', '_').replace('&', 'and')}",
+            "title": category,
+        }
+        for category in CATEGORY_SUBCATEGORIES.keys()
     ]
-
-    rows = []
-    for cid, title in categories:
-        rows.append({
-            "id": cid,
-            "title": title,
-            "description": ""
-        })
 
     send_list_picker(
         wa_id,
         header="Select Legal Category",
-        body="Choose the type of legal issue",
-        rows=rows,
+        body="Choose the category that best matches your issue",
         section_title="Legal Categories",
+        rows=rows,
     )
-
-# =================================================
-# SUB-CATEGORY HELPER (WITH GENERAL OPTION ALWAYS)
-# =================================================
 
 def send_subcategory_list(wa_id, category):
     """
-    Sends sub-category list based on selected category.
-    Always appends 'General Legal Query' as the last option.
+    Sends sub-categories strictly from CATEGORY_SUBCATEGORIES.
+    Ensures 'General Legal Query' is always present.
     """
-    subcategories_map = {
-        "family": [
-            ("subcat_divorce", "Divorce"),
-            ("subcat_maintenance", "Maintenance / Alimony"),
-            ("subcat_custody", "Child Custody"),
-            ("subcat_domestic", "Domestic Violence"),
-        ],
-        "criminal": [
-            ("subcat_bail", "Bail"),
-            ("subcat_fir", "FIR / Police Case"),
-            ("subcat_trial", "Criminal Trial"),
-        ],
-        "civil": [
-            ("subcat_property", "Property Dispute"),
-            ("subcat_agreement", "Agreement / Contract"),
-            ("subcat_injunction", "Injunction"),
-        ],
-        "corporate": [
-            ("subcat_company", "Company Matters"),
-            ("subcat_compliance", "Compliance & Filings"),
-            ("subcat_contract", "Business Contracts"),
-        ],
-        "labour": [
-            ("subcat_termination", "Termination"),
-            ("subcat_salary", "Salary Dispute"),
-            ("subcat_hr", "Workplace / HR Issues"),
-        ],
-        "consumer": [
-            ("subcat_complaint", "Consumer Complaint"),
-            ("subcat_refund", "Refund / Deficiency"),
-        ],
-        "other": [],
-    }
 
-    # category value example: "cat_family"
-    key = category.replace("cat_", "")
-    items = subcategories_map.get(key, [])
+    # category example: "cat_banking_and_finance"
+    category_key = (
+        category
+        .replace("cat_", "")
+        .replace("_and_", " & ")
+        .replace("_", " ")
+        .title()
+    )
 
-    # ✅ Always add General Legal Query at the bottom
-    items = items + [("subcat_general", "General Legal Query")]
+    subcats = CATEGORY_SUBCATEGORIES.get(category_key, []).copy()
 
-    rows = []
-    for sid, title in items:
-        rows.append({
-            "id": sid,
-            "title": title,
-            "description": ""
-        })
+    # ✅ Ensure General Legal Query always exists
+    if "General Legal Query" not in subcats:
+        subcats.append("General Legal Query")
+
+    rows = [
+        {
+            # SAFE, FLAT WhatsApp ID
+            "id": f"subcat_{sub.lower().replace(' ', '_').replace('/', '').replace('(', '').replace(')', '')}",
+            "title": sub[:24],  # WhatsApp title limit
+        }
+        for sub in subcats
+    ]
 
     send_list_picker(
         wa_id,
-        header="Select Sub-Category",
-        body="Choose the specific issue",
+        header=f"{category_key} – Select Sub-Category",
+        body="Choose the issue type",
+        section_title="Sub-Categories",
         rows=rows,
-        section_title="Legal Sub-Categories",
     )
 
 # ===============================
@@ -481,172 +520,456 @@ def webhook():
             )
             return jsonify({"status": "ok"}), 200
         
-        
+ 
         # -------------------------------
-        # Ask State
+        # Ask State (STRICT & SAFE)
         # -------------------------------
         if user.state == ASK_STATE:
             state_name = None
         
+            # ---------------------------------
+            # Pagination: "More states..."
+            # ---------------------------------
             if interactive_id and interactive_id.startswith("state_page_"):
                 page = int(interactive_id.replace("state_page_", ""))
+        
                 send_list_picker(
                     wa_id,
                     header="Select State",
                     body="Choose your state",
-                    rows=build_state_list_rows(page=page),
+                    rows=build_state_list_rows(
+                        page=page,
+                        preferred_state=user.state_name,
+                    ),
                     section_title="Indian States",
                 )
                 return jsonify({"status": "ok"}), 200
         
+            # ---------------------------------
+            # State selected from list
+            # ---------------------------------
             if interactive_id and interactive_id.startswith("state_"):
                 state_name = interactive_id.replace("state_", "")
         
+            # ---------------------------------
+            # Typed state fallback (only if text present)
+            # ---------------------------------
             if not state_name and text_body:
                 state_name = detect_state_from_text(text_body)
         
+            # ---------------------------------
+            # Still invalid → ask again
+            # ---------------------------------
             if not state_name:
-                send_text(wa_id, "Please select or type your *state* 👇")
+                send_text(
+                    wa_id,
+                    "Please select or type your *state* 🙂"
+                )
                 send_list_picker(
                     wa_id,
                     header="Select State",
-                    body="Choose your state",
-                    rows=build_state_list_rows(page=1),
+                    body="Choose your state or tap More",
+                    rows=build_state_list_rows(
+                        page=1,
+                        preferred_state=user.state_name,
+                    ),
                     section_title="Indian States",
                 )
                 return jsonify({"status": "ok"}), 200
         
+            # ---------------------------------
+            # Save & move forward
+            # ---------------------------------
             user.state_name = state_name
+            db.commit()
+        
             save_state(db, user, ASK_DISTRICT)
+        
+            from services.location_service import get_safe_section_title
         
             send_list_picker(
                 wa_id,
                 header=f"Select district in {state_name}",
-                body="Choose your district",
+                body="Choose district",
                 rows=build_district_list_rows(state_name),
                 section_title=get_safe_section_title(state_name),
             )
+        
             return jsonify({"status": "ok"}), 200
-        
-        
+
         # -------------------------------
-        # Ask District
+        # Ask District (STRICT & SAFE)
         # -------------------------------
         if user.state == ASK_DISTRICT:
             district = None
         
+            # ---------------------------------
+            # Pagination: "More districts..."
+            # ---------------------------------
             if interactive_id and interactive_id.startswith("district_page_"):
                 page = int(interactive_id.replace("district_page_", ""))
+        
                 send_list_picker(
                     wa_id,
                     header=f"Select district in {user.state_name}",
                     body="Choose your district",
-                    rows=build_district_list_rows(user.state_name, page=page),
+                    rows=build_district_list_rows(
+                        user.state_name,
+                        page=page,
+                        preferred_district=user.district_name,
+                    ),
                     section_title=get_safe_section_title(user.state_name),
                 )
                 return jsonify({"status": "ok"}), 200
         
+            # ---------------------------------
+            # District selected from list (VALIDATE)
+            # ---------------------------------
             if interactive_id and interactive_id.startswith("district_"):
-                district = interactive_id.replace("district_", "")
+                candidate = interactive_id.replace("district_", "")
         
+                from services.location_service import get_districts_for_state
+                if candidate in get_districts_for_state(user.state_name):
+                    district = candidate
+        
+            # ---------------------------------
+            # Typed district (FUZZY + STATE ONLY)
+            # ---------------------------------
             if not district and text_body:
                 from services.location_service import detect_district_in_state
-                district = detect_district_in_state(user.state_name, text_body)
         
+                matched = detect_district_in_state(user.state_name, text_body)
+        
+                if matched:
+                    district = matched
+        
+                    # Auto-correction notice
+                    if matched.lower() != text_body.lower():
+                        send_text(
+                            wa_id,
+                            f"ℹ️ Interpreted *{text_body}* as *{matched}*."
+                        )
+        
+            # ---------------------------------
+            # Ignore empty / status events
+            # ---------------------------------
+            if not district and not text_body:
+                return jsonify({"status": "ignored"}), 200
+        
+            # ---------------------------------
+            # Still invalid → force list
+            # ---------------------------------
             if not district:
                 send_text(
                     wa_id,
-                    f"Please select a district in *{user.state_name}* 👇"
+                    f"❌ Could not identify district *{text_body}* in {user.state_name}.\n"
+                    "Please select from the list below 👇"
                 )
                 send_list_picker(
                     wa_id,
                     header=f"Select district in {user.state_name}",
-                    body="Choose your district",
+                    body="Choose district",
                     rows=build_district_list_rows(user.state_name),
                     section_title=get_safe_section_title(user.state_name),
                 )
                 return jsonify({"status": "ok"}), 200
         
+            # ---------------------------------
+            # Save & move forward
+            # ---------------------------------
             user.district_name = district
+            db.commit()
+        
             save_state(db, user, ASK_CATEGORY)
             send_category_list(wa_id)
+        
             return jsonify({"status": "ok"}), 200
         
-        
         # -------------------------------
-        # Ask Category
+        # Category (STRICT & SAFE)
         # -------------------------------
         if user.state == ASK_CATEGORY:
+            category = None
+        
+            # ---------------------------------
+            # Category selected from list
+            # ---------------------------------
             if interactive_id and interactive_id.startswith("cat_"):
-                user.category = interactive_id.replace("cat_", "")
-                save_state(db, user, ASK_SUBCATEGORY)
-                send_subcategory_list(wa_id, user.category)
+                category = interactive_id.replace("cat_", "")
+        
+            # ---------------------------------
+            # Ignore empty / status events
+            # ---------------------------------
+            if not category and not text_body:
+                return jsonify({"status": "ignored"}), 200
+        
+            # ---------------------------------
+            # Still invalid → ask again
+            # ---------------------------------
+            if not category:
+                send_text(
+                    wa_id,
+                    "Please select a legal category from the list 👇"
+                )
+                send_category_list(wa_id)
                 return jsonify({"status": "ok"}), 200
         
-            send_text(wa_id, "Please select a legal category 👇")
-            send_category_list(wa_id)
-            return jsonify({"status": "ok"}), 200
+            # ---------------------------------
+            # Save category & move forward
+            # ---------------------------------
+            user.category = category
+            db.commit()
         
+            save_state(db, user, ASK_SUBCATEGORY)
+            send_subcategory_list(wa_id, category)
+        
+            return jsonify({"status": "ok"}), 200
         # -------------------------------
-        # Ask Sub-Category
+        # Sub Category (STRICT & SAFE)
         # -------------------------------
         if user.state == ASK_SUBCATEGORY:
-            if not interactive_id or not interactive_id.startswith("subcat_"):
-                send_text(wa_id, "Please select a sub-category 👇")
+            # ---------------------------------
+            # Ignore empty / status events
+            # ---------------------------------
+            if not interactive_id:
+                return jsonify({"status": "ignored"}), 200
+        
+            if not interactive_id.startswith("subcat_"):
+                send_text(
+                    wa_id,
+                    "Please select a sub-category from the list 👇"
+                )
                 send_subcategory_list(wa_id, user.category)
                 return jsonify({"status": "ok"}), 200
         
-            # interactive_id examples:
-            # subcat_complaint
-            # subcat_refund
-            # subcat_general
-            subcategory = interactive_id.replace("subcat_", "")
+            # ---------------------------------
+            # Safe parsing
+            # Format: subcat_<category>_<subcategory>
+            # ---------------------------------
+            parts = interactive_id.split("_", 2)
+            if len(parts) != 3:
+                send_text(
+                    wa_id,
+                    "Invalid selection. Please choose a sub-category again 👇"
+                )
+                send_subcategory_list(wa_id, user.category)
+                return jsonify({"status": "ok"}), 200
         
+            _, category, subcategory = parts
+        
+            # ---------------------------------
+            # Validate category consistency
+            # ---------------------------------
+            if category != user.category:
+                send_text(
+                    wa_id,
+                    "Selected sub-category does not match your category. Please try again 👇"
+                )
+                send_subcategory_list(wa_id, user.category)
+                return jsonify({"status": "ok"}), 200
+        
+            # ---------------------------------
+            # Save sub-category
+            # ---------------------------------
             user.subcategory = subcategory
+            db.commit()
+        
+            # 📊 Analytics (SAFE)
+            from models import CategoryAnalytics
+        
+            record = (
+                db.query(CategoryAnalytics)
+                .filter_by(category=category, subcategory=subcategory)
+                .first()
+            )
+        
+            if record:
+                record.count += 1
+            else:
+                db.add(
+                    CategoryAnalytics(
+                        category=category,
+                        subcategory=subcategory,
+                        count=1,
+                    )
+                )
+        
+            db.commit()
+        
             save_state(db, user, ASK_DATE)
         
             send_list_picker(
                 wa_id,
-                header="Select appointment date",
+                header="Select appointment date 👇",
                 body="Available dates",
                 rows=generate_dates_calendar(skip_today=True),
                 section_title="Next 7 days",
             )
             return jsonify({"status": "ok"}), 200
-
         
         # -------------------------------
-        # Ask Date
+        # Date (STRICT & SAFE)
         # -------------------------------
         if user.state == ASK_DATE:
-            if not interactive_id or not interactive_id.startswith("date_"):
-                send_text(wa_id, "Please select a date 👇")
+            # ---------------------------------
+            # Ignore empty / status events
+            # ---------------------------------
+            if not interactive_id:
+                return jsonify({"status": "ignored"}), 200
+        
+            # ---------------------------------
+            # Date selected from list
+            # ---------------------------------
+            if not interactive_id.startswith("date_"):
+                send_text(
+                    wa_id,
+                    "Please select an appointment *date* from the list 👇"
+                )
                 return jsonify({"status": "ok"}), 200
         
-            date_str = interactive_id.replace("date_", "")
-            user.temp_date = date_str
-            save_state(db, user, ASK_SLOT)
+            date_str = interactive_id.replace("date_", "").strip()
         
+            # ---------------------------------
+            # Validate date format
+            # ---------------------------------
+        
+            try:
+                selected_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+                today = datetime.now().date()
+            
+                if selected_date <= today:
+                    send_text(
+                        wa_id,
+                        "⚠️ You cannot select a past or same-day appointment.\n"
+                        "Please choose a future date 👇"
+                    )
+                    send_list_picker(
+                        wa_id,
+                        header="Select appointment date 👇",
+                        body="Available dates",
+                        rows=generate_dates_calendar(skip_today=True),
+                        section_title="Next available days",
+                    )
+                    return jsonify({"status": "ok"}), 200
+            
+            except ValueError:
+                send_text(
+                    wa_id,
+                    "Invalid date selected. Please choose again 👇"
+                )
+                return jsonify({"status": "ok"}), 200
+
+        
+            # ---------------------------------
+            # Save date & move forward
+            # ---------------------------------
+        
+            slots = generate_slots_calendar(date_str)
+        
+            # ---------------------------------
+            # No slots available (buffer case)
+            # ---------------------------------
+            if not slots:
+                send_text(
+                    wa_id,
+                    "⚠️ No available time slots for this date.\n"
+                    "Please select another date 👇"
+                )
+                save_state(db, user, ASK_DATE)
+        
+                send_list_picker(
+                    wa_id,
+                    header="Select appointment date 👇",
+                    body="Available dates",
+                    rows=generate_dates_calendar(skip_today=True),
+                    section_title="Next available days",
+                )
+                return jsonify({"status": "ok"}), 200
+        
+            # ---------------------------------
+            # Show slots
+            # ---------------------------------
+            user.temp_date = date_str
+            db.commit()
+            save_state(db, user, ASK_SLOT)
             send_list_picker(
                 wa_id,
                 header=f"Select time slot for {format_date_readable(date_str)}",
                 body="Available time slots (IST)",
-                rows=generate_slots_calendar(date_str),
+                rows=slots,
                 section_title="Time Slots",
             )
+        
             return jsonify({"status": "ok"}), 200
-        
-        
+            
         # -------------------------------
-        # Ask Slot
+        # Slot (STRICT & SAFE)
         # -------------------------------
         if user.state == ASK_SLOT:
-            if not interactive_id or not interactive_id.startswith("slot_"):
-                send_text(wa_id, "Please select a time slot 👇")
+            # ---------------------------------
+            # Ignore empty / status events
+            # ---------------------------------
+            if not interactive_id:
+                return jsonify({"status": "ignored"}), 200
+
+            # ---------------------------------
+            # SAFETY: User clicked a DATE again
+            # ---------------------------------
+            if interactive_id.startswith("date_"):
+                save_state(db, user, ASK_DATE)
                 return jsonify({"status": "ok"}), 200
         
-            slot_code = interactive_id.replace("slot_", "")
+            # ---------------------------------
+            # Validate slot selection
+            # ---------------------------------
+            if not interactive_id.startswith("slot_"):
+                send_text(
+                    wa_id,
+                    "Please select a time slot from the list 👇"
+                )
+                return jsonify({"status": "ok"}), 200
         
+            slot_code = interactive_id.replace("slot_", "").strip()
+        
+            # ---------------------------------
+            # Validate slot exists
+            # ---------------------------------
+            if slot_code not in SLOT_MAP:
+                send_text(
+                    wa_id,
+                    "Invalid time slot selected. Please choose again 👇"
+                )
+                send_list_picker(
+                    wa_id,
+                    header=f"Select time slot for {format_date_readable(user.temp_date)}",
+                    body="Available time slots (IST)",
+                    rows=generate_slots_calendar(user.temp_date),
+                    section_title="Time Slots",
+                )
+                return jsonify({"status": "ok"}), 200
+        
+            # ---------------------------------
+            # Final safety check before booking
+            # ---------------------------------
+            required_fields = [
+                user.name,
+                user.state_name,
+                user.district_name,
+                user.category,
+                user.temp_date,
+            ]
+        
+            if not all(required_fields):
+                send_text(
+                    wa_id,
+                    "⚠️ Some booking details are missing. Please restart booking."
+                )
+                save_state(db, user, ASK_NAME)
+                return jsonify({"status": "ok"}), 200
+        
+            # ---------------------------------
+            # Attempt booking (includes buffer & expiry validation)
+            # ---------------------------------
             booking, payment_link = create_booking_temp(
                 db=db,
                 user=user,
@@ -658,12 +981,20 @@ def webhook():
                 slot_code=slot_code,
             )
         
+            # ---------------------------------
+            # Booking validation failed
+            # ---------------------------------
             if not booking:
-                send_text(wa_id, payment_link)
+                send_text(wa_id, f"⚠️ {payment_link}")
                 return jsonify({"status": "ok"}), 200
         
+            # ---------------------------------
+            # Save & move to payment
+            # ---------------------------------
             user.temp_slot = slot_code
             user.last_payment_link = payment_link
+            db.commit()
+        
             save_state(db, user, WAITING_PAYMENT)
         
             send_text(
@@ -675,22 +1006,65 @@ def webhook():
                 f"*Category:* {user.category}\n"
                 f"*Date:* {format_date_readable(user.temp_date)}\n"
                 f"*Slot:* {SLOT_MAP[slot_code]}\n"
-                f"*Fees:* ₹{BOOKING_PRICE}\n\n"
-                f"💳 Complete payment:\n{payment_link}"
+                f"*Fees:* ₹{BOOKING_PRICE} (one-time session) 🙂\n\n"
+                f"Please complete payment:\n{payment_link}"
             )
+        
             return jsonify({"status": "ok"}), 200
         
         
         # -------------------------------
-        # Waiting for Payment
+        # Waiting payment (AI LOCKED)
         # -------------------------------
         if user.state == WAITING_PAYMENT:
             send_text(
                 wa_id,
                 f"💳 Your payment link is active:\n{user.last_payment_link}"
             )
+            return jsonify({"status": "ok"}), 200 
+            
+        # -------------------------------
+        # AI Chat (ONLY AFTER PAYMENT)
+        # -------------------------------
+        if user.state == PAYMENT_CONFIRMED:
+            # Send session intro ONCE
+            if not user.session_started:
+                send_text(
+                    wa_id,
+                    "✅ *Payment received successfully.*\n\n"
+                    "You may now ask your legal questions here.\n"
+                    "Our legal expert will also call you at the scheduled date and time."
+                )
+                user.session_started = True
+                db.commit()
+                return jsonify({"status": "ok"}), 200
+        
+            if not text_body:
+                return jsonify({"status": "ignored"}), 200
+        
+            send_typing_on(wa_id)
+            try:
+                reply = ai_reply(text_body, user)
+            except Exception:
+                send_typing_off(wa_id)
+                send_text(
+                    wa_id,
+                    "⚠️ Sorry, I’m having trouble responding right now.\n"
+                    "Please try again."
+                )
+                return jsonify({"status": "ok"}), 200
+        
+            send_typing_off(wa_id)
+            send_text(wa_id, reply)
             return jsonify({"status": "ok"}), 200
 
+        # -------------------------------
+        # Default fallback (safe)
+        # -------------------------------
+        return jsonify({"status": "ignored"}), 200
+    except Exception as e:
+        logger.exception("Webhook error")
+        return jsonify({"error": str(e)}), 500
     finally:
         db.close()
 
