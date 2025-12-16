@@ -277,7 +277,7 @@ def send_subcategory_list(wa_id, category):
     Ensures 'General Legal Query' is always present.
     """
 
-    # category example: "cat_banking_and_finance"
+    # category example: "cat_business"
     category_key = (
         category
         .replace("cat_", "")
@@ -291,15 +291,15 @@ def send_subcategory_list(wa_id, category):
     # ✅ Ensure General Legal Query always exists
     if "General Legal Query" not in subcats:
         subcats.append("General Legal Query")
-        
-      rows = [
+
+    rows = [
         {
             # ID FORMAT: subcat_<category>_<subcategory>
             "id": f"subcat_{category}_{sub.lower().replace(' ', '_').replace('/', '').replace('(', '').replace(')', '')}",
-            "title": sub[:24],
+            "title": sub[:24],  # WhatsApp title limit
         }
         for sub in subcats
-      ]
+    ]
 
     send_list_picker(
         wa_id,
@@ -308,6 +308,7 @@ def send_subcategory_list(wa_id, category):
         section_title="Sub-Categories",
         rows=rows,
     )
+
 
 # ===============================
 # ROUTES
