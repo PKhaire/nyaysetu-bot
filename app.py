@@ -587,6 +587,8 @@ def webhook():
             )
             return jsonify({"status": "ok"}), 200
 
+    finally:
+        db.close()
 
 # ===============================
 # PAYMENT WEBHOOK
