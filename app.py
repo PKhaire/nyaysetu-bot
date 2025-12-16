@@ -314,8 +314,8 @@ def webhook():
         # Global rate limiting
         # -------------------------------
         if message["type"] in ("text", "interactive"):
-        if is_global_rate_limited():
-            return jsonify({"status": "rate_limited"}), 200
+            if is_global_rate_limited():
+                return jsonify({"status": "rate_limited"}), 200
                
         # ===============================
         # RESTART
