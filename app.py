@@ -331,16 +331,6 @@ def verify():
         return request.args.get("hub.challenge"), 200
     return "Invalid token", 403
 
-# ===============================
-# ROUTES
-# ===============================
-@app.route("/webhook", methods=["GET"])
-def verify():
-    if request.args.get("hub.verify_token") == WHATSAPP_VERIFY_TOKEN:
-        return request.args.get("hub.challenge"), 200
-    return "Invalid token", 403
-
-
 @app.route("/webhook", methods=["POST"])
 def webhook():
     payload = request.get_json(force=True, silent=True) or {}
