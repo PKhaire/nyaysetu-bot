@@ -418,13 +418,13 @@ def webhook():
             return jsonify({"status": "ok"}), 200
 
         # ===============================
-        # LANGUAGE
+        # LANGUAGE SELECTION
         # ===============================
         if user.state == ASK_LANGUAGE:
-            lang_map = {"lang_en": "English", "lang_hi": "Hinglish", "lang_mr": "Marathi"}
-            if interactive_id in lang_map:
-                user.language = lang_map[interactive_id]
+            if interactive_id in ("lang_en", "lang_hi", "lang_mr"):
+                user.language = interactive_id.replace("lang_", "")
                 save_state(db, user, ASK_AI_OR_BOOK)
+        
                 send_buttons(
                     wa_id,
                     t(user, "ask_ai_or_book"),
@@ -433,7 +433,6 @@ def webhook():
                         {"id": "opt_book", "title": t(user, "book_consult")},
                     ],
                 )
-
             return jsonify({"status": "ok"}), 200
 
         # ===============================
@@ -595,7 +594,7 @@ def webhook():
         
             send_list_picker(
                 wa_id,
-                header=t(user, "select_district_in", state=state_name),
+                header=t(user, "select_district_in", state=user.state_name),
                 body=t(user, "choose_district"),
                 rows=build_district_list_rows(state_name),
                 section_title=get_safe_section_title(state_name),
@@ -678,7 +677,7 @@ def webhook():
 
                 send_list_picker(
                     wa_id,
-                    header=t(user, "select_district_in", state=state_name),
+                    header=t(user, "select_district_in", state=user.state_name),
                     body=t(user, "choose_district"),
                     rows=build_district_list_rows(user.state_name),
                     section_title=get_safe_section_title(user.state_name),
@@ -1072,7 +1071,10 @@ def payment_webhook():
         booking.user.ai_enabled = True
         booking.user.free_ai_count = 0
         save_state(db, booking.user, PAYMENT_CONFIRMED)
-        send_text(wa_id, t(user, "payment_success"))
+        send_text(
+            booking.user.whatsapp_id,
+            t(booking.user, "payment_success")
+        )
         return jsonify({"status": "confirmed"}), 200
     finally:
         db.close()
