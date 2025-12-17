@@ -377,14 +377,10 @@ def webhook():
         # ===============================
         if lower_text in RESTART_KEYWORDS:
             if user.state == WAITING_PAYMENT:
-                send_text(
-                    wa_id,
-                    "⚠️ Payment is in progress.\nPlease complete or wait."
-                )
+                send_text(wa_id, t(user, "payment_in_progress"))
                 return jsonify({"status": "ok"}), 200
 
             user.state = NORMAL
-            user.language = None
             user.ai_enabled = False
             user.free_ai_count = 0
             user.temp_date = None
@@ -417,8 +413,7 @@ def webhook():
         if is_user_rate_limited(wa_id):
             send_text(
                 wa_id,
-                "⏳ You’re sending messages too quickly.\n"
-                "Please wait a moment and try again."
+                t(user, "rate_limit_exceeded")
             )
             return jsonify({"status": "ok"}), 200
 
@@ -449,7 +444,7 @@ def webhook():
                 user.ai_enabled = True
                 save_state(db, user, NORMAL)
                 db.commit()
-                send_text(wa_id, "🤖 Ask your legal question.")
+                send_text(wa_id, t(user, "ask_ai_prompt"))
                 return jsonify({"status": "ok"}), 200
 
             if interactive_id == "opt_book":
@@ -490,10 +485,7 @@ def webhook():
             # AI rate limiting
             # -------------------------------
             if is_ai_rate_limited(wa_id):
-                send_text(
-                    wa_id,
-                    "⏳ Please wait a moment before sending another message."
-                )
+                send_text(wa_id, t(user, "ai_cooldown"))
                 return jsonify({"status": "ok"}), 200
 
             reply = ai_reply(text_body, user)
@@ -517,7 +509,7 @@ def webhook():
         # -------------------------------
         if user.state == ASK_NAME:
             if not text_body or len(text_body.strip()) < 2:
-                send_text(wa_id, "Please enter your *full name* 🙂")
+                send_text(wa_id, t(user, "ask_name_retry"))
                 return jsonify({"status": "ok"}), 200
         
             user.name = text_body.strip()
@@ -578,14 +570,11 @@ def webhook():
             # Still invalid → ask again
             # ---------------------------------
             if not state_name:
-                send_text(
-                    wa_id,
-                    "Please select or type your *state* 🙂"
-                )
+                send_text(wa_id, t(user, "ask_state_retry"))
                 send_list_picker(
                     wa_id,
                     header=t(user, "select_state"),
-                    body="Choose your state or tap More",
+                    body=t(user, "choose_state_or_more"),
                     rows=build_state_list_rows(
                         page=1,
                         preferred_state=user.state_name,
@@ -606,8 +595,8 @@ def webhook():
         
             send_list_picker(
                 wa_id,
-                header=f"Select district in {state_name}",
-                body="Choose district",
+                header=t(user, "select_district_in", state=state_name),
+                body=t(user, "choose_district"),
                 rows=build_district_list_rows(state_name),
                 section_title=get_safe_section_title(state_name),
             )
@@ -679,13 +668,18 @@ def webhook():
             if not district:
                 send_text(
                     wa_id,
-                    f"❌ Could not identify district *{text_body}* in {user.state_name}.\n"
-                    "Please select from the list below 👇"
+                    t(
+                        user,
+                        "district_invalid",
+                        district=text_body,
+                        state=user.state_name,
+                    )
                 )
+
                 send_list_picker(
                     wa_id,
-                    header=f"Select district in {user.state_name}",
-                    body="Choose district",
+                    header=t(user, "select_district_in", state=state_name)",
+                    body=t(user, "choose_district"),
                     rows=build_district_list_rows(user.state_name),
                     section_title=get_safe_section_title(user.state_name),
                 )
@@ -724,10 +718,7 @@ def webhook():
             # Still invalid → ask again
             # ---------------------------------
             if not category:
-                send_text(
-                    wa_id,
-                    "Please select a legal category from the list 👇"
-                )
+                send_text(wa_id, t(user, "category_retry"))
                 send_category_list(wa_id, user)
                 return jsonify({"status": "ok"}), 200
         
@@ -758,10 +749,7 @@ def webhook():
                 return jsonify({"status": "ignored"}), 200
         
             if not interactive_id.startswith("subcat_"):
-                send_text(
-                    wa_id,
-                    "Please select a sub-category from the list 👇"
-                )
+                send_text(wa_id, t(user, "subcategory_retry"))
                 send_subcategory_list(wa_id, user.category)
                 return jsonify({"status": "ok"}), 200
         
@@ -786,7 +774,7 @@ def webhook():
             if normalize_category(category) != normalize_category(user.category):
                 send_text(
                     wa_id,
-                    "Selected sub-category does not match your category. Please try again 👇"
+                    t(user, "subcategory_mismatch")
                 )
                 send_subcategory_list(wa_id, user.category)
                 return jsonify({"status": "ok"}), 200
@@ -844,10 +832,7 @@ def webhook():
             # Date selected from list
             # ---------------------------------
             if not interactive_id.startswith("date_"):
-                send_text(
-                    wa_id,
-                    "Please select an appointment *date* from the list 👇"
-                )
+                send_text(wa_id, t(user, "select_date_retry"))
                 return jsonify({"status": "ok"}), 200
         
             date_str = interactive_id.replace("date_", "").strip()
@@ -861,11 +846,7 @@ def webhook():
                 today = datetime.now().date()
             
                 if selected_date <= today:
-                    send_text(
-                        wa_id,
-                        "⚠️ You cannot select a past or same-day appointment.\n"
-                        "Please choose a future date 👇"
-                    )
+                    send_text(wa_id, t(user, "past_date_error"))
                     send_list_picker(
                         wa_id,
                         header=t(user, "select_date"),
@@ -876,10 +857,7 @@ def webhook():
                     return jsonify({"status": "ok"}), 200
             
             except ValueError:
-                send_text(
-                    wa_id,
-                    "Invalid date selected. Please choose again 👇"
-                )
+                send_text(wa_id, t(user, "invalid_date"))
                 return jsonify({"status": "ok"}), 200
             # ---------------------------------
             # Save date & move forward
@@ -897,11 +875,7 @@ def webhook():
             # ---------------------------------
      
             if not slots:
-                send_text(
-                    wa_id,
-                    "⚠️ No available time slots for this date.\n"
-                    "Please select another date 👇"
-                )
+                send_text(wa_id, t(user, "no_slots"))
                 save_state(db, user, ASK_DATE)
         
                 send_list_picker(
@@ -950,10 +924,7 @@ def webhook():
             # Validate slot selection
             # ---------------------------------
             if not interactive_id.startswith("slot_"):
-                send_text(
-                    wa_id,
-                    "Please select a time slot from the list 👇"
-                )
+                send_text(wa_id, t(user, "slot_retry"))
                 return jsonify({"status": "ok"}), 200
         
             slot_code = interactive_id.replace("slot_", "").strip()
@@ -962,10 +933,7 @@ def webhook():
             # Validate slot exists
             # ---------------------------------
             if slot_code not in SLOT_MAP:
-                send_text(
-                    wa_id,
-                    "Invalid time slot selected. Please choose again 👇"
-                )
+                send_text(wa_id, t(user, "invalid_slot"))
                 send_list_picker(
                     wa_id,
                     header=f"Select time slot for {format_date_readable(user.temp_date)}",
@@ -987,10 +955,7 @@ def webhook():
             ]
         
             if not all(required_fields):
-                send_text(
-                    wa_id,
-                    "⚠️ Some booking details are missing. Please restart booking."
-                )
+                send_text(wa_id, t(user, "booking_missing"))
                 save_state(db, user, ASK_NAME)
                 return jsonify({"status": "ok"}), 200
         
@@ -1056,12 +1021,7 @@ def webhook():
         if user.state == PAYMENT_CONFIRMED:
             # Send session intro ONCE
             if not user.session_started:
-                send_text(
-                    wa_id,
-                    "✅ *Payment received successfully.*\n\n"
-                    "You may now ask your legal questions here.\n"
-                    "Our legal expert will also call you at the scheduled date and time."
-                )
+                send_text(wa_id, t(user, "session_start"))
                 user.session_started = True
                 db.commit()
                 return jsonify({"status": "ok"}), 200
@@ -1090,7 +1050,7 @@ def webhook():
         # -------------------------------
         return jsonify({"status": "ignored"}), 200
     except Exception as e:
-        logger.exception("Webhook error")
+        logger.exception("Webhook error for wa_id=%s", wa_id)
         return jsonify({"error": str(e)}), 500
     finally:
         db.close()
@@ -1112,11 +1072,7 @@ def payment_webhook():
         booking.user.ai_enabled = True
         booking.user.free_ai_count = 0
         save_state(db, booking.user, PAYMENT_CONFIRMED)
-
-        send_text(
-            booking.whatsapp_id,
-            "💳 Payment successful.\nYour consultation is confirmed."
-        )
+        send_text(wa_id, t(user, "payment_success"))
         return jsonify({"status": "confirmed"}), 200
     finally:
         db.close()
