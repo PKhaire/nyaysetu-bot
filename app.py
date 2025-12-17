@@ -5,6 +5,7 @@ import time
 from collections import defaultdict, deque
 from datetime import datetime
 from flask import Flask, request, jsonify
+from translations import TRANSLATIONS
 
 # ===============================
 # CONFIG
@@ -322,6 +323,11 @@ def normalize_category(value):
         .strip()
     )
 
+def t(user, key, **kwargs):
+    lang = user.language or "en"
+    text = TRANSLATIONS.get(lang, TRANSLATIONS["en"]).get(key, key)
+    return text.format(**kwargs)
+
 # ===============================
 # ROUTES
 # ===============================
@@ -398,7 +404,7 @@ def webhook():
             save_state(db, user, ASK_LANGUAGE)
             send_buttons(
                 wa_id,
-                f"👋 *Welcome to NyaySetu* ⚖️\n\n🆔 Case ID: {user.case_id}\n\nSelect language:",
+                t(user, "welcome", case_id=user.case_id),
                 [
                     {"id": "lang_en", "title": "English"},
                     {"id": "lang_hi", "title": "Hinglish"},
@@ -428,12 +434,13 @@ def webhook():
                 save_state(db, user, ASK_AI_OR_BOOK)
                 send_buttons(
                     wa_id,
-                    f"Language set to *{user.language}*\nHow would you like to proceed?",
+                    t(user, "select_category"),
                     [
-                        {"id": "opt_ai", "title": "Ask AI"},
-                        {"id": "opt_book", "title": "Book Consultation"},
+                        {"id": "opt_ai", "title": t(user, "ask_ai")},
+                        {"id": "opt_book", "title": t(user, "book_consult")},
                     ],
                 )
+
             return jsonify({"status": "ok"}), 200
 
         # ===============================
