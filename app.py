@@ -252,27 +252,25 @@ def is_global_rate_limited():
 # CATEGORY & SUB-CATEGORY HELPERS
 # =================================================
 
-def send_category_list(wa_id):
-    """
-    Sends legal categories strictly from CATEGORY_SUBCATEGORIES
-    """
+def send_category_list(wa_id, user):
     rows = [
         {
             "id": f"cat_{category.lower().replace(' ', '_').replace('&', 'and')}",
-            "title": category,
+            "title": category,  # category names stay same
         }
         for category in CATEGORY_SUBCATEGORIES.keys()
     ]
 
     send_list_picker(
         wa_id,
-        header="Select Legal Category",
-        body="Choose the category that best matches your issue",
-        section_title="Legal Categories",
+        header=t(user, "select_category"),
+        body=t(user, "choose_category"),
+        section_title=t(user, "select_category"),
         rows=rows,
     )
 
-def send_subcategory_list(wa_id, category):
+
+def send_subcategory_list(wa_id, user, category):
     """
     Sends sub-categories strictly from CATEGORY_SUBCATEGORIES.
     Ensures 'General Legal Query' is always present.
@@ -304,9 +302,9 @@ def send_subcategory_list(wa_id, category):
 
     send_list_picker(
         wa_id,
-        header=f"{category_key} – Select Sub-Category",
-        body="Choose the issue type",
-        section_title="Sub-Categories",
+        header=f"{category_key} – {t(user, 'select_subcategory')}",
+        body=t(user, "choose_subcategory"),
+        section_title=t(user, "select_subcategory"),
         rows=rows,
     )
     
@@ -394,7 +392,7 @@ def webhook():
             user.last_payment_link = None
             db.commit()
 
-            send_text(wa_id, "🔄 Session reset.\nType *Hi* to start again.")
+            send_text(wa_id, t(user, "restart"))
             return jsonify({"status": "ok"}), 200
 
         # ===============================
@@ -434,7 +432,7 @@ def webhook():
                 save_state(db, user, ASK_AI_OR_BOOK)
                 send_buttons(
                     wa_id,
-                    t(user, "select_category"),
+                    t(user, "ask_ai_or_book"),
                     [
                         {"id": "opt_ai", "title": t(user, "ask_ai")},
                         {"id": "opt_book", "title": t(user, "book_consult")},
@@ -458,7 +456,7 @@ def webhook():
                 user.ai_enabled = False
                 save_state(db, user, ASK_NAME)
                 db.commit()
-                send_text(wa_id, "Please tell me your *full name*.")
+                send_text(wa_id, t(user, "ask_name"))
                 return jsonify({"status": "ok"}), 200
 
         # ===============================
@@ -469,7 +467,7 @@ def webhook():
             user.free_ai_count = 0
             save_state(db, user, ASK_NAME)
             db.commit()
-            send_text(wa_id, "Please tell me your *full name*.")
+            send_text(wa_id, t(user, "ask_name"))
             return jsonify({"status": "ok"}), 200
 
         # ===============================
@@ -482,8 +480,8 @@ def webhook():
             if user.free_ai_count >= FREE_AI_LIMIT:
                 send_buttons(
                     wa_id,
-                    "🚫 Free AI limit reached.\nPlease book a consultation.",
-                    [{"id": "book_now", "title": "Book Consultation"}],
+                    t(user, "free_limit_reached"),
+                    [{"id": "book_now", "title": t(user, "book_consult")}],
                 )
                 return jsonify({"status": "ok"}), 200
 
@@ -532,10 +530,10 @@ def webhook():
         
             send_list_picker(
                 wa_id,
-                header="Select State",
-                body="Choose your state",
+                header=t(user, "select_state"),
+                body=t(user, "choose_state"),
                 rows=build_state_list_rows(page=1),
-                section_title="Indian States",
+                section_title=t(user, "indian_states"),
             )
             return jsonify({"status": "ok"}), 200
         
@@ -554,13 +552,13 @@ def webhook():
         
                 send_list_picker(
                     wa_id,
-                    header="Select State",
-                    body="Choose your state",
+                    header=t(user, "select_state"),
+                    body=t(user, "choose_state"),
                     rows=build_state_list_rows(
                         page=page,
                         preferred_state=user.state_name,
                     ),
-                    section_title="Indian States",
+                    section_title=t(user, "indian_states"),
                 )
                 return jsonify({"status": "ok"}), 200
         
@@ -586,13 +584,13 @@ def webhook():
                 )
                 send_list_picker(
                     wa_id,
-                    header="Select State",
+                    header=t(user, "select_state"),
                     body="Choose your state or tap More",
                     rows=build_state_list_rows(
                         page=1,
                         preferred_state=user.state_name,
                     ),
-                    section_title="Indian States",
+                    section_title=t(user, "indian_states"),
                 )
                 return jsonify({"status": "ok"}), 200
         
@@ -700,7 +698,7 @@ def webhook():
             db.commit()
         
             save_state(db, user, ASK_CATEGORY)
-            send_category_list(wa_id)
+            send_category_list(wa_id, user)
         
             return jsonify({"status": "ok"}), 200
         
@@ -730,7 +728,7 @@ def webhook():
                     wa_id,
                     "Please select a legal category from the list 👇"
                 )
-                send_category_list(wa_id)
+                send_category_list(wa_id, user)
                 return jsonify({"status": "ok"}), 200
         
             # ---------------------------------
@@ -745,7 +743,7 @@ def webhook():
             db.commit()
         
             save_state(db, user, ASK_SUBCATEGORY)
-            send_subcategory_list(wa_id, category)
+            send_subcategory_list(wa_id, user, category)
         
             return jsonify({"status": "ok"}), 200
         # -------------------------------
@@ -825,10 +823,10 @@ def webhook():
         
             send_list_picker(
                 wa_id,
-                header="Select appointment date 👇",
-                body="Available dates",
+                header=t(user, "select_date"),
+                body=t(user, "available_dates"),
                 rows=generate_dates_calendar(skip_today=True),
-                section_title="Next 7 days",
+                section_title=t(user, "next_7_days"),
             )
             return jsonify({"status": "ok"}), 200
         
@@ -870,8 +868,8 @@ def webhook():
                     )
                     send_list_picker(
                         wa_id,
-                        header="Select appointment date 👇",
-                        body="Available dates",
+                        header=t(user, "select_date"),
+                        body=t(user, "available_dates"),
                         rows=generate_dates_calendar(skip_today=True),
                         section_title="Next available days",
                     )
@@ -908,8 +906,8 @@ def webhook():
         
                 send_list_picker(
                     wa_id,
-                    header="Select appointment date 👇",
-                    body="Available dates",
+                    header=t(user, "select_date"),
+                    body=t(user, "available_dates"),
                     rows=generate_dates_calendar(skip_today=True),
                     section_title="Next available days",
                 )
@@ -923,10 +921,10 @@ def webhook():
             save_state(db, user, ASK_SLOT)
             send_list_picker(
                 wa_id,
-                header=f"Select time slot for {format_date_readable(date_str)}",
-                body="Available time slots (IST)",
+                header=f"{t(user, 'select_slot')} {format_date_readable(date_str)}",
+                body=t(user, "available_slots"),
                 rows=slots,
-                section_title="Time Slots",
+                section_title=t(user, "time_slots"),
             )
         
             return jsonify({"status": "ok"}), 200
@@ -971,9 +969,9 @@ def webhook():
                 send_list_picker(
                     wa_id,
                     header=f"Select time slot for {format_date_readable(user.temp_date)}",
-                    body="Available time slots (IST)",
+                    body=t(user, "available_slots"),
                     rows=generate_slots_calendar(user.temp_date),
-                    section_title="Time Slots",
+                    section_title=t(user, "time_slots"),
                 )
                 return jsonify({"status": "ok"}), 200
         
