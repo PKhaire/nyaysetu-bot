@@ -678,7 +678,7 @@ def webhook():
 
                 send_list_picker(
                     wa_id,
-                    header=t(user, "select_district_in", state=state_name)",
+                    header=t(user, "select_district_in", state=state_name),
                     body=t(user, "choose_district"),
                     rows=build_district_list_rows(user.state_name),
                     section_title=get_safe_section_title(user.state_name),
