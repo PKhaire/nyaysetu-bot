@@ -268,7 +268,7 @@ def send_category_list(wa_id, user):
     rows = [
         {
             "id": f"cat_{category.lower().replace(' ', '_').replace('&', 'and')}",
-            "title": get_category_label(category, user),  # category names stay same
+            "title": get_category_label(user.category, user),  # category names stay same
         }
         for category in CATEGORY_SUBCATEGORIES.keys()
     ]
@@ -289,13 +289,8 @@ def send_subcategory_list(wa_id, user, category):
     """
 
     # category example: "cat_business"
-    category_key = (
-        category
-        .replace("cat_", "")
-        .replace("_and_", " & ")
-        .replace("_", " ")
-        .title()
-    )
+    category_key = category.replace("_", " ").title()
+
 
     subcats = CATEGORY_SUBCATEGORIES.get(category_key, []).copy()
 
@@ -776,21 +771,19 @@ def webhook():
             # ---------------------------------
             # Save category & move forward
             # ---------------------------------
-            user.category = (
-                category
-                .replace("_and_", " & ")
-                .replace("_", " ")
-                .title()
-            )
+            
+            user.category = category
             db.commit()
-        
+            
             save_state(db, user, ASK_SUBCATEGORY)
+            
+            # category is already normalized key
             send_subcategory_list(
                 wa_id,
                 user,
-                normalize_category(user.category)
+                user.category
             )
-        
+
             return jsonify({"status": "ok"}), 200
         # -------------------------------
         # Sub Category (STRICT & SAFE)
@@ -803,24 +796,24 @@ def webhook():
             if not interactive_id:
                 return jsonify({"status": "ignored"}), 200
         
-            if not interactive_id.startswith("subcat_"):
+            if not interactive_id.startswith("subcat::"):
                 send_text(wa_id, t(user, "subcategory_retry"))
                 send_subcategory_list(
                     wa_id,
                     user,
-                    normalize_category(user.category)
+                    user.category
                 )
                 return jsonify({"status": "ok"}), 200
-        
+                    
         # ---------------------------------
         # Safe parsing of sub-category ID
         # Expected format:
         # subcat::<category_key>::<subcategory_key>
         # ---------------------------------
         category, subcategory = parse_subcategory_id(interactive_id)
-
-        expected_category = normalize_category(user.category)
-
+        
+        expected_category = user.category
+        
         if not category or category != expected_category:
             send_text(
                 wa_id,
