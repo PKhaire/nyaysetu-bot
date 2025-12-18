@@ -34,6 +34,7 @@ TRANSLATIONS = {
         "ask_state_retry": "Please select or type your *state* 🙂",
         "choose_state": "Choose your state",
         "choose_state_or_more": "Choose your state or tap More",
+        "thanks_state": "Thanks 🙏\nWhich state are you in?",
 
         "ask_district": "Choose district",
         "choose_district": "Choose your district",
@@ -66,6 +67,9 @@ TRANSLATIONS = {
             "⚠️ You cannot select a past or same-day appointment.\n"
             "Please choose a future date 👇"
         ),
+        "available_on": "Available on {date}",
+        "next_7_days": "Next available days",
+
 
         # ---------- SLOT ----------
         "select_slot": "Select time slot for",
@@ -101,6 +105,18 @@ TRANSLATIONS = {
             "Our legal expert will also call you at the scheduled date and time."
         ),
 
+        "appointment_summary": (
+            "✅ Your appointment details:\n"
+            "Name: {name}\n"
+            "State: {state}\n"
+            "District: {district}\n"
+            "Category: {category}\n"
+            "Date: {date}\n"
+            "Slot: {slot}\n"
+            "Fees: ₹{amount} (one-time session) 🙂\n\n"
+            "Please complete payment:"
+        ),
+        
         # ---------- COMMON ----------
         "invalid_selection": "Invalid selection. Please try again 👇",
     },
@@ -134,6 +150,7 @@ TRANSLATIONS = {
         "ask_state_retry": "Apna *state* select ya type karein 🙂",
         "choose_state": "Apna state choose karein",
         "choose_state_or_more": "State choose karein ya More par tap karein",
+        "thanks_state": "Dhanyavaad 🙏\nAap kis state mein hain?",
 
         "ask_district": "District choose karein",
         "choose_district": "Apna district choose karein",
@@ -163,6 +180,8 @@ TRANSLATIONS = {
             "⚠️ Aap past ya same-day appointment select nahi kar sakte.\n"
             "Future date choose karein 👇"
         ),
+        "available_on": "{date} ko available",
+        "next_7_days": "Agale available din",
 
         "select_slot": "Time slot select karein",
         "available_slots": "Available time slots (IST)",
@@ -195,7 +214,18 @@ TRANSLATIONS = {
             "Ab aap yahan apne legal questions pooch sakte hain.\n"
             "Legal expert aapko scheduled date aur time par call karega."
         ),
-
+        
+        "appointment_summary": (
+            "✅ Aapke appointment details:\n"
+            "Naam: {name}\n"
+            "State: {state}\n"
+            "District: {district}\n"
+            "Category: {category}\n"
+            "Date: {date}\n"
+            "Slot: {slot}\n"
+            "Fees: ₹{amount} (one-time session) 🙂\n\n"
+            "Kripya payment complete karein:"
+        ),
         "invalid_selection": "Galat selection. Dobara try karein 👇",
     },
 
@@ -228,6 +258,7 @@ TRANSLATIONS = {
         "ask_state_retry": "कृपया आपले *राज्य* निवडा किंवा लिहा 🙂",
         "choose_state": "राज्य निवडा",
         "choose_state_or_more": "राज्य निवडा किंवा More वर टॅप करा",
+        "thanks_state": "धन्यवाद 🙏\nआपण कोणत्या राज्यात आहात?",
 
         "ask_district": "जिल्हा निवडा",
         "choose_district": "आपला जिल्हा निवडा",
@@ -257,6 +288,8 @@ TRANSLATIONS = {
             "⚠️ आपण मागील किंवा आजची तारीख निवडू शकत नाही.\n"
             "भविष्यातील तारीख निवडा 👇"
         ),
+        "available_on": "{date} रोजी उपलब्ध",
+        "next_7_days": "पुढील उपलब्ध दिवस",
 
         "select_slot": "वेळ निवडा",
         "available_slots": "उपलब्ध वेळा (IST)",
@@ -288,6 +321,18 @@ TRANSLATIONS = {
             "✅ *पेमेंट यशस्वीरीत्या प्राप्त झाले आहे.*\n\n"
             "आता आपण येथे आपले कायदेशीर प्रश्न विचारू शकता.\n"
             "नियोजित तारीख व वेळेस आमचे तज्ज्ञ आपल्याशी संपर्क साधतील."
+        ),
+        
+        "appointment_summary": (
+            "✅ आपल्या अपॉइंटमेंटचे तपशील:\n"
+            "नाव: {name}\n"
+            "राज्य: {state}\n"
+            "जिल्हा: {district}\n"
+            "श्रेणी: {category}\n"
+            "तारीख: {date}\n"
+            "वेळ: {slot}\n"
+            "फीस: ₹{amount} (एकदाच सत्र) 🙂\n\n"
+            "कृपया पेमेंट पूर्ण करा:"
         ),
 
         "invalid_selection": "चुकीची निवड. कृपया पुन्हा प्रयत्न करा 👇",
