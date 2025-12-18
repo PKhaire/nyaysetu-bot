@@ -5,8 +5,12 @@ import time
 from collections import defaultdict, deque
 from datetime import datetime
 from flask import Flask, request, jsonify
+# ===============================
+# TRANSLATIONS
+# ===============================
 from translations import TRANSLATIONS
-
+from category_labels import CATEGORY_LABELS
+from subcategory_labels import SUBCATEGORY_LABELS
 # ===============================
 # CONFIG
 # ===============================
@@ -264,7 +268,7 @@ def send_category_list(wa_id, user):
     rows = [
         {
             "id": f"cat_{category.lower().replace(' ', '_').replace('&', 'and')}",
-            "title": category,  # category names stay same
+            "title": get_category_label(category, user),  # category names stay same
         }
         for category in CATEGORY_SUBCATEGORIES.keys()
     ]
@@ -303,7 +307,7 @@ def send_subcategory_list(wa_id, user, category):
         {
             # ID FORMAT: subcat_<category>_<subcategory>
             "id": f"subcat_{category}_{sub.lower().replace(' ', '_').replace('/', '').replace('(', '').replace(')', '')}",
-            "title": sub[:24],  # WhatsApp title limit
+            "title": get_subcategory_label(sub, user)[:24],  # display label + WhatsApp limit
         }
         for sub in subcats
     ]
@@ -328,6 +332,15 @@ def normalize_category(value):
         .replace(" ", "_")
         .strip()
     )
+
+def get_category_label(category_key, user):
+    lang = user.language or "en"
+    return CATEGORY_LABELS.get(category_key, {}).get(lang, category_key)
+
+
+def get_subcategory_label(subcategory, user):
+    lang = user.language or "en"
+    return SUBCATEGORY_LABELS.get(subcategory, {}).get(lang, subcategory)
 
 def t(user, key, **kwargs):
     lang = user.language or "en"
