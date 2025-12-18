@@ -344,8 +344,16 @@ def get_subcategory_label(subcategory, user):
 
 def t(user, key, **kwargs):
     lang = user.language or "en"
-    text = TRANSLATIONS.get(lang, TRANSLATIONS["en"]).get(key, key)
-    return text.format(**kwargs)
+    lang_map = TRANSLATIONS.get(lang, {})
+
+    if key not in lang_map:
+        logger.warning(f"⚠️ Missing translation: {lang}.{key}")
+
+    return lang_map.get(
+        key,
+        TRANSLATIONS["en"].get(key, key)
+    ).format(**kwargs)
+
 
 # ===============================
 # ROUTES
@@ -534,16 +542,14 @@ def webhook():
         
             user.name = text_body.strip()
             save_state(db, user, ASK_STATE)        
-            send_text(wa_id, t(user, "ask_state"))
-
-        
             send_list_picker(
                 wa_id,
-                header=t(user, "select_state"),
+                header=t(user, "ask_state"),
                 body=t(user, "choose_state"),
                 rows=build_state_list_rows(page=1),
                 section_title=t(user, "indian_states"),
             )
+            
             return jsonify({"status": "ok"}), 200
         
  
@@ -751,7 +757,11 @@ def webhook():
             db.commit()
         
             save_state(db, user, ASK_SUBCATEGORY)
-            send_subcategory_list(wa_id, user, category)
+            send_subcategory_list(
+                wa_id,
+                user,
+                normalize_category(user.category)
+            )
         
             return jsonify({"status": "ok"}), 200
         # -------------------------------
@@ -767,7 +777,11 @@ def webhook():
         
             if not interactive_id.startswith("subcat_"):
                 send_text(wa_id, t(user, "subcategory_retry"))
-                send_subcategory_list(wa_id, user.category)
+                send_subcategory_list(
+                    wa_id,
+                    user,
+                    normalize_category(user.category)
+                )
                 return jsonify({"status": "ok"}), 200
         
             # ---------------------------------
@@ -780,7 +794,11 @@ def webhook():
                     wa_id,
                     "Invalid selection. Please choose a sub-category again 👇"
                 )
-                send_subcategory_list(wa_id, user.category)
+                send_subcategory_list(
+                    wa_id,
+                    user,
+                    normalize_category(user.category)
+                )
                 return jsonify({"status": "ok"}), 200
         
             _, category, subcategory = parts
@@ -788,12 +806,18 @@ def webhook():
             # ---------------------------------
             # Validate category consistency
             # ---------------------------------
-            if normalize_category(category) != normalize_category(user.category):
+            expected_category = normalize_category(user.category)
+            
+            if category != expected_category:
                 send_text(
                     wa_id,
                     t(user, "subcategory_mismatch")
                 )
-                send_subcategory_list(wa_id, user.category)
+                send_subcategory_list(
+                    wa_id,
+                    user,
+                    expected_category
+                )
                 return jsonify({"status": "ok"}), 200
                     
             # ---------------------------------
