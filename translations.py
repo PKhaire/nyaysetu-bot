@@ -35,6 +35,8 @@ TRANSLATIONS = {
         "choose_state": "Choose your state",
         "choose_state_or_more": "Choose your state or tap More",
         "thanks_state": "Thanks 🙏\nWhich state are you in?",
+        "select_state": "Select State",
+        "indian_states": "Indian States",
 
         "ask_district": "Choose district",
         "choose_district": "Choose your district",
@@ -151,6 +153,8 @@ TRANSLATIONS = {
         "choose_state": "Apna state choose karein",
         "choose_state_or_more": "State choose karein ya More par tap karein",
         "thanks_state": "Dhanyavaad 🙏\nAap kis state mein hain?",
+        "select_state": "State select karein",
+        "indian_states": "Indian States",
 
         "ask_district": "District choose karein",
         "choose_district": "Apna district choose karein",
@@ -259,6 +263,8 @@ TRANSLATIONS = {
         "choose_state": "राज्य निवडा",
         "choose_state_or_more": "राज्य निवडा किंवा More वर टॅप करा",
         "thanks_state": "धन्यवाद 🙏\nआपण कोणत्या राज्यात आहात?",
+        "select_state": "राज्य निवडा",
+        "indian_states": "भारतीय राज्ये",
 
         "ask_district": "जिल्हा निवडा",
         "choose_district": "आपला जिल्हा निवडा",
