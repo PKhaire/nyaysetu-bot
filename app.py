@@ -512,12 +512,9 @@ def webhook():
                 return jsonify({"status": "ok"}), 200
         
             user.name = text_body.strip()
-            save_state(db, user, ASK_STATE)
-        
-            send_text(
-                wa_id,
-                "Thanks 🙏\nWhich *state* are you in?"
-            )
+            save_state(db, user, ASK_STATE)        
+            send_text(wa_id, t(user, "ask_state"))
+
         
             send_list_picker(
                 wa_id,
@@ -867,7 +864,8 @@ def webhook():
             readable_date = format_date_readable(date_str)
             for slot in slots:
                 if "description" in slot and slot["description"]:
-                    slot["description"] = f"Available on {readable_date}"
+                    slot["description"] = t(user, "available_on", date=readable_date)
+
             
             # ---------------------------------
             # No slots available (buffer case)
@@ -990,19 +988,20 @@ def webhook():
         
             send_text(
                 wa_id,
-                "✅ *Your appointment details:*\n"
-                f"*Name:* {user.name}\n"
-                f"*State:* {user.state_name}\n"
-                f"*District:* {user.district_name}\n"
-                f"*Category:* {user.category}\n"
-                f"*Date:* {format_date_readable(user.temp_date)}\n"
-                f"*Slot:* {SLOT_MAP[slot_code]}\n"
-                f"*Fees:* ₹{BOOKING_PRICE} (one-time session) 🙂\n\n"
-                f"Please complete payment:\n{payment_link}"
+                t(
+                    user,
+                    "appointment_summary",
+                    name=user.full_name,
+                    state=user.state_name,
+                    district=user.district_name,
+                    category=user.category,
+                    date=readable_date,
+                    slot=slot_text,
+                    amount=499,
+                )
             )
-        
-            return jsonify({"status": "ok"}), 200
-        
+     
+            return jsonify({"status": "ok"}), 200        
         
         # -------------------------------
         # Waiting payment (AI LOCKED)
