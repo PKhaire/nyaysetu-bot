@@ -306,7 +306,11 @@ def send_subcategory_list(wa_id, user, category):
     rows = [
         {
             # ID FORMAT: subcat_<category>_<subcategory>
-            "id": f"subcat_{category}_{sub.lower().replace(' ', '_').replace('/', '').replace('(', '').replace(')', '')}",
+            "id": (
+                "subcat::"
+                f"{category}::"
+                f"{sub.lower().replace(' ', '_').replace('/', '').replace('(', '').replace(')', '')}"
+            ),
             "title": get_subcategory_label(sub, user)[:24],  # display label + WhatsApp limit
         }
         for sub in subcats
@@ -332,6 +336,23 @@ def normalize_category(value):
         .replace(" ", "_")
         .strip()
     )
+
+def parse_subcategory_id(interactive_id: str):
+    """
+    Expected format:
+    subcat::<category_key>::<subcategory_key>
+    Example:
+    subcat::banking_and_finance::not_sure_need_guidance
+    """
+    if not interactive_id.startswith("subcat::"):
+        return None, None
+
+    parts = interactive_id.split("::")
+    if len(parts) != 3:
+        return None, None
+
+    _, category, subcategory = parts
+    return category, subcategory
 
 def get_category_label(category_key, user):
     lang = user.language or "en"
@@ -603,10 +624,10 @@ def webhook():
                 send_text(wa_id, t(user, "ask_state_retry"))
                 send_list_picker(
                     wa_id,
-                    header=t(user, "select_state"),
-                    body=t(user, "choose_state_or_more"),
+                    header=safe_header(t(user, "select_state")),
+                    body=t(user, "choose_state"),
                     rows=build_state_list_rows(
-                        page=1,
+                        page=page,
                         preferred_state=user.state_name,
                     ),
                     section_title=t(user, "indian_states"),
@@ -795,27 +816,12 @@ def webhook():
             # Safe parsing
             # Format: subcat_<category>_<subcategory>
             # ---------------------------------
-            parts = interactive_id.split("_", 2)
-            if len(parts) != 3:
-                send_text(
-                    wa_id,
-                    "Invalid selection. Please choose a sub-category again 👇"
-                )
-                send_subcategory_list(
-                    wa_id,
-                    user,
-                    normalize_category(user.category)
-                )
-                return jsonify({"status": "ok"}), 200
-        
-            _, category, subcategory = parts
-        
-            # ---------------------------------
-            # Validate category consistency
-            # ---------------------------------
+
+            category, subcategory = parse_subcategory_id(interactive_id)
+            
             expected_category = normalize_category(user.category)
             
-            if category != expected_category:
+            if not category or category != expected_category:
                 send_text(
                     wa_id,
                     t(user, "subcategory_mismatch")
@@ -826,45 +832,46 @@ def webhook():
                     expected_category
                 )
                 return jsonify({"status": "ok"}), 200
+            
+                                
+                        # ---------------------------------
+                        # Save sub-category
+                        # ---------------------------------
+                        user.subcategory = subcategory
+                        db.commit()
                     
-            # ---------------------------------
-            # Save sub-category
-            # ---------------------------------
-            user.subcategory = subcategory
-            db.commit()
-        
-            # 📊 Analytics (SAFE)
-            from models import CategoryAnalytics
-        
-            record = (
-                db.query(CategoryAnalytics)
-                .filter_by(category=category, subcategory=subcategory)
-                .first()
-            )
-        
-            if record:
-                record.count += 1
-            else:
-                db.add(
-                    CategoryAnalytics(
-                        category=category,
-                        subcategory=subcategory,
-                        count=1,
-                    )
-                )
-        
-            db.commit()
-        
-            save_state(db, user, ASK_DATE)
-        
-            send_list_picker(
-                wa_id,
-                header=t(user, "select_date"),
-                body=t(user, "available_dates"),
-                rows=generate_dates_calendar(skip_today=True),
-                section_title=t(user, "next_7_days"),
-            )
-            return jsonify({"status": "ok"}), 200
+                        # 📊 Analytics (SAFE)
+                        from models import CategoryAnalytics
+                    
+                        record = (
+                            db.query(CategoryAnalytics)
+                            .filter_by(category=category, subcategory=subcategory)
+                            .first()
+                        )
+                    
+                        if record:
+                            record.count += 1
+                        else:
+                            db.add(
+                                CategoryAnalytics(
+                                    category=category,
+                                    subcategory=subcategory,
+                                    count=1,
+                                )
+                            )
+                    
+                        db.commit()
+                    
+                        save_state(db, user, ASK_DATE)
+                    
+                        send_list_picker(
+                            wa_id,
+                            header=t(user, "select_date"),
+                            body=t(user, "available_dates"),
+                            rows=generate_dates_calendar(skip_today=True),
+                            section_title=t(user, "next_7_days"),
+                        )
+                        return jsonify({"status": "ok"}), 200
         
         # -------------------------------
         # Date (STRICT & SAFE)
