@@ -354,6 +354,14 @@ def t(user, key, **kwargs):
         TRANSLATIONS["en"].get(key, key)
     ).format(**kwargs)
 
+def safe_header(text: str) -> str:
+    # WhatsApp list headers do NOT allow markdown
+    return (
+        text
+        .replace("*", "")
+        .replace("_", "")
+        .replace("~", "")
+    )
 
 # ===============================
 # ROUTES
@@ -544,8 +552,8 @@ def webhook():
             save_state(db, user, ASK_STATE)        
             send_list_picker(
                 wa_id,
-                header=t(user, "ask_state"),
-                body=t(user, "choose_state"),
+                header=safe_header(t(user, "select_state")),  
+                body=t(user, "choose_state"),                 
                 rows=build_state_list_rows(page=1),
                 section_title=t(user, "indian_states"),
             )
@@ -567,7 +575,7 @@ def webhook():
         
                 send_list_picker(
                     wa_id,
-                    header=t(user, "select_state"),
+                    header=safe_header(t(user, "select_state")),
                     body=t(user, "choose_state"),
                     rows=build_state_list_rows(
                         page=page,
@@ -575,7 +583,6 @@ def webhook():
                     ),
                     section_title=t(user, "indian_states"),
                 )
-                return jsonify({"status": "ok"}), 200
         
             # ---------------------------------
             # State selected from list
