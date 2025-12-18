@@ -812,66 +812,66 @@ def webhook():
                 )
                 return jsonify({"status": "ok"}), 200
         
-            # ---------------------------------
-            # Safe parsing
-            # Format: subcat_<category>_<subcategory>
-            # ---------------------------------
+        # ---------------------------------
+        # Safe parsing of sub-category ID
+        # Expected format:
+        # subcat::<category_key>::<subcategory_key>
+        # ---------------------------------
+        category, subcategory = parse_subcategory_id(interactive_id)
 
-            category, subcategory = parse_subcategory_id(interactive_id)
-            
-            expected_category = normalize_category(user.category)
-            
-            if not category or category != expected_category:
-                send_text(
-                    wa_id,
-                    t(user, "subcategory_mismatch")
+        expected_category = normalize_category(user.category)
+
+        if not category or category != expected_category:
+            send_text(
+                wa_id,
+                t(user, "subcategory_mismatch")
+            )
+            send_subcategory_list(
+                wa_id,
+                user,
+                expected_category
+            )
+            return jsonify({"status": "ok"}), 200
+
+        # ---------------------------------
+        # Save sub-category
+        # ---------------------------------
+        user.subcategory = subcategory
+        db.commit()
+
+        # 📊 Analytics (SAFE)
+        from models import CategoryAnalytics
+
+        record = (
+            db.query(CategoryAnalytics)
+            .filter_by(category=category, subcategory=subcategory)
+            .first()
+        )
+
+        if record:
+            record.count += 1
+        else:
+            db.add(
+                CategoryAnalytics(
+                    category=category,
+                    subcategory=subcategory,
+                    count=1,
                 )
-                send_subcategory_list(
-                    wa_id,
-                    user,
-                    expected_category
-                )
-                return jsonify({"status": "ok"}), 200
-            
-                                
-                        # ---------------------------------
-                        # Save sub-category
-                        # ---------------------------------
-                        user.subcategory = subcategory
-                        db.commit()
-                    
-                        # 📊 Analytics (SAFE)
-                        from models import CategoryAnalytics
-                    
-                        record = (
-                            db.query(CategoryAnalytics)
-                            .filter_by(category=category, subcategory=subcategory)
-                            .first()
-                        )
-                    
-                        if record:
-                            record.count += 1
-                        else:
-                            db.add(
-                                CategoryAnalytics(
-                                    category=category,
-                                    subcategory=subcategory,
-                                    count=1,
-                                )
-                            )
-                    
-                        db.commit()
-                    
-                        save_state(db, user, ASK_DATE)
-                    
-                        send_list_picker(
-                            wa_id,
-                            header=t(user, "select_date"),
-                            body=t(user, "available_dates"),
-                            rows=generate_dates_calendar(skip_today=True),
-                            section_title=t(user, "next_7_days"),
-                        )
-                        return jsonify({"status": "ok"}), 200
+            )
+
+        db.commit()
+
+        save_state(db, user, ASK_DATE)
+
+        send_list_picker(
+            wa_id,
+            header=t(user, "select_date"),
+            body=t(user, "available_dates"),
+            rows=generate_dates_calendar(skip_today=True),
+            section_title=t(user, "next_7_days"),
+        )
+        return jsonify({"status": "ok"}), 200
+                         
         
         # -------------------------------
         # Date (STRICT & SAFE)
