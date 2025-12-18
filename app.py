@@ -268,7 +268,11 @@ def send_category_list(wa_id, user):
     rows = [
         {
             "id": f"cat_{category.lower().replace(' ', '_').replace('&', 'and')}",
-            "title": get_category_label(user.category, user),  # category names stay same
+            # ✅ Use loop variable, NOT user.category
+            "title": get_category_label(
+                category.lower().replace(' ', '_').replace('&', 'and'),
+                user
+            ),
         }
         for category in CATEGORY_SUBCATEGORIES.keys()
     ]
