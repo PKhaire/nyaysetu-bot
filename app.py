@@ -350,9 +350,19 @@ def parse_subcategory_id(interactive_id: str):
     return category, subcategory
 
 def get_category_label(category_key, user):
+    """
+    category_key: canonical key (e.g. banking_and_finance)
+    """
     lang = user.language or "en"
-    return CATEGORY_LABELS.get(category_key, {}).get(lang, category_key)
 
+    display_key = (
+        category_key
+        .replace("_and_", " & ")
+        .replace("_", " ")
+        .title()
+    )
+
+    return CATEGORY_LABELS.get(display_key, {}).get(lang, display_key)
 
 def get_subcategory_label(subcategory, user):
     lang = user.language or "en"
