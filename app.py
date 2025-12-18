@@ -50,69 +50,77 @@ BOOKING_KEYWORDS = {
 CATEGORY_SUBCATEGORIES = {
     "Family": [
         "Divorce",
-        "Maintenance / Alimony",
-        "Child Custody",
+        "Maintenance and Alimony",
         "Domestic Violence",
+        "Child Custody",
         "Dowry Harassment",
-        "Other Family Issue",
+        "Other Family Matter",
+        "Not Sure Need Guidance",
     ],
 
     "Criminal": [
-        "FIR / Police Case",
-        "Bail",
-        "False FIR",
-        "Theft / Assault",
+        "Police Case or FIR",
+        "Bail Matter",
         "Cyber Crime",
+        "Theft or Assault",
+        "False FIR",
         "Police Harassment",
+        "Not Sure Need Guidance",
     ],
 
     "Accident": [
         "Road Accident",
-        "Motor Accident Claim (MACT)",
-        "Hit and Run",
+        "Motor Accident Claim",
         "Injury Compensation",
         "Death Due to Accident",
+        "Hit and Run Accident",
+        "Not Sure Need Guidance",
     ],
 
     "Property": [
-        "Property / Land Dispute",
+        "Property or Land Dispute",
         "Illegal Possession",
-        "Builder Delay / Fraud",
-        "Partition / Inheritance",
-        "Agreement / Sale Deed Issue",
-        "Injunction",
+        "Builder Delay or Fraud",
+        "Sale Deed or Agreement Issue",
+        "Partition or Inheritance",
+        "Injunction Case",
+        "Not Sure Need Guidance",
     ],
 
     "Business": [
-        "Cheque Bounce (Section 138)",
-        "Partnership Dispute",
-        "Recovery of Money",
-        "Business Fraud",
+        "Cheque Bounce Case",
+        "Money Recovery",
         "Contract Dispute",
+        "Partnership Dispute",
+        "Business Fraud",
+        "Not Sure Need Guidance",
     ],
 
     "Job": [
         "Wrongful Termination",
         "Salary Not Paid",
         "Workplace Harassment",
-        "Employment Contract Issue",
-        "PF / Gratuity Issue",
+        "Employment Issue",
+        "PF or Gratuity Issue",
+        "Not Sure Need Guidance",
     ],
 
     "Consumer": [
         "Consumer Complaint",
-        "Refund / Deficiency",
+        "Refund Issue",
+        "Online Fraud",
         "Service Deficiency",
-        "Online Fraud / Scam",
         "Warranty Issue",
+        "Not Sure Need Guidance",
     ],
 
     "Banking & Finance": [
         "Loan Recovery Harassment",
-        "Credit Card Issue",
-        "Bank Account Freeze",
         "Fraudulent Transaction",
-        "Insurance Claim Dispute",
+        "Credit Card Problem",
+        "Bank Account Freeze",
+        "Insurance Claim Issue",
+        "Not Sure Need Guidance",
     ],
 
     "Other": [
@@ -120,9 +128,9 @@ CATEGORY_SUBCATEGORIES = {
         "Legal Notice Drafting",
         "Agreement Drafting",
         "Document Verification",
+        "Not Sure Need Guidance",
     ],
 }
-
 
 # ===============================
 # INIT
