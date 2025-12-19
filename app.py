@@ -1091,7 +1091,17 @@ def webhook():
             db.commit()
         
             save_state(db, user, WAITING_PAYMENT)
-        
+            
+            # ---------------------------------
+            # SAFE derivation for summary
+            # ---------------------------------
+            readable_date = (
+                format_date_readable(user.temp_date)
+                if user.temp_date else "N/A"
+            )
+            
+            slot_text = SLOT_MAP.get(slot_code, "N/A")
+            
             send_text(
                 wa_id,
                 t(
@@ -1101,8 +1111,8 @@ def webhook():
                     state=user.state_name or "N/A",
                     district=user.district_name or "N/A",
                     category=user.category or "N/A",
-                    date=readable_date or "N/A",
-                    slot=slot_text or "N/A",
+                    date=readable_date,
+                    slot=slot_text,
                     amount=499,
                 )
             )
