@@ -285,36 +285,65 @@ def send_category_list(wa_id, user):
         rows=rows,
     )
 
-
 def send_subcategory_list(wa_id, user, category):
     """
     Sends sub-categories strictly from CATEGORY_SUBCATEGORIES.
     Ensures 'General Legal Query' is always present.
+    Category MUST be canonical key like: banking_and_finance
     """
 
-    # category example: "cat_business"
+    # ===============================
+    # SAFETY GUARD — NEVER CRASH
+    # ===============================
+    if not category:
+        logger.error(
+            "send_subcategory_list called with category=None | wa_id=%s | state=%s",
+            wa_id,
+            user.state,
+        )
+        save_state(db, user, ASK_CATEGORY)
+        send_category_list(wa_id, user)
+        return
+
+    # ===============================
+    # NORMALIZE CATEGORY (DEFENSIVE)
+    # ===============================
+    # Handle accidental prefixes like "cat_banking_and_finance"
+    if category.startswith("cat_"):
+        category = category.replace("cat_", "", 1)
+
+    # Display label (safe now)
     category_key = category.replace("_", " ").title()
 
-
+    # ===============================
+    # FETCH SUB-CATEGORIES
+    # ===============================
     subcats = CATEGORY_SUBCATEGORIES.get(category_key, []).copy()
 
-    # ✅ Ensure General Legal Query always exists
+    # ✅ Ensure "General Legal Query" always exists
     if "General Legal Query" not in subcats:
         subcats.append("General Legal Query")
 
+    # ===============================
+    # BUILD WHATSAPP ROWS
+    # ===============================
     rows = [
         {
-            # ID FORMAT: subcat_<category>_<subcategory>
+            # ID FORMAT: subcat::<category_key>::<subcategory_key>
             "id": (
                 "subcat::"
                 f"{category}::"
                 f"{sub.lower().replace(' ', '_').replace('/', '').replace('(', '').replace(')', '')}"
             ),
-            "title": get_subcategory_label(sub, user)[:24],  # display label + WhatsApp limit
+            # WhatsApp title limit = 24 chars
+            "title": get_subcategory_label(sub, user)[:24],
         }
         for sub in subcats
     ]
 
+    # ===============================
+    # SEND LIST PICKER
+    # ===============================
     send_list_picker(
         wa_id,
         header=f"{category_key} – {t(user, 'select_subcategory')}",
@@ -322,6 +351,7 @@ def send_subcategory_list(wa_id, user, category):
         section_title=t(user, "select_subcategory"),
         rows=rows,
     )
+
     
 def normalize_category(value):
     """
@@ -828,6 +858,21 @@ def webhook():
         
         expected_category = user.category
         
+        # ===============================
+        # SAFETY: CATEGORY MUST EXIST
+        # ===============================
+        if not expected_category:
+            logger.error(
+                "Category missing during ASK_SUBCATEGORY | wa_id=%s",
+                wa_id,
+            )
+            save_state(db, user, ASK_CATEGORY)
+            send_category_list(wa_id, user)
+            return jsonify({"status": "ok"}), 200
+        
+        # ===============================
+        # SUBCATEGORY VALIDATION
+        # ===============================
         if not category or category != expected_category:
             send_text(
                 wa_id,
