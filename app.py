@@ -1097,16 +1097,16 @@ def webhook():
                 t(
                     user,
                     "appointment_summary",
-                    name=user.full_name,
-                    state=user.state_name,
-                    district=user.district_name,
-                    category=user.category,
-                    date=readable_date,
-                    slot=slot_text,
+                    name=user.name or "N/A",
+                    state=user.state_name or "N/A",
+                    district=user.district_name or "N/A",
+                    category=user.category or "N/A",
+                    date=readable_date or "N/A",
+                    slot=slot_text or "N/A",
                     amount=499,
                 )
             )
-     
+
             return jsonify({"status": "ok"}), 200        
         
         # -------------------------------
