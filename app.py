@@ -847,101 +847,78 @@ def webhook():
             )
 
             return jsonify({"status": "ok"}), 200
+
         # -------------------------------
         # Sub Category (STRICT & SAFE)
-        # -------------------------------       
-
+        # -------------------------------
         if user.state == ASK_SUBCATEGORY:
-            # ---------------------------------
-            # Ignore empty / status events
-            # ---------------------------------
+        
             if not interactive_id:
                 return jsonify({"status": "ignored"}), 200
         
             if not interactive_id.startswith("subcat::"):
-                send_text(wa_id, t(user, "subcategory_retry"))
-                send_subcategory_list(
+                logger.info(
+                    "Invalid subcategory input | wa_id=%s | id=%s",
                     wa_id,
-                    user,
-                    user.category
+                    interactive_id,
                 )
+                send_text(wa_id, t(user, "subcategory_retry"))
+                send_subcategory_list(wa_id, user, user.category)
                 return jsonify({"status": "ok"}), 200
-                    
-        # ---------------------------------
-        # Safe parsing of sub-category ID
-        # Expected format:
-        # subcat::<category_key>::<subcategory_key>
-        # ---------------------------------
-        category, subcategory = parse_subcategory_id(interactive_id)
         
-        expected_category = user.category
+            # Parse ID
+            parsed_category, subcategory = parse_subcategory_id(interactive_id)
+            expected_category = user.category
         
-        # ===============================
-        # SAFETY: CATEGORY MUST EXIST
-        # ===============================
-        if not expected_category:
-            logger.error(
-                "Category missing during ASK_SUBCATEGORY | wa_id=%s",
-                wa_id,
-            )
-            save_state(db, user, ASK_CATEGORY)
-            send_category_list(wa_id, user)
-            return jsonify({"status": "ok"}), 200
+            if not expected_category:
+                logger.error(
+                    "Category missing during ASK_SUBCATEGORY | wa_id=%s",
+                    wa_id,
+                )
+                save_state(db, user, ASK_CATEGORY)
+                send_category_list(wa_id, user)
+                return jsonify({"status": "ok"}), 200
         
-        # ===============================
-        # SUBCATEGORY VALIDATION
-        # ===============================
-        if not category or category != expected_category:
-            send_text(
-                wa_id,
-                t(user, "subcategory_mismatch")
+            if not parsed_category or parsed_category != expected_category:
+                send_text(wa_id, t(user, "subcategory_mismatch"))
+                send_subcategory_list(wa_id, user, expected_category)
+                return jsonify({"status": "ok"}), 200
+        
+            # Save subcategory
+            user.subcategory = subcategory
+            db.commit()
+        
+            # Analytics
+            from models import CategoryAnalytics
+            record = (
+                db.query(CategoryAnalytics)
+                .filter_by(category=parsed_category, subcategory=subcategory)
+                .first()
             )
-            send_subcategory_list(
-                wa_id,
-                user,
-                expected_category
-            )
-            return jsonify({"status": "ok"}), 200
-
-        # ---------------------------------
-        # Save sub-category
-        # ---------------------------------
-        user.subcategory = subcategory
-        db.commit()
-
-        # 📊 Analytics (SAFE)
-        from models import CategoryAnalytics
-
-        record = (
-            db.query(CategoryAnalytics)
-            .filter_by(category=category, subcategory=subcategory)
-            .first()
-        )
-
-        if record:
-            record.count += 1
-        else:
-            db.add(
-                CategoryAnalytics(
-                    category=category,
+        
+            if record:
+                record.count += 1
+            else:
+                db.add(CategoryAnalytics(
+                    category=parsed_category,
                     subcategory=subcategory,
                     count=1,
-                )
+                ))
+        
+            db.commit()
+        
+            save_state(db, user, ASK_DATE)
+        
+            send_list_picker(
+                wa_id,
+                header=t(user, "select_date"),
+                body=t(user, "available_dates"),
+                rows=generate_dates_calendar(skip_today=True),
+                section_title=t(user, "next_7_days"),
             )
-
-        db.commit()
-
-        save_state(db, user, ASK_DATE)
-
-        send_list_picker(
-            wa_id,
-            header=t(user, "select_date"),
-            body=t(user, "available_dates"),
-            rows=generate_dates_calendar(skip_today=True),
-            section_title=t(user, "next_7_days"),
-        )
-        return jsonify({"status": "ok"}), 200
-                         
+        
+            return jsonify({"status": "ok"}), 200
+                       
         
         # -------------------------------
         # Date (STRICT & SAFE)
