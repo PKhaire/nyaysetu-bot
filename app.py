@@ -403,16 +403,34 @@ def get_subcategory_label(subcategory, user):
     return SUBCATEGORY_LABELS.get(subcategory, {}).get(lang, subcategory)
 
 def t(user, key, **kwargs):
-    lang = user.language or "en"
-    lang_map = TRANSLATIONS.get(lang, {})
+    """
+    Translation helper with language normalization and safe fallback
+    """
 
-    if key not in lang_map:
-        logger.warning(f"⚠️ Missing translation: {lang}.{key}")
+    # Normalize user.language → translation key
+    lang_map = {
+        "English": "en",
+        "Hinglish": "hi",
+        "Hindi": "hi",
+        "Marathi": "mr",
+        "en": "en",
+        "hi": "hi",
+        "mr": "mr",
+    }
 
-    return lang_map.get(
+    lang = lang_map.get(user.language, "en")
+
+    translations = TRANSLATIONS.get(lang, {})
+
+    if key not in translations:
+        logger.warning("⚠️ Missing translation: %s.%s", lang, key)
+
+    text = translations.get(
         key,
         TRANSLATIONS["en"].get(key, key)
-    ).format(**kwargs)
+    )
+
+    return text.format(**kwargs) if kwargs else text
 
 def safe_header(text: str) -> str:
     # WhatsApp list headers do NOT allow markdown
