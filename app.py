@@ -352,20 +352,6 @@ def send_subcategory_list(wa_id, user, category):
         rows=rows,
     )
 
-    
-def normalize_category(value):
-    """
-    Normalizes category values for safe comparison
-    Example:
-    'Banking & Finance' -> 'banking_and_finance'
-    """
-    return (
-        value.lower()
-        .replace("&", "and")
-        .replace(" ", "_")
-        .strip()
-    )
-
 def parse_subcategory_id(interactive_id: str):
     """
     Expected format:
@@ -538,6 +524,23 @@ def webhook():
         if user.state == ASK_LANGUAGE:
             if interactive_id in ("lang_en", "lang_hi", "lang_mr"):
                 user.language = interactive_id.replace("lang_", "")
+                db.commit()
+        
+                # ✅ Marathi default state (prefill only)
+                if user.language == "mr":
+                    user.state_name = "Maharashtra"
+        
+                    # ✅ Marathi greeting — ONLY ONCE
+                    if not getattr(user, "marathi_greeted", False):
+                        send_text(
+                            wa_id,
+                            "🙏 जय महाराष्ट्र! 🇮🇳\n"
+                            "आपण NyaySetu मध्ये स्वागत आहे ⚖️"
+                        )
+                        user.marathi_greeted = True
+        
+                    db.commit()
+        
                 save_state(db, user, ASK_AI_OR_BOOK)
         
                 send_buttons(
@@ -548,6 +551,7 @@ def webhook():
                         {"id": "opt_book", "title": t(user, "book_consult")},
                     ],
                 )
+        
             return jsonify({"status": "ok"}), 200
 
         # ===============================
@@ -644,6 +648,20 @@ def webhook():
         # -------------------------------
         if user.state == ASK_STATE:
             state_name = None
+            # ✅ AUTO-SKIP STATE for Marathi (prefilled Maharashtra)
+            if user.language == "mr" and user.state_name:
+                save_state(db, user, ASK_DISTRICT)
+        
+                from services.location_service import get_safe_section_title
+        
+                send_list_picker(
+                    wa_id,
+                    header=t(user, "select_district_in", state=user.state_name),
+                    body=t(user, "choose_district"),
+                    rows=build_district_list_rows(user.state_name),
+                    section_title=get_safe_section_title(user.state_name),
+                )
+                return jsonify({"status": "ok"}), 200
         
             # ---------------------------------
             # Pagination: "More states..."
@@ -684,7 +702,7 @@ def webhook():
                     header=safe_header(t(user, "select_state")),
                     body=t(user, "choose_state"),
                     rows=build_state_list_rows(
-                        page=page,
+                        page=1,
                         preferred_state=user.state_name,
                     ),
                     section_title=t(user, "indian_states"),
@@ -1091,7 +1109,7 @@ def webhook():
             db.commit()
         
             save_state(db, user, WAITING_PAYMENT)
-            
+                        
             # ---------------------------------
             # SAFE derivation for summary
             # ---------------------------------
@@ -1102,33 +1120,67 @@ def webhook():
             
             slot_text = SLOT_MAP.get(slot_code, "N/A")
             
+            # ---------------------------------
+            # Appointment Summary (SAFE)
+            # ---------------------------------
             send_text(
                 wa_id,
                 t(
                     user,
                     "appointment_summary",
-                    name=user.name or "N/A",
+                    name=getattr(user, "full_name", None)
+                         or getattr(user, "name", "N/A"),
                     state=user.state_name or "N/A",
                     district=user.district_name or "N/A",
-                    category=user.category or "N/A",
+                    category=get_category_label(user.category, user),
                     date=readable_date,
                     slot=slot_text,
                     amount=499,
                 )
             )
+            
+            # ---------------------------------
+            # SEND PAYMENT LINK (CRITICAL FIX)
+            # ---------------------------------
+            if user.last_payment_link:
+                send_text(
+                    wa_id,
+                    f"💳 {t(user, 'payment_link_text')}\n{user.last_payment_link}"
+                )
+            else:
+                logger.error(
+                    "Payment link missing | wa_id=%s | user_id=%s",
+                    wa_id,
+                    user.id,
+                )
+                send_text(
+                    wa_id,
+                    t(user, "payment_link_error")
+                )
+            
+            save_state(db, user, WAITING_PAYMENT)
+            return jsonify({"status": "ok"}), 200
 
-            return jsonify({"status": "ok"}), 200        
-        
         # -------------------------------
-        # Waiting payment (AI LOCKED)
+        # Waiting payment (SAFE & NON-SPAM)
         # -------------------------------
         if user.state == WAITING_PAYMENT:
-            send_text(
-                wa_id,
-                f"💳 Your payment link is active:\n{user.last_payment_link}"
-            )
-            return jsonify({"status": "ok"}), 200 
-            
+        
+            # Only respond if user sends actual text
+            if text_body:
+                if user.last_payment_link:
+                    send_text(
+                        wa_id,
+                        f"💳 {t(user, 'payment_link_text')}\n{user.last_payment_link}"
+                    )
+                else:
+                    send_text(
+                        wa_id,
+                        t(user, "payment_link_error")
+                    )
+        
+            return jsonify({"status": "ok"}), 200
+
         # -------------------------------
         # AI Chat (ONLY AFTER PAYMENT)
         # -------------------------------
