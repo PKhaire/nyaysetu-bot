@@ -4,13 +4,15 @@ from datetime import datetime, date, time, timedelta
 import uuid
 from zoneinfo import ZoneInfo
 IST = ZoneInfo("Asia/Kolkata")
-
-from config import BOOKING_PRICE, BOOKING_CUTOFF_HOURS
+import razorpay
+from config import BOOKING_PRICE, BOOKING_CUTOFF_HOURS, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
 from models import Booking   # ✅ REQUIRED IMPORT
 
 SLOT_BUFFER_HOURS = 2  # Same buffer as backend
 
-
+razorpay_client = razorpay.Client(
+    auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET)
+)
 
 # --------------------
 # Slot configuration
@@ -90,10 +92,6 @@ def generate_slots_calendar(date_str):
 # --------------------
 # Time slot validation
 # --------------------
-from datetime import datetime, date, time, timedelta
-
-SLOT_BUFFER_HOURS = 2  # Minimum buffer from current time
-
 def validate_slot(date_str, slot_code):
     """
     Reject past slots and enforce minimum 2-hour buffer.
@@ -155,8 +153,32 @@ def create_booking_temp(db, user, name, state, district, category, date, slot_co
     db.commit()
     db.refresh(booking)
 
-    return booking, f"https://pay.nyaysetu.in/{token}"
+    # 🔐 CREATE RAZORPAY PAYMENT LINK
+    payment_link = razorpay_client.payment_link.create({
+        "amount": BOOKING_PRICE * 100,  # ₹ → paisa
+        "currency": "INR",
+        "accept_partial": False,
+        "description": "NyaySetu Legal Consultation",
+        "customer": {
+            "name": name,
+            "contact": user.whatsapp_id
+        },
+        "notify": {
+            "sms": False,
+            "email": False
+        },
+        "notes": {
+            "booking_token": token
+        },
+        "callback_url": "https://yourdomain.com/payment_webhook",
+        "callback_method": "post"
+    })
 
+    # Save Razorpay reference
+    booking.razorpay_payment_link_id = payment_link["id"]
+    db.commit()
+
+    return booking, payment_link["short_url"]
 
 # --------------------
 # Payment confirmation
@@ -165,7 +187,10 @@ def confirm_booking_after_payment(db, token):
     booking = db.query(Booking).filter_by(payment_token=token).first()
     if not booking:
         return None, "Booking not found."
-        
+
+    if booking.status == "PAID":
+        return None, "Already paid."
+
     booking.status = "PAID"
     db.commit()
 
