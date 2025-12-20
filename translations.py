@@ -106,6 +106,7 @@ TRANSLATIONS = {
             "You may now ask your legal questions here.\n"
             "Our legal expert will also call you at the scheduled date and time."
         ),
+       "payment_link_text": "Your payment link is active:",
 
         "appointment_summary": (
             "✅ Your appointment details:\n"
@@ -218,7 +219,8 @@ TRANSLATIONS = {
             "Ab aap yahan apne legal questions pooch sakte hain.\n"
             "Legal expert aapko scheduled date aur time par call karega."
         ),
-        
+        "payment_link_text": "Aapka payment link active hai:",
+
         "appointment_summary": (
             "✅ Aapke appointment details:\n"
             "Naam: {name}\n"
@@ -328,6 +330,7 @@ TRANSLATIONS = {
             "आता आपण येथे आपले कायदेशीर प्रश्न विचारू शकता.\n"
             "नियोजित तारीख व वेळेस आमचे तज्ज्ञ आपल्याशी संपर्क साधतील."
         ),
+        "payment_link_text": "आपला पेमेंट लिंक सक्रिय आहे:",
         
         "appointment_summary": (
             "✅ आपल्या अपॉइंटमेंटचे तपशील:\n"
