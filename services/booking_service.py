@@ -155,7 +155,7 @@ def create_booking_temp(db, user, name, state, district, category, date, slot_co
 
     # 🔐 CREATE RAZORPAY PAYMENT LINK
     payment_link = razorpay_client.payment_link.create({
-        "amount": BOOKING_PRICE * 100,  # ₹ → paisa
+        "amount": BOOKING_PRICE * 100,  # paisa
         "currency": "INR",
         "accept_partial": False,
         "description": "NyaySetu Legal Consultation",
@@ -169,9 +169,7 @@ def create_booking_temp(db, user, name, state, district, category, date, slot_co
         },
         "notes": {
             "booking_token": token
-        },
-        "callback_url": "https://yourdomain.com/payment_webhook",
-        "callback_method": "post"
+        }
     })
 
     # Save Razorpay reference
