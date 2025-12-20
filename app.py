@@ -1248,8 +1248,31 @@ def webhook():
 # ===============================
 @app.route("/payment_webhook", methods=["POST"])
 def payment_webhook():
-    data = request.get_json(force=True) or {}
-    token = data.get("payment_token")
+    payload = request.data
+    signature = request.headers.get("X-Razorpay-Signature")
+
+    import hmac
+    import hashlib
+    from config import RAZORPAY_WEBHOOK_SECRET
+
+    expected_signature = hmac.new(
+        RAZORPAY_WEBHOOK_SECRET.encode(),
+        payload,
+        hashlib.sha256
+    ).hexdigest()
+
+    if not hmac.compare_digest(expected_signature, signature):
+        return jsonify({"error": "Invalid webhook signature"}), 403
+
+    data = request.get_json()
+
+    try:
+        token = (
+            data["payload"]["payment_link"]["entity"]
+            ["notes"]["booking_token"]
+        )
+    except Exception:
+        return jsonify({"error": "Invalid payload"}), 400
 
     db = get_db()
     try:
@@ -1257,13 +1280,16 @@ def payment_webhook():
         if not booking:
             return jsonify({"error": msg}), 404
 
+        # Enable paid session
         booking.user.ai_enabled = True
         booking.user.free_ai_count = 0
         save_state(db, booking.user, PAYMENT_CONFIRMED)
+
         send_text(
             booking.user.whatsapp_id,
             t(booking.user, "payment_success")
         )
+
         return jsonify({"status": "confirmed"}), 200
     finally:
         db.close()
