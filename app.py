@@ -649,10 +649,13 @@ def webhook():
         if user.state == ASK_STATE:
             state_name = None
             # ✅ AUTO-SKIP STATE for Marathi (prefilled Maharashtra)
-            if user.language == "mr" and user.state_name:
+            if (
+                user.language == "mr"
+                and user.state_name == "Maharashtra"
+                and not interactive_id
+                and not text_body
+            ):
                 save_state(db, user, ASK_DISTRICT)
-        
-                from services.location_service import get_safe_section_title
         
                 send_list_picker(
                     wa_id,
@@ -662,7 +665,7 @@ def webhook():
                     section_title=get_safe_section_title(user.state_name),
                 )
                 return jsonify({"status": "ok"}), 200
-        
+
             # ---------------------------------
             # Pagination: "More states..."
             # ---------------------------------
