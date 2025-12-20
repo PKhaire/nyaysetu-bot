@@ -18,6 +18,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 # Razorpay (optional) — set both to enable real payments
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
+RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
 
 # Booking / business settings
 BOOKING_PRICE = int(os.getenv("BOOKING_PRICE", "499"))
