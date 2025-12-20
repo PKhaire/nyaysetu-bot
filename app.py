@@ -529,6 +529,7 @@ def webhook():
                 # ✅ Marathi default state (prefill only)
                 if user.language == "mr":
                     user.state_name = "Maharashtra"
+                    user.auto_state_prefilled = True   # ⭐ ADD THIS LINE
         
                     # ✅ Marathi greeting — ONLY ONCE
                     if not getattr(user, "marathi_greeted", False):
@@ -552,7 +553,7 @@ def webhook():
                     ],
                 )
         
-            return jsonify({"status": "ok"}), 200
+            return jsonify({"status": "ok"}), 200       
 
         # ===============================
         # AI OR BOOK
@@ -631,27 +632,87 @@ def webhook():
                 return jsonify({"status": "ok"}), 200
         
             user.name = text_body.strip()
-            save_state(db, user, ASK_STATE)        
+            
+            # ✅ Marathi users: auto-skip state
+            if user.language == "mr" and user.state_name == "Maharashtra":
+                save_state(db, user, ASK_DISTRICT)
+            
+                send_list_picker(
+                    wa_id,
+                    header=t(user, "select_district_in", state=user.state_name),
+                    body=t(user, "choose_district"),
+                    rows=build_district_list_rows(user.state_name),
+                    section_title=get_safe_section_title(user.state_name),
+                )
+                return jsonify({"status": "ok"}), 200
+            
+            # ✅ All other users
+            save_state(db, user, ASK_STATE)
+            
             send_list_picker(
                 wa_id,
-                header=safe_header(t(user, "select_state")),  
-                body=t(user, "choose_state"),                 
+                header=safe_header(t(user, "select_state")),
+                body=t(user, "choose_state"),
                 rows=build_state_list_rows(page=1),
                 section_title=t(user, "indian_states"),
             )
             
             return jsonify({"status": "ok"}), 200
+
         
  
+# -------------------------------
+# Ask Name
+# -------------------------------
+if user.state == ASK_NAME:
+    if not text_body or len(text_body.strip()) < 2:
+        send_text(wa_id, t(user, "ask_name_retry"))
+        return jsonify({"status": "ok"}), 200
+
+    user.name = text_body.strip()
+    db.commit()
+
+    # ✅ Marathi users: auto-apply Maharashtra AFTER name
+    if user.language == "mr":
+        user.state_name = "Maharashtra"
+        user.auto_state_applied = True
+        db.commit()
+
+        save_state(db, user, ASK_DISTRICT)
+
+        send_list_picker(
+            wa_id,
+            header=t(user, "select_district_in", state=user.state_name),
+            body=t(user, "choose_district"),
+            rows=build_district_list_rows(user.state_name),
+            section_title=get_safe_section_title(user.state_name),
+        )
+        return jsonify({"status": "ok"}), 200
+
+    # ✅ All other users → ask state
+    save_state(db, user, ASK_STATE)
+
+    send_list_picker(
+        wa_id,
+        header=safe_header(t(user, "select_state")),
+        body=t(user, "choose_state"),
+        rows=build_state_list_rows(page=1),
+        section_title=t(user, "indian_states"),
+    )
+
+    return jsonify({"status": "ok"}), 200
+    
         # -------------------------------
         # Ask State (STRICT & SAFE)
         # -------------------------------
         if user.state == ASK_STATE:
             state_name = None
-            # ✅ AUTO-SKIP STATE for Marathi (prefilled Maharashtra)
+        
+            # ✅ Safety auto-skip (Marathi fallback only, no spam)
             if (
                 user.language == "mr"
                 and user.state_name == "Maharashtra"
+                and getattr(user, "auto_state_applied", False)
                 and not interactive_id
                 and not text_body
             ):
@@ -665,9 +726,9 @@ def webhook():
                     section_title=get_safe_section_title(user.state_name),
                 )
                 return jsonify({"status": "ok"}), 200
-
+        
             # ---------------------------------
-            # Pagination: "More states..."
+            # Pagination
             # ---------------------------------
             if interactive_id and interactive_id.startswith("state_page_"):
                 page = int(interactive_id.replace("state_page_", ""))
@@ -682,6 +743,7 @@ def webhook():
                     ),
                     section_title=t(user, "indian_states"),
                 )
+                return jsonify({"status": "ok"}), 200
         
             # ---------------------------------
             # State selected from list
@@ -690,13 +752,13 @@ def webhook():
                 state_name = interactive_id.replace("state_", "")
         
             # ---------------------------------
-            # Typed state fallback (only if text present)
+            # Typed fallback
             # ---------------------------------
             if not state_name and text_body:
                 state_name = detect_state_from_text(text_body)
         
             # ---------------------------------
-            # Still invalid → ask again
+            # Invalid → retry
             # ---------------------------------
             if not state_name:
                 send_text(wa_id, t(user, "ask_state_retry"))
@@ -704,10 +766,7 @@ def webhook():
                     wa_id,
                     header=safe_header(t(user, "select_state")),
                     body=t(user, "choose_state"),
-                    rows=build_state_list_rows(
-                        page=1,
-                        preferred_state=user.state_name,
-                    ),
+                    rows=build_state_list_rows(page=1),
                     section_title=t(user, "indian_states"),
                 )
                 return jsonify({"status": "ok"}), 200
@@ -716,11 +775,10 @@ def webhook():
             # Save & move forward
             # ---------------------------------
             user.state_name = state_name
+            user.auto_state_applied = False
             db.commit()
         
             save_state(db, user, ASK_DISTRICT)
-        
-            from services.location_service import get_safe_section_title
         
             send_list_picker(
                 wa_id,
@@ -731,7 +789,6 @@ def webhook():
             )
         
             return jsonify({"status": "ok"}), 200
-
         # -------------------------------
         # Ask District (STRICT & SAFE)
         # -------------------------------
