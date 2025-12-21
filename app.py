@@ -161,7 +161,8 @@ from services.booking_service import (
     generate_dates_calendar,
     generate_slots_calendar,
     create_booking_temp,
-    confirm_booking_after_payment,
+    is_payment_already_processed,
+    mark_booking_as_paid,
     SLOT_MAP
 )
 from services.location_service import (
@@ -1349,16 +1350,20 @@ def payment_webhook():
         if is_payment_already_processed(payment_id):
             logger.info("🔁 Duplicate webhook ignored | %s", payment_id)
             return "OK", 200
-
+        
         # -------------------------------------------------
         # 8. ATOMIC PAYMENT CONFIRMATION
         # -------------------------------------------------
-        mark_booking_as_paid(
-            payment_id=payment_id,
+        success = mark_booking_as_paid(
             payment_link_id=payment_link_id,
+            payment_id=payment_id,
             payment_mode=razorpay_mode
         )
-
+        
+        if not success:
+            logger.warning("⚠️ Booking not found or already processed")
+            return "Ignored", 200
+        
         logger.info("✅ PAYMENT CONFIRMED & BOOKING UPDATED")
         return "OK", 200
 
