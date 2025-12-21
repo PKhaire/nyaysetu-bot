@@ -1249,18 +1249,26 @@ def webhook():
 # ===============================
 # PAYMENT WEBHOOK
 # ===============================
-@app.route("/payment_webhook", methods=["POST"])
 @app.route("/payment/webhook", methods=["POST"])
 def payment_webhook():
-    
+
+    # -----------------------------
+    # Basic payload protection
+    # -----------------------------
     if request.content_length and request.content_length > 1024 * 1024:
         return "Payload too large", 413
+
     payload = request.data
     signature = request.headers.get("X-Razorpay-Signature")
 
     import hmac
     import hashlib
     from config import RAZORPAY_WEBHOOK_SECRET
+
+    # 🔐 ABSOLUTE GUARD (prevents your crash)
+    if not signature:
+        logger.error("❌ Razorpay signature missing")
+        return jsonify({"error": "Signature missing"}), 400
 
     expected_signature = hmac.new(
         RAZORPAY_WEBHOOK_SECRET.encode(),
@@ -1269,19 +1277,19 @@ def payment_webhook():
     ).hexdigest()
 
     if not hmac.compare_digest(expected_signature, signature):
-        return jsonify({"error": "Invalid webhook signature"}), 403
+        logger.error("❌ Razorpay signature mismatch")
+        return jsonify({"error": "Invalid signature"}), 403
 
-    data = request.get_json()
-    # ✅ Accept only successful payment link events
+    data = request.get_json(silent=True) or {}
+
+    # ✅ Accept only successful payment event
     if data.get("event") != "payment_link.paid":
         return jsonify({"status": "ignored"}), 200
 
     try:
-        token = (
-            data["payload"]["payment_link"]["entity"]
-            ["notes"]["booking_token"]
-        )
+        token = data["payload"]["payment_link"]["entity"]["notes"]["booking_token"]
     except Exception:
+        logger.error("❌ booking_token missing in webhook payload")
         return jsonify({"error": "Invalid payload"}), 400
 
     db = get_db()
@@ -1290,7 +1298,6 @@ def payment_webhook():
         if not booking:
             return jsonify({"error": msg}), 404
 
-        # Enable paid session
         booking.user.ai_enabled = True
         booking.user.free_ai_count = 0
         save_state(db, booking.user, PAYMENT_CONFIRMED)
@@ -1301,5 +1308,6 @@ def payment_webhook():
         )
 
         return jsonify({"status": "confirmed"}), 200
+
     finally:
         db.close()
