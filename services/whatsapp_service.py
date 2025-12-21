@@ -68,3 +68,24 @@ def send_list_picker(wa_id: str, header: str, body: str, rows: list, section_tit
         }
     }
     return _send(payload)
+
+
+def send_payment_success_message(booking):
+    message = (
+        "✅ Payment successful.\n\n"
+        "Your consultation is confirmed.\n\n"
+        f"📅 {booking.date}\n"
+        f"⏰ {booking.slot_readable}\n"
+        f"💰 ₹{booking.amount}\n\n"
+        "Thank you for choosing NyaySetu."
+    )
+
+    send_text(booking.whatsapp_id, message)
+
+def send_payment_receipt_pdf(wa_id, pdf_path):
+    send_document(
+        wa_id=wa_id,
+        file_path=pdf_path,
+        caption="Your payment receipt."
+    )
+
