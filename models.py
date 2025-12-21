@@ -34,32 +34,63 @@ class User(Base):
 class Booking(Base):
     __tablename__ = "booking"
 
+    # -------------------------
+    # PRIMARY KEY
+    # -------------------------
     id = Column(Integer, primary_key=True, index=True)
 
     # -------------------------
-    # EXISTING FIELDS
+    # WHATSAPP CONTEXT
+    # -------------------------
+    whatsapp_id = Column(String, nullable=False, index=True)
+
+    # -------------------------
+    # USER DETAILS
     # -------------------------
     name = Column(String, nullable=False)
     phone = Column(String, nullable=False)
+
+    # -------------------------
+    # LOCATION
+    # -------------------------
     state = Column(String, nullable=False)
     district = Column(String, nullable=False)
+
+    # -------------------------
+    # LEGAL CONTEXT
+    # -------------------------
     category = Column(String, nullable=False)
     subcategory = Column(String, nullable=True)
-    appointment_date = Column(String, nullable=False)
-    time_slot = Column(String, nullable=False)
+
+    # -------------------------
+    # APPOINTMENT DETAILS
+    # -------------------------
+    appointment_date = Column(String, nullable=False)   # e.g. 2025-12-24
+    time_slot = Column(String, nullable=False)          # e.g. 3:00–4:00 PM
+    slot_code = Column(String, nullable=True)           # optional internal use
+    slot_readable = Column(String, nullable=True)       # optional display
+
+    # -------------------------
+    # PAYMENT
+    # -------------------------
     amount = Column(Integer, nullable=False)
-    status = Column(String, default="PENDING")
+    status = Column(String, default="PENDING")          # PENDING / PAID
 
-    # Payment link reference
-    razorpay_payment_link_id = Column(String, nullable=False, unique=True)
+    payment_token = Column(String, nullable=True, unique=True)
 
-    # -------------------------
-    # PAYMENT CONFIRMATION
-    # -------------------------
-    razorpay_payment_id = Column(String, nullable=True, unique=True)
-    payment_mode = Column(String, nullable=True)  # test / live
+    razorpay_payment_link_id = Column(
+        String, nullable=False, unique=True
+    )
+    razorpay_payment_id = Column(
+        String, nullable=True, unique=True
+    )
+
+    payment_mode = Column(String, nullable=True)        # test / live
     paid_at = Column(DateTime, nullable=True)
 
+    # -------------------------
+    # AUDIT
+    # -------------------------
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class CategoryAnalytics(Base):
