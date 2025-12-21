@@ -197,3 +197,50 @@ def confirm_booking_after_payment(db, token):
     db.commit()
 
     return booking, "confirmed"
+
+def is_payment_already_processed(payment_id):
+    from db import SessionLocal
+    from models import Booking
+
+    db = SessionLocal()
+    try:
+        return (
+            db.query(Booking)
+            .filter(Booking.razorpay_payment_id == payment_id)
+            .first()
+            is not None
+        )
+    finally:
+        db.close()
+
+
+def confirm_booking_payment(payment_link_id, payment_id, payment_mode):
+    from db import SessionLocal
+    from models import Booking
+    from datetime import datetime
+
+    db = SessionLocal()
+    try:
+        booking = (
+            db.query(Booking)
+            .filter(
+                Booking.razorpay_payment_link_id == payment_link_id,
+                Booking.status == "PENDING"
+            )
+            .first()
+        )
+
+        if not booking:
+            return False
+
+        booking.status = "PAID"
+        booking.razorpay_payment_id = payment_id
+        booking.payment_mode = payment_mode
+        booking.paid_at = datetime.utcnow()
+
+        db.commit()
+        return True
+
+    finally:
+        db.close()
+
