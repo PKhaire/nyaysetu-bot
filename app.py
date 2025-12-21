@@ -2,6 +2,9 @@ import os
 import json
 import logging
 import time
+import hmac
+import hashlib
+
 from collections import defaultdict, deque
 from datetime import datetime
 from flask import Flask, request, jsonify
@@ -145,7 +148,8 @@ from db import SessionLocal, init_db
 init_db()
 
 from models import User, Booking
-from config import WHATSAPP_VERIFY_TOKEN, BOOKING_PRICE
+from config import WHATSAPP_VERIFY_TOKEN, BOOKING_PRICE, RAZORPAY_WEBHOOK_SECRET
+
 from utils import format_date_readable
 from services.whatsapp_service import (
     send_text, send_buttons,
@@ -1259,11 +1263,9 @@ def payment_webhook():
         return "Payload too large", 413
 
     payload = request.data
-    signature = request.headers.get("X-Razorpay-Signature")
+    logger.info("🔍 Razorpay webhook headers: %s", dict(request.headers)) ## Dont forget to delete logs secuirty issue 
 
-    import hmac
-    import hashlib
-    from config import RAZORPAY_WEBHOOK_SECRET
+    signature = request.headers.get("X-Razorpay-Signature")
 
     # 🔐 ABSOLUTE GUARD (prevents your crash)
     if not signature:
