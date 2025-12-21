@@ -1255,61 +1255,113 @@ def webhook():
 # ===============================
 @app.route("/payment/webhook", methods=["POST"])
 def payment_webhook():
-
-    # -----------------------------
-    # Basic payload protection
-    # -----------------------------
-    if request.content_length and request.content_length > 1024 * 1024:
-        return "Payload too large", 413
-
-    payload = request.data
-    logger.info("🔍 Razorpay webhook headers: %s", dict(request.headers)) ## Dont forget to delete logs secuirty issue 
-
-    signature = request.headers.get("X-Razorpay-Signature")
-
-    # 🔐 ABSOLUTE GUARD (prevents your crash)
-    if not signature:
-        logger.error("❌ Razorpay signature missing")
-        return jsonify({"error": "Signature missing"}), 400
-
-    expected_signature = hmac.new(
-        RAZORPAY_WEBHOOK_SECRET.encode(),
-        payload,
-        hashlib.sha256
-    ).hexdigest()
-
-    if not hmac.compare_digest(expected_signature, signature):
-        logger.error("❌ Razorpay signature mismatch")
-        return jsonify({"error": "Invalid signature"}), 403
-
-    data = request.get_json(silent=True) or {}
-
-    # ✅ Accept only successful payment event
-    if data.get("event") != "payment_link.paid":
-        return jsonify({"status": "ignored"}), 200
-
     try:
-        token = data["payload"]["payment_link"]["entity"]["notes"]["booking_token"]
-    except Exception:
-        logger.error("❌ booking_token missing in webhook payload")
-        return jsonify({"error": "Invalid payload"}), 400
+        # -------------------------------------------------
+        # 1. Read RAW payload (required for HMAC)
+        # -------------------------------------------------
+        payload = request.data
+        data = json.loads(payload.decode("utf-8"))
 
-    db = get_db()
-    try:
-        booking, msg = confirm_booking_after_payment(db, token)
-        if not booking:
-            return jsonify({"error": msg}), 404
+        # -------------------------------------------------
+        # 2. Detect mode (single source of truth)
+        # -------------------------------------------------
+        razorpay_mode = os.getenv("RAZORPAY_MODE", "live")
+        if razorpay_mode not in ("test", "live"):
+            logger.critical("❌ Invalid RAZORPAY_MODE")
+            return "Server misconfiguration", 500
 
-        booking.user.ai_enabled = True
-        booking.user.free_ai_count = 0
-        save_state(db, booking.user, PAYMENT_CONFIRMED)
+        signature = request.headers.get("X-Razorpay-Signature")
 
-        send_text(
-            booking.user.whatsapp_id,
-            t(booking.user, "payment_success")
+        # -------------------------------------------------
+        # 3. SECURITY GATE
+        # -------------------------------------------------
+        if razorpay_mode == "live":
+            # 🔒 LIVE: signature is mandatory
+            if not signature:
+                logger.error("❌ Missing Razorpay signature (LIVE)")
+                return "Signature missing", 400
+
+            secret = os.getenv("RAZORPAY_WEBHOOK_SECRET", "").encode()
+            expected_signature = hmac.new(
+                secret,
+                payload,
+                hashlib.sha256
+            ).hexdigest()
+
+            if not hmac.compare_digest(expected_signature, signature):
+                logger.error("❌ Invalid Razorpay signature")
+                return "Invalid signature", 400
+
+        else:
+            # 🧪 TEST: allow unsigned webhook, but only from Razorpay
+            user_agent = request.headers.get("User-Agent", "")
+            if "Razorpay-Webhook" not in user_agent:
+                logger.error("❌ Blocked non-Razorpay request in TEST")
+                return "Forbidden", 403
+
+        # -------------------------------------------------
+        # 4. Accept ONLY final payment event
+        # -------------------------------------------------
+        event = data.get("event")
+        if event != "payment_link.paid":
+            logger.info("ℹ️ Ignored event: %s", event)
+            return "Ignored", 200
+
+        # -------------------------------------------------
+        # 5. Extract payment details
+        # -------------------------------------------------
+        payment = data["payload"]["payment"]["entity"]
+        payment_link = data["payload"]["payment_link"]["entity"]
+
+        payment_id = payment.get("id")
+        payment_status = payment.get("status")
+        payment_link_id = payment_link.get("id")
+        payment_link_status = payment_link.get("status")
+
+        logger.info(
+            "💰 Payment webhook | payment_id=%s | status=%s | mode=%s",
+            payment_id,
+            payment_status,
+            razorpay_mode
         )
 
-        return jsonify({"status": "confirmed"}), 200
+        # -------------------------------------------------
+        # 6. FINAL CONFIRMATION CHECK
+        # -------------------------------------------------
+        if razorpay_mode == "live":
+            confirmed = (
+                payment_status == "captured"
+                and payment_link_status == "paid"
+            )
+        else:
+            confirmed = (
+                payment_status == "captured"
+                or payment_link_status == "paid"
+            )
 
-    finally:
-        db.close()
+        if not confirmed:
+            logger.warning("⚠️ Payment not finalized yet")
+            return "Not finalized", 200
+
+        # -------------------------------------------------
+        # 7. IDEMPOTENCY CHECK (MANDATORY)
+        # -------------------------------------------------
+        if is_payment_already_processed(payment_id):
+            logger.info("🔁 Duplicate webhook ignored | %s", payment_id)
+            return "OK", 200
+
+        # -------------------------------------------------
+        # 8. ATOMIC PAYMENT CONFIRMATION
+        # -------------------------------------------------
+        mark_booking_as_paid(
+            payment_id=payment_id,
+            payment_link_id=payment_link_id,
+            payment_mode=razorpay_mode
+        )
+
+        logger.info("✅ PAYMENT CONFIRMED & BOOKING UPDATED")
+        return "OK", 200
+
+    except Exception:
+        logger.exception("🔥 Razorpay webhook processing error")
+        return "Internal error", 500
