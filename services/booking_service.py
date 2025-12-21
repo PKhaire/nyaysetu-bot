@@ -183,11 +183,15 @@ def create_booking_temp(db, user, name, state, district, category, date, slot_co
 # --------------------
 def confirm_booking_after_payment(db, token):
     booking = db.query(Booking).filter_by(payment_token=token).first()
+    # ⏳ Expire payment link after 15 minutes
+    if booking.created_at < datetime.utcnow() - timedelta(minutes=15):
+        return None, "Payment link expired"
+        
     if not booking:
         return None, "Booking not found."
 
     if booking.status == "PAID":
-        return None, "Already paid."
+        return booking, "Already confirmed"
 
     booking.status = "PAID"
     db.commit()
