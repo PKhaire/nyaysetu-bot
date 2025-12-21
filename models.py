@@ -42,7 +42,7 @@ class Booking(Base):
     # -------------------------
     # WHATSAPP CONTEXT
     # -------------------------
-    whatsapp_id = Column(String, nullable=False, index=True)
+    whatsapp_id = Column(String, index=True, nullable=False)
 
     # -------------------------
     # USER DETAILS
@@ -51,10 +51,10 @@ class Booking(Base):
     phone = Column(String, nullable=False)
 
     # -------------------------
-    # LOCATION
+    # LOCATION (LEFT-SIDE NAMES)
     # -------------------------
-    state = Column(String, nullable=False)
-    district = Column(String, nullable=False)
+    state_name = Column(String, nullable=False)
+    district_name = Column(String, nullable=False)
 
     # -------------------------
     # LEGAL CONTEXT
@@ -63,20 +63,19 @@ class Booking(Base):
     subcategory = Column(String, nullable=True)
 
     # -------------------------
-    # APPOINTMENT DETAILS
+    # APPOINTMENT
     # -------------------------
-    appointment_date = Column(String, nullable=False)   # e.g. 2025-12-24
-    time_slot = Column(String, nullable=False)          # e.g. 3:00–4:00 PM
-    slot_code = Column(String, nullable=True)           # optional internal use
-    slot_readable = Column(String, nullable=True)       # optional display
+    date = Column(String, nullable=False)
+    slot_code = Column(String, nullable=True)
+    slot_readable = Column(String, nullable=False)
 
     # -------------------------
     # PAYMENT
     # -------------------------
     amount = Column(Integer, nullable=False)
-    status = Column(String, default="PENDING")          # PENDING / PAID
+    status = Column(String, default="PENDING")
 
-    payment_token = Column(String, nullable=True, unique=True)
+    payment_token = Column(String, unique=True, nullable=True)
 
     razorpay_payment_link_id = Column(
         String, nullable=False, unique=True
@@ -85,7 +84,7 @@ class Booking(Base):
         String, nullable=True, unique=True
     )
 
-    payment_mode = Column(String, nullable=True)        # test / live
+    payment_mode = Column(String, nullable=True)  # test / live
     paid_at = Column(DateTime, nullable=True)
 
     # -------------------------
