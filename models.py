@@ -78,7 +78,7 @@ class Booking(Base):
     payment_token = Column(String, unique=True, nullable=True)
 
     razorpay_payment_link_id = Column(
-        String, nullable=False, unique=True
+        String, nullable=True, unique=True
     )
     razorpay_payment_id = Column(
         String, nullable=True, unique=True
