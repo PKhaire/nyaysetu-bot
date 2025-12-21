@@ -32,22 +32,33 @@ class User(Base):
 
 
 class Booking(Base):
-    __tablename__ = "bookings"
+    __tablename__ = "booking"
 
-    id = Column(Integer, primary_key=True)
-    whatsapp_id = Column(String, index=True)
+    id = Column(Integer, primary_key=True, index=True)
 
-    name = Column(String)
-    state_name = Column(String)
-    district_name = Column(String)
-    category = Column(String)
-
-    date = Column(String)
-    slot_code = Column(String)
-    slot_readable = Column(String)
-
-    payment_token = Column(String, unique=True)
+    # -------------------------
+    # EXISTING FIELDS
+    # -------------------------
+    name = Column(String, nullable=False)
+    phone = Column(String, nullable=False)
+    state = Column(String, nullable=False)
+    district = Column(String, nullable=False)
+    category = Column(String, nullable=False)
+    subcategory = Column(String, nullable=True)
+    appointment_date = Column(String, nullable=False)
+    time_slot = Column(String, nullable=False)
+    amount = Column(Integer, nullable=False)
     status = Column(String, default="PENDING")
+
+    # Payment link reference
+    razorpay_payment_link_id = Column(String, nullable=False, unique=True)
+
+    # -------------------------
+    # PAYMENT CONFIRMATION
+    # -------------------------
+    razorpay_payment_id = Column(String, nullable=True, unique=True)
+    payment_mode = Column(String, nullable=True)  # test / live
+    paid_at = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
