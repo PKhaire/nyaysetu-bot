@@ -154,8 +154,11 @@ from utils import format_date_readable
 from services.whatsapp_service import (
     send_text, send_buttons,
     send_typing_on, send_typing_off,
-    send_list_picker
+    send_list_picker,
+    send_payment_success_message,
+    send_payment_receipt_pdf
 )
+from services.receipt_service import generate_pdf_receipt
 from services.openai_service import ai_reply
 from services.booking_service import (
     generate_dates_calendar,
@@ -1363,6 +1366,23 @@ def payment_webhook():
         if not success:
             logger.warning("⚠️ Booking not found or already processed")
             return "Ignored", 200
+        # -------------------------
+        # 2️⃣ WhatsApp success message
+        # -------------------------
+        send_payment_success_message(success)
+
+        # -------------------------
+        # 3️⃣ Generate PDF receipt
+        # -------------------------
+        pdf_path = generate_pdf_receipt(success)
+
+        # -------------------------
+        # 4️⃣ Send PDF on WhatsApp
+        # -------------------------
+        send_payment_receipt_pdf(
+            success.whatsapp_id,
+            pdf_path
+        )
         
         logger.info("✅ PAYMENT CONFIRMED & BOOKING UPDATED")
         return "OK", 200
