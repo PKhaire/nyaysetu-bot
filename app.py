@@ -5,6 +5,7 @@ import time
 from collections import defaultdict, deque
 from datetime import datetime
 from flask import Flask, request, jsonify
+
 # ===============================
 # TRANSLATIONS
 # ===============================
@@ -15,6 +16,7 @@ from subcategory_labels import SUBCATEGORY_LABELS
 # CONFIG
 # ===============================
 RESET_DB = True   # ⚠️ MUST BE FALSE IN PROD
+#RESET_DB = ENV != "production"
 
 if RESET_DB:
     if os.path.exists("nyaysetu.db"):
@@ -1238,7 +1240,8 @@ def webhook():
         # -------------------------------
         return jsonify({"status": "ignored"}), 200
     except Exception as e:
-        logger.exception("Webhook error for wa_id=%s", wa_id)
+        safe_wa_id = wa_id[:5] + "*****" + wa_id[-2:]
+        logger.exception("Webhook error for wa_id=%s", safe_wa_id)
         return jsonify({"error": str(e)}), 500
     finally:
         db.close()
@@ -1247,7 +1250,11 @@ def webhook():
 # PAYMENT WEBHOOK
 # ===============================
 @app.route("/payment_webhook", methods=["POST"])
+@app.route("/payment/webhook", methods=["POST"])
 def payment_webhook():
+    
+    if request.content_length and request.content_length > 1024 * 1024:
+        return "Payload too large", 413
     payload = request.data
     signature = request.headers.get("X-Razorpay-Signature")
 
@@ -1265,6 +1272,9 @@ def payment_webhook():
         return jsonify({"error": "Invalid webhook signature"}), 403
 
     data = request.get_json()
+    # ✅ Accept only successful payment link events
+    if data.get("event") != "payment_link.paid":
+        return jsonify({"status": "ignored"}), 200
 
     try:
         token = (
