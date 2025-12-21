@@ -266,7 +266,7 @@ def mark_booking_as_paid(payment_link_id, payment_id, payment_mode):
         )
 
         if not booking:
-            return False
+            return None   # 👈 IMPORTANT
 
         booking.status = "PAID"
         booking.razorpay_payment_id = payment_id
@@ -274,8 +274,9 @@ def mark_booking_as_paid(payment_link_id, payment_id, payment_mode):
         booking.paid_at = datetime.utcnow()
 
         db.commit()
-        return True
+        db.refresh(booking)   # 👈 ensures latest data
+
+        return booking        # ✅ RETURN BOOKING OBJECT
 
     finally:
         db.close()
-
