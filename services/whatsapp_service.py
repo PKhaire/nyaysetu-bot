@@ -88,4 +88,60 @@ def send_payment_receipt_pdf(wa_id, pdf_path):
         file_path=pdf_path,
         caption="Your payment receipt."
     )
+    
+def send_document(wa_id: str, file_path: str, caption: str = ""):
+    """
+    Sends a PDF/document to WhatsApp using Cloud API.
+    Uses the same token + base URL style as _send().
+    """
+    if not WHATSAPP_API_URL or not WHATSAPP_TOKEN:
+        logger.warning("WHATSAPP_API_URL or WHATSAPP_TOKEN not configured. Skipping document send.")
+        return {"error": "no_whatsapp_config"}
+
+    if not os.path.exists(file_path):
+        logger.error("PDF file not found: %s", file_path)
+        return {"error": "file_not_found"}
+
+    # -----------------------------------
+    # 1️⃣ Upload media
+    # -----------------------------------
+    # WhatsApp media upload endpoint is same base, replacing /messages with /media
+    media_url = WHATSAPP_API_URL.replace("/messages", "/media")
+
+    headers = {
+        "Authorization": f"Bearer {WHATSAPP_TOKEN}"
+    }
+
+    with open(file_path, "rb") as f:
+        files = {
+            "file": (os.path.basename(file_path), f, "application/pdf")
+        }
+        data = {
+            "messaging_product": "whatsapp"
+        }
+
+        with httpx.Client(timeout=20) as client:
+            upload_resp = client.post(media_url, headers=headers, files=files, data=data)
+
+    upload_resp.raise_for_status()
+    media_id = upload_resp.json().get("id")
+
+    if not media_id:
+        logger.error("Failed to upload media: %s", upload_resp.text)
+        return {"error": "media_upload_failed"}
+
+    # -----------------------------------
+    # 2️⃣ Send document message
+    # -----------------------------------
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": wa_id,
+        "type": "document",
+        "document": {
+            "id": media_id,
+            "caption": caption or ""
+        }
+    }
+
+    return _send(payload)
 
