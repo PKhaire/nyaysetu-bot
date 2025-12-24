@@ -1267,7 +1267,7 @@ def payment_webhook():
         data = json.loads(payload.decode("utf-8"))
 
         # -------------------------------------------------
-        # 2. Detect mode (single source of truth)
+        # 2. Detect mode
         # -------------------------------------------------
         razorpay_mode = os.getenv("RAZORPAY_MODE", "live")
         if razorpay_mode not in ("test", "live"):
@@ -1280,35 +1280,25 @@ def payment_webhook():
         # 3. SECURITY GATE
         # -------------------------------------------------
         if razorpay_mode == "live":
-            # 🔒 LIVE: signature is mandatory
             if not signature:
-                logger.error("❌ Missing Razorpay signature (LIVE)")
                 return "Signature missing", 400
 
             secret = os.getenv("RAZORPAY_WEBHOOK_SECRET", "").encode()
             expected_signature = hmac.new(
-                secret,
-                payload,
-                hashlib.sha256
+                secret, payload, hashlib.sha256
             ).hexdigest()
 
             if not hmac.compare_digest(expected_signature, signature):
-                logger.error("❌ Invalid Razorpay signature")
                 return "Invalid signature", 400
-
         else:
-            # 🧪 TEST: allow unsigned webhook, but only from Razorpay
             user_agent = request.headers.get("User-Agent", "")
             if "Razorpay-Webhook" not in user_agent:
-                logger.error("❌ Blocked non-Razorpay request in TEST")
                 return "Forbidden", 403
 
         # -------------------------------------------------
         # 4. Accept ONLY final payment event
         # -------------------------------------------------
-        event = data.get("event")
-        if event != "payment_link.paid":
-            logger.info("ℹ️ Ignored event: %s", event)
+        if data.get("event") != "payment_link.paid":
             return "Ignored", 200
 
         # -------------------------------------------------
@@ -1317,17 +1307,13 @@ def payment_webhook():
         payment = data["payload"]["payment"]["entity"]
         payment_link = data["payload"]["payment_link"]["entity"]
 
-        payment_id = payment.get("id")
-        payment_status = payment.get("status")
-        payment_link_id = payment_link.get("id")
-        payment_link_status = payment_link.get("status")
+        payment_id = payment["id"]
+        payment_status = payment["status"]
+        payment_link_id = payment_link["id"]
+        payment_link_status = payment_link["status"]
 
-        logger.info(
-            "💰 Payment webhook | payment_id=%s | status=%s | mode=%s",
-            payment_id,
-            payment_status,
-            razorpay_mode
-        )
+        paid_amount = payment.get("amount")      # paise
+        paid_currency = payment.get("currency") # INR
 
         # -------------------------------------------------
         # 6. FINAL CONFIRMATION CHECK
@@ -1344,46 +1330,69 @@ def payment_webhook():
             )
 
         if not confirmed:
-            logger.warning("⚠️ Payment not finalized yet")
             return "Not finalized", 200
 
         # -------------------------------------------------
-        # 7. IDEMPOTENCY CHECK (MANDATORY)
+        # 7. AMOUNT + CURRENCY VALIDATION (MANDATORY)
         # -------------------------------------------------
-        if is_payment_already_processed(payment_id):
-            logger.info("🔁 Duplicate webhook ignored | %s", payment_id)
-            return "OK", 200
-        
+        EXPECTED_AMOUNT = int(BOOKING_PRICE * 100)
+
+        if paid_currency != "INR" or paid_amount != EXPECTED_AMOUNT:
+            logger.error(
+                "❌ Amount mismatch | expected=%s | got=%s %s",
+                EXPECTED_AMOUNT,
+                paid_amount,
+                paid_currency
+            )
+            return "Amount mismatch", 400
+
         # -------------------------------------------------
-        # 8. ATOMIC PAYMENT CONFIRMATION
+        # 8. IDEMPOTENCY CHECK (DB LEVEL)
         # -------------------------------------------------
-        success = mark_booking_as_paid(
+        db = get_db()
+        try:
+            existing = (
+                db.query(Booking)
+                .filter(Booking.razorpay_payment_id == payment_id)
+                .first()
+            )
+            if existing:
+                logger.info(
+                    "🔁 Duplicate webhook ignored | payment_id=%s",
+                    payment_id
+                )
+                return "OK", 200
+        finally:
+            db.close()
+
+        # -------------------------------------------------
+        # 9. ATOMIC PAYMENT CONFIRMATION
+        # -------------------------------------------------
+        booking = mark_booking_as_paid(
             payment_link_id=payment_link_id,
             payment_id=payment_id,
             payment_mode=razorpay_mode
         )
-        
-        if not success:
-            logger.warning("⚠️ Booking not found or already processed")
+
+        if not booking:
             return "Ignored", 200
-        # -------------------------
-        # 2️⃣ WhatsApp success message
-        # -------------------------
-        send_payment_success_message(success)
 
-        # -------------------------
-        # 3️⃣ Generate PDF receipt
-        # -------------------------
-        pdf_path = generate_pdf_receipt(success)
+        # -------------------------------------------------
+        # 10. SIDE EFFECTS (AFTER COMMIT)
+        # -------------------------------------------------
+        try:
+            send_payment_success_message(booking)
+            pdf_path = generate_pdf_receipt(booking)
+            send_payment_receipt_pdf(
+                booking.whatsapp_id,
+                pdf_path
+            )
+        except Exception:
+            logger.exception(
+                "⚠️ Receipt failed but payment confirmed | booking_id=%s",
+                booking.id
+            )
 
-        # -------------------------
-        # 4️⃣ Send PDF on WhatsApp
-        # -------------------------
-        send_payment_receipt_pdf(
-            success.whatsapp_id,
-            pdf_path
-        )
-        
         logger.info("✅ PAYMENT CONFIRMED & BOOKING UPDATED")
         return "OK", 200
 
