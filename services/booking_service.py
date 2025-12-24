@@ -7,6 +7,7 @@ IST = ZoneInfo("Asia/Kolkata")
 import razorpay
 from config import BOOKING_PRICE, BOOKING_CUTOFF_HOURS, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
 from models import Booking   # ✅ REQUIRED IMPORT
+from db import SessionLocal
 
 SLOT_BUFFER_HOURS = 2  # Same buffer as backend
 
