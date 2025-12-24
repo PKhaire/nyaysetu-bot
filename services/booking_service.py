@@ -250,33 +250,30 @@ def confirm_booking_payment(payment_link_id, payment_id, payment_mode):
 # FINAL PAYMENT CONFIRMATION (USED BY WEBHOOK)
 # --------------------
 def mark_booking_as_paid(payment_link_id, payment_id, payment_mode):
-    from db import SessionLocal
-    from models import Booking
-    from datetime import datetime
-
     db = SessionLocal()
     try:
         booking = (
             db.query(Booking)
-            .filter(
-                Booking.razorpay_payment_link_id == payment_link_id,
-                Booking.status == "PENDING"
-            )
+            .filter(Booking.razorpay_payment_link_id == payment_link_id)
             .first()
         )
 
         if not booking:
-            return None   # 👈 IMPORTANT
+            return None
+
+        # 🔐 FINAL IDEMPOTENCY LOCK
+        if booking.payment_processed:
+            return booking
 
         booking.status = "PAID"
         booking.razorpay_payment_id = payment_id
         booking.payment_mode = payment_mode
+        booking.payment_processed = True
         booking.paid_at = datetime.utcnow()
 
         db.commit()
-        db.refresh(booking)   # 👈 ensures latest data
-
-        return booking        # ✅ RETURN BOOKING OBJECT
+        db.refresh(booking)
+        return booking
 
     finally:
         db.close()
