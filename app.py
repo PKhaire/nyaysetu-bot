@@ -548,6 +548,22 @@ def webhook():
                     "❌ No completed payment found for your number."
                 )
                 return jsonify({"status": "ok"}), 200
+            # -------------------------------------------------
+            # 🔒 CLOSE PAYMENT FLOW (CRITICAL)
+            # -------------------------------------------------
+            db = get_db()
+            try:
+                user = (
+                    db.query(User)
+                    .filter(User.whatsapp_id == booking.whatsapp_id)
+                    .first()
+                )
+                if user:
+                    user.state = PAYMENT_CONFIRMED
+                    user.last_payment_link = None
+                    db.commit()
+            finally:
+                db.close()
         
             try:
                 # Generate PDF if not already done
@@ -1244,6 +1260,25 @@ def webhook():
                 )
             
             save_state(db, user, WAITING_PAYMENT)
+            return jsonify({"status": "ok"}), 200
+            
+        # ===============================
+        # POST-PAYMENT GUARD (CRITICAL)
+        # ===============================
+        if user.state == PAYMENT_CONFIRMED:
+        
+            if lower_text == "receipt":
+                # Existing RECEIPT handler will take over
+                pass
+            else:
+                send_text(
+                    wa_id,
+                    "✅ Your consultation is already confirmed.\n\n"
+                    "📅 27 Dec 2025\n"
+                    "⏰ 12:00 PM – 1:00 PM\n\n"
+                    "If you need your receipt, type RECEIPT."
+                )
+        
             return jsonify({"status": "ok"}), 200
 
         # -------------------------------
