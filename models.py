@@ -87,6 +87,8 @@ class Booking(Base):
 
     payment_mode = Column(String, nullable=True)  # test / live
     paid_at = Column(DateTime, nullable=True)
+    receipt_generated = Column(Boolean, default=False)
+    receipt_sent = Column(Boolean, default=False)
 
     # -------------------------
     # AUDIT
