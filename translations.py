@@ -119,7 +119,7 @@ TRANSLATIONS = {
             "Fees: ₹{amount} (one-time session) 🙂\n\n"
             "Please complete payment:"
         ),
-        "receipt_help": "Didn’t receive receipt? Type RECEIPT"
+        "receipt_help": "Didn’t receive receipt? Type RECEIPT",
 
         # ---------- COMMON ----------
         "invalid_selection": "Invalid selection. Please try again 👇",
@@ -233,7 +233,7 @@ TRANSLATIONS = {
             "Fees: ₹{amount} (one-time session) 🙂\n\n"
             "Kripya payment complete karein:"
         ),
-        "receipt_help": "रसीद नहीं मिली? RECEIPT लिखें"
+        "receipt_help": "रसीद नहीं मिली? RECEIPT लिखें",
         "invalid_selection": "Galat selection. Dobara try karein 👇",
     },
 
@@ -345,7 +345,7 @@ TRANSLATIONS = {
             "फीस: ₹{amount} (एकदाच सत्र) 🙂\n\n"
             "कृपया पेमेंट पूर्ण करा:"
         ),
-        "receipt_help": "पावती मिळाली नाही? RECEIPT टाइप करा"
+        "receipt_help": "पावती मिळाली नाही? RECEIPT टाइप करा",
         "invalid_selection": "चुकीची निवड. कृपया पुन्हा प्रयत्न करा 👇",
     },
 }
