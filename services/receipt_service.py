@@ -38,3 +38,20 @@ def generate_pdf_receipt(booking):
     c.save()
 
     return file_path
+
+def generate_pdf_receipt(booking):
+    try:
+        # existing PDF logic
+        pdf_path = create_pdf_somehow(booking)
+
+        db = SessionLocal()
+        booking = db.merge(booking)
+        booking.receipt_generated = True
+        db.commit()
+        db.close()
+
+        return pdf_path
+
+    except Exception:
+        raise
+
