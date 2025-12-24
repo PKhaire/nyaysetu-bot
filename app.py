@@ -1260,77 +1260,45 @@ def webhook():
                 )
             
             save_state(db, user, WAITING_PAYMENT)
-            return jsonify({"status": "ok"}), 200
-            
-        # ===============================
-        # POST-PAYMENT GUARD (CRITICAL)
-        # ===============================
-        if user.state == PAYMENT_CONFIRMED:
-        
-            if lower_text == "receipt":
-                # Existing RECEIPT handler will take over
-                pass
-            else:
-                send_text(
-                    wa_id,
-                    "✅ Your consultation is already confirmed.\n\n"
-                    "📅 27 Dec 2025\n"
-                    "⏰ 12:00 PM – 1:00 PM\n\n"
-                    "If you need your receipt, type RECEIPT."
-                )
-        
-            return jsonify({"status": "ok"}), 200
+            return jsonify({"status": "ok"}), 200            
 
-        # -------------------------------
-        # Waiting payment (SAFE & NON-SPAM)
-        # -------------------------------
+        # ===============================
+        # WAITING PAYMENT (SAFE MODE)
+        # ===============================
         if user.state == WAITING_PAYMENT:
         
-            # Only respond if user sends actual text
-            if text_body:
-                if user.last_payment_link:
-                    send_text(
-                        wa_id,
-                        f"💳 {t(user, 'payment_link_text')}\n{user.last_payment_link}"
-                    )
-                else:
-                    send_text(
-                        wa_id,
-                        t(user, "payment_link_error")
-                    )
-        
-            return jsonify({"status": "ok"}), 200
-
-        # -------------------------------
-        # AI Chat (ONLY AFTER PAYMENT)
-        # -------------------------------
-        if user.state == PAYMENT_CONFIRMED:
-            # Send session intro ONCE
-            if not user.session_started:
-                send_text(wa_id, t(user, "session_start"))
-                user.session_started = True
-                db.commit()
-                return jsonify({"status": "ok"}), 200
-        
+            # Ignore delivery/status callbacks
             if not text_body:
                 return jsonify({"status": "ignored"}), 200
         
-            send_typing_on(wa_id)
-            try:
-                reply = ai_reply(text_body, user)
-            except Exception:
-                send_typing_off(wa_id)
+            # 🔒 Safety: if payment already completed, stop immediately
+            booking = (
+                db.query(Booking)
+                .filter(
+                    Booking.whatsapp_id == wa_id,
+                    Booking.status == "PAID"
+                )
+                .first()
+            )
+        
+            if booking:
+                return jsonify({"status": "ignored"}), 200
+        
+            # Resend payment link only on user text
+            if user.last_payment_link:
                 send_text(
                     wa_id,
-                    "⚠️ Sorry, I’m having trouble responding right now.\n"
-                    "Please try again."
+                    f"💳 {t(user, 'payment_link_text')}\n{user.last_payment_link}"
                 )
-                return jsonify({"status": "ok"}), 200
+            else:
+                send_text(
+                    wa_id,
+                    t(user, "payment_link_error")
+                )
         
-            send_typing_off(wa_id)
-            send_text(wa_id, reply)
             return jsonify({"status": "ok"}), 200
 
+                
         # -------------------------------
         # Default fallback (safe)
         # -------------------------------
@@ -1464,7 +1432,23 @@ def payment_webhook():
         
         if not booking:
             return "Ignored", 200
-        
+        # -------------------------------------------------
+        # 🔒 CLOSE USER PAYMENT STATE (CRITICAL)
+        # -------------------------------------------------
+        db = get_db()
+        try:
+            user = (
+                db.query(User)
+                .filter(User.whatsapp_id == booking.whatsapp_id)
+                .first()
+            )
+            if user:
+                user.state = PAYMENT_CONFIRMED
+                user.last_payment_link = None
+                db.commit()
+        finally:
+            db.close()
+               
         receipt_sent = False
         
         try:
@@ -1477,22 +1461,19 @@ def payment_webhook():
                 pdf_path
             )
         
-            # If we reached here, receipt WAS sent
             receipt_sent = True
         
         except Exception:
             logger.exception(
-                "⚠️ Receipt flow error | booking_id=%s",
+                "⚠️ Receipt flow failed | booking_id=%s",
                 booking.id
             )
         
-        # 👉 Show help ONLY if PDF was NOT sent
         if not receipt_sent:
             send_text(
                 booking.whatsapp_id,
                 "Didn’t receive receipt? Type RECEIPT"
             )
-
         
         logger.info("✅ PAYMENT CONFIRMED & BOOKING UPDATED")
         return "OK", 200
