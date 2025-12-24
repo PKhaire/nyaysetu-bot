@@ -3,6 +3,7 @@ import os
 import logging
 import httpx
 from config import WHATSAPP_TOKEN, WHATSAPP_API_URL
+from db import SessionLocal
 
 logger = logging.getLogger("services.whatsapp_service")
 
