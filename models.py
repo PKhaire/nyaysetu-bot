@@ -83,6 +83,7 @@ class Booking(Base):
     razorpay_payment_id = Column(
         String, nullable=True, unique=True
     )
+    payment_processed = Column(Boolean, default=False)
 
     payment_mode = Column(String, nullable=True)  # test / live
     paid_at = Column(DateTime, nullable=True)
