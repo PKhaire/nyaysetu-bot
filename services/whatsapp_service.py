@@ -4,6 +4,7 @@ import logging
 import httpx
 from config import WHATSAPP_TOKEN, WHATSAPP_API_URL
 from db import SessionLocal
+from models import Booking
 
 logger = logging.getLogger("services.whatsapp_service")
 
