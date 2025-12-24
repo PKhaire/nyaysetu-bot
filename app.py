@@ -1430,6 +1430,8 @@ def payment_webhook():
         if not booking:
             return "Ignored", 200
         
+        receipt_sent = False
+        
         try:
             send_payment_success_message(booking)
         
@@ -1440,17 +1442,22 @@ def payment_webhook():
                 pdf_path
             )
         
+            # If we reached here, receipt WAS sent
+            receipt_sent = True
+        
         except Exception:
             logger.exception(
-                "⚠️ Receipt failed but payment confirmed | booking_id=%s",
+                "⚠️ Receipt flow error | booking_id=%s",
                 booking.id
             )
         
-            # 👉 Show help ONLY if receipt failed
+        # 👉 Show help ONLY if PDF was NOT sent
+        if not receipt_sent:
             send_text(
                 booking.whatsapp_id,
                 "Didn’t receive receipt? Type RECEIPT"
             )
+
         
         logger.info("✅ PAYMENT CONFIRMED & BOOKING UPDATED")
         return "OK", 200
