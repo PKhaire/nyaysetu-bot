@@ -1435,7 +1435,10 @@ def payment_webhook():
         # -------------------------------------------------
         try:
             send_payment_success_message(booking)
-            send_text(booking.whatsapp_id,t(None, "receipt_help"))
+            send_text(
+                booking.whatsapp_id,
+                "Didn’t receive receipt? Type RECEIPT"
+            )
             pdf_path = generate_pdf_receipt(booking)
             send_payment_receipt_pdf(
                 booking.whatsapp_id,
