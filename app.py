@@ -527,6 +527,59 @@ def webhook():
                 t(user, "rate_limit_exceeded")
             )
             return jsonify({"status": "ok"}), 200
+            
+        # ===============================
+        # RECEIPT RETRY (USER INITIATED)
+        # ===============================
+        if lower_text == "receipt":
+            booking = (
+                db.query(Booking)
+                .filter(
+                    Booking.whatsapp_id == wa_id,
+                    Booking.status == "PAID"
+                )
+                .order_by(Booking.id.desc())
+                .first()
+            )
+        
+            if not booking:
+                send_text(
+                    wa_id,
+                    "❌ No completed payment found for your number."
+                )
+                return jsonify({"status": "ok"}), 200
+        
+            try:
+                # Generate PDF if not already done
+                if not booking.receipt_generated:
+                    pdf_path = generate_pdf_receipt(booking)
+                else:
+                    pdf_path = booking.receipt_path if hasattr(booking, "receipt_path") else None
+        
+                # Send receipt if not already sent
+                if not booking.receipt_sent:
+                    send_payment_receipt_pdf(
+                        booking.whatsapp_id,
+                        pdf_path
+                    )
+        
+                send_text(
+                    wa_id,
+                    "📄 Your payment receipt has been re-sent successfully."
+                )
+        
+            except Exception:
+                logger.exception(
+                    "❌ Receipt resend failed | booking_id=%s",
+                    booking.id
+                )
+                send_text(
+                    wa_id,
+                    "⚠️ Sorry, we couldn’t resend your receipt right now.\n"
+                    "Please try again later."
+                )
+        
+            return jsonify({"status": "ok"}), 200
 
         # ===============================
         # LANGUAGE SELECTION
@@ -1382,6 +1435,7 @@ def payment_webhook():
         # -------------------------------------------------
         try:
             send_payment_success_message(booking)
+            send_text(booking.whatsapp_id,t(None, "receipt_help"))
             pdf_path = generate_pdf_receipt(booking)
             send_payment_receipt_pdf(
                 booking.whatsapp_id,
