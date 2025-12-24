@@ -1426,32 +1426,35 @@ def payment_webhook():
             payment_id=payment_id,
             payment_mode=razorpay_mode
         )
-
+        
         if not booking:
             return "Ignored", 200
-
-        # -------------------------------------------------
-        # 10. SIDE EFFECTS (AFTER COMMIT)
-        # -------------------------------------------------
+        
         try:
             send_payment_success_message(booking)
-            send_text(
-                booking.whatsapp_id,
-                "Didn’t receive receipt? Type RECEIPT"
-            )
+        
             pdf_path = generate_pdf_receipt(booking)
+        
             send_payment_receipt_pdf(
                 booking.whatsapp_id,
                 pdf_path
             )
+        
         except Exception:
             logger.exception(
                 "⚠️ Receipt failed but payment confirmed | booking_id=%s",
                 booking.id
             )
-
+        
+            # 👉 Show help ONLY if receipt failed
+            send_text(
+                booking.whatsapp_id,
+                "Didn’t receive receipt? Type RECEIPT"
+            )
+        
         logger.info("✅ PAYMENT CONFIRMED & BOOKING UPDATED")
         return "OK", 200
+
 
     except Exception:
         logger.exception("🔥 Razorpay webhook processing error")
