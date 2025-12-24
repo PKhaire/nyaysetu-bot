@@ -145,3 +145,23 @@ def send_document(wa_id: str, file_path: str, caption: str = ""):
 
     return _send(payload)
 
+def send_payment_receipt_pdf(wa_id, pdf_path):
+    # existing WhatsApp send logic
+    send_document(wa_id, pdf_path)
+
+    db = SessionLocal()
+    booking = (
+        db.query(Booking)
+        .filter(Booking.whatsapp_id == wa_id)
+        .order_by(Booking.id.desc())
+        .first()
+    )
+
+    if booking:
+        booking.receipt_sent = True
+        db.commit()
+
+    db.close()
+
+
+
