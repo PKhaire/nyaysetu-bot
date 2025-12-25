@@ -78,11 +78,14 @@ def _booking_cta(user):
 # MAIN AI FUNCTION (FLOW UNCHANGED)
 # =================================================
 
-def ai_reply(prompt: str, user):
+def ai_reply(prompt: str, user, context: str = "default"):
     """
-    If OPENAI_API_KEY present, call ChatCompletion.
-    Otherwise return a helpful canned reply.
+    AI reply handler.
+    - Respects user language
+    - Safe before & after payment
+    - No re-booking CTA after payment
     """
+
     if not prompt:
         return "Hi — tell me your legal question and I'll try to help."
 
@@ -90,7 +93,7 @@ def ai_reply(prompt: str, user):
     if not OPENAI_API_KEY:
         return f"I can help with that. (AI is offline) — you said: {prompt[:200]}"
 
-    # 🧠 SYSTEM PROMPT (ENHANCED, SAFE)
+    # 🧠 SYSTEM PROMPT (SAFE & CONTROLLED)
     system_prompt = f"""
 You are NyaySetu, an Indian legal assistant.
 
@@ -100,9 +103,12 @@ You are NyaySetu, an Indian legal assistant.
 
 Rules:
 - Indian legal context only
-- Do not give illegal advice
-- Be clear and calm
-- Do NOT scare the user
+- Explain concepts, process, documents, timelines
+- Do NOT give final legal advice
+- Do NOT predict case outcomes
+- Do NOT draft legal notices
+- Be calm, respectful, and helpful
+- Always remind that final advice will be given by a lawyer
 """
 
     url = "https://api.openai.com/v1/chat/completions"
@@ -124,12 +130,20 @@ Rules:
 
             reply = j["choices"][0]["message"]["content"].strip()
 
-            # ✅ Append CTA + Disclaimer (SAFE)
-            reply += "\n\n" + _booking_cta(user)
+            # -------------------------------------------------
+            # POST-PROCESSING (CRITICAL LOGIC)
+            # -------------------------------------------------
+
+            # ✅ BEFORE payment → allow booking CTA
+            if context != "post_payment":
+                reply += "\n\n" + _booking_cta(user)
+
+            # ✅ ALWAYS show legal disclaimer
             reply += _disclaimer_text(user)
 
             return reply
 
-    except Exception as e:
+    except Exception:
         logger.exception("OpenAI call failed")
-        return f"Sorry, I couldn't reach the AI service. ({e})"
+        return "Sorry, I couldn't reach the AI service right now. Please try again later."
+
