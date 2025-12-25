@@ -477,7 +477,7 @@ def webhook():
 
         lower_text = text_body.lower().strip()
         # =================================================
-        # POST-PAYMENT AI SUPPORT (PREPARATION MODE)
+        # POST-PAYMENT HANDLING (SAFE & FINAL)
         # =================================================
         paid_booking = (
             db.query(Booking)
@@ -490,10 +490,22 @@ def webhook():
         )
         
         if paid_booking:
-            # Allow receipt command explicitly
-            if lower_text == "receipt":
-                pass  # handled by existing receipt logic
-            else:
+            # Allow receipt command
+            if lower_text.strip().lower() == "receipt":
+                pass  # handled in receipt logic below
+        
+            # Block restart / menu / booking after payment
+            elif lower_text in RESTART_KEYWORDS:
+                send_text(
+                    wa_id,
+                    "✅ Your consultation is confirmed.\n\n"
+                    "📄 Type RECEIPT to get your payment receipt again.\n"
+                    "📞 Our team will contact you shortly."
+                )
+                return jsonify({"status": "ok"}), 200
+        
+            # Allow AI preparation help
+            elif text_body:
                 reply = ai_reply(
                     text_body,
                     user,
@@ -503,12 +515,10 @@ def webhook():
                 send_text(
                     wa_id,
                     "🤖 *Consultation Preparation Assistant*\n\n"
-                    f"{reply}\n\n"
-                    "_Final legal advice will be provided by the lawyer during your consultation._"
+                    f"{reply}"
                 )
                 return jsonify({"status": "ok"}), 200
-
-                
+     
         # -------------------------------
         # Global rate limiting
         # -------------------------------
@@ -564,7 +574,7 @@ def webhook():
         # ===============================
         # RECEIPT RETRY (USER INITIATED)
         # ===============================
-        if lower_text == "receipt":
+        if lower_text.strip().lower() == "receipt":
             booking = (
                 db.query(Booking)
                 .filter(
@@ -584,20 +594,17 @@ def webhook():
             # -------------------------------------------------
             # 🔒 CLOSE PAYMENT FLOW (CRITICAL)
             # -------------------------------------------------
-            db = get_db()
-            try:
-                user = (
-                    db.query(User)
-                    .filter(User.whatsapp_id == booking.whatsapp_id)
-                    .first()
-                )
-                if user:
-                    user.state = PAYMENT_CONFIRMED
-                    user.last_payment_link = None
-                    db.commit()
-            finally:
-                db.close()
-        
+            user = (
+                db.query(User)
+                .filter(User.whatsapp_id == booking.whatsapp_id)
+                .first()
+            )
+            
+            if user:
+                user.state = PAYMENT_CONFIRMED
+                user.last_payment_link = None
+                db.commit()
+      
             try:
                 # Generate PDF if not already done
                 if not booking.receipt_generated:
@@ -1445,73 +1452,71 @@ def payment_webhook():
                 .filter(Booking.razorpay_payment_id == payment_id)
                 .first()
             )
+        
             if existing:
                 logger.info(
                     "🔁 Duplicate webhook ignored | payment_id=%s",
                     payment_id
                 )
                 return "OK", 200
-        finally:
-            db.close()
-
-        # -------------------------------------------------
-        # 9. ATOMIC PAYMENT CONFIRMATION
-        # -------------------------------------------------
-        booking = mark_booking_as_paid(
-            payment_link_id=payment_link_id,
-            payment_id=payment_id,
-            payment_mode=razorpay_mode
-        )
         
-        if not booking:
-            return "Ignored", 200
-        # -------------------------------------------------
-        # 🔒 CLOSE USER PAYMENT STATE (CRITICAL)
-        # -------------------------------------------------
-        db = get_db()
-        try:
+            # -------------------------------------------------
+            # 9. ATOMIC PAYMENT CONFIRMATION
+            # -------------------------------------------------
+            booking = mark_booking_as_paid(
+                payment_link_id=payment_link_id,
+                payment_id=payment_id,
+                payment_mode=razorpay_mode
+            )
+        
+            if not booking:
+                return "Ignored", 200
+        
+            # -------------------------------------------------
+            # 🔒 CLOSE USER PAYMENT STATE (CRITICAL)
+            # -------------------------------------------------
             user = (
                 db.query(User)
                 .filter(User.whatsapp_id == booking.whatsapp_id)
                 .first()
             )
+        
             if user:
                 user.state = PAYMENT_CONFIRMED
                 user.last_payment_link = None
                 db.commit()
+        
+            # -------------------------------------------------
+            # 10. RECEIPT FLOW (NON-BLOCKING)
+            # -------------------------------------------------
+            receipt_sent = False
+        
+            try:
+                send_payment_success_message(booking)
+        
+                pdf_path = generate_pdf_receipt(booking)
+        
+                send_payment_receipt_pdf(
+                    booking.whatsapp_id,
+                    pdf_path
+                )
+        
+                receipt_sent = True
+        
+            except Exception:
+                logger.exception(
+                    "⚠️ Receipt flow failed | booking_id=%s",
+                    booking.id
+                )
+        
+            if not receipt_sent:
+                send_text(
+                    booking.whatsapp_id,
+                    "Didn’t receive receipt? Type RECEIPT"
+                )
+        
+            logger.info("✅ PAYMENT CONFIRMED & BOOKING UPDATED")
+            return "OK", 200
+        
         finally:
             db.close()
-               
-        receipt_sent = False
-        
-        try:
-            send_payment_success_message(booking)
-        
-            pdf_path = generate_pdf_receipt(booking)
-        
-            send_payment_receipt_pdf(
-                booking.whatsapp_id,
-                pdf_path
-            )
-        
-            receipt_sent = True
-        
-        except Exception:
-            logger.exception(
-                "⚠️ Receipt flow failed | booking_id=%s",
-                booking.id
-            )
-        
-        if not receipt_sent:
-            send_text(
-                booking.whatsapp_id,
-                "Didn’t receive receipt? Type RECEIPT"
-            )
-        
-        logger.info("✅ PAYMENT CONFIRMED & BOOKING UPDATED")
-        return "OK", 200
-
-
-    except Exception:
-        logger.exception("🔥 Razorpay webhook processing error")
-        return "Internal error", 500
