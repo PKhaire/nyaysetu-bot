@@ -476,6 +476,39 @@ def webhook():
             text_body = interactive_id
 
         lower_text = text_body.lower().strip()
+        # =================================================
+        # POST-PAYMENT AI SUPPORT (PREPARATION MODE)
+        # =================================================
+        paid_booking = (
+            db.query(Booking)
+            .filter(
+                Booking.whatsapp_id == wa_id,
+                Booking.status == "PAID"
+            )
+            .order_by(Booking.id.desc())
+            .first()
+        )
+        
+        if paid_booking:
+            # Allow receipt command explicitly
+            if lower_text == "receipt":
+                pass  # handled by existing receipt logic
+            else:
+                reply = ai_reply(
+                    text_body,
+                    user,
+                    context="post_payment"
+                )
+        
+                send_text(
+                    wa_id,
+                    "🤖 *Consultation Preparation Assistant*\n\n"
+                    f"{reply}\n\n"
+                    "_Final legal advice will be provided by the lawyer during your consultation._"
+                )
+                return jsonify({"status": "ok"}), 200
+
+                
         # -------------------------------
         # Global rate limiting
         # -------------------------------
