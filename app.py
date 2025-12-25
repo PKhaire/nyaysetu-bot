@@ -1355,6 +1355,7 @@ def webhook():
 # ===============================
 @app.route("/payment/webhook", methods=["POST"])
 def payment_webhook():
+    db = get_db()
     try:
         # -------------------------------------------------
         # 1. Read RAW payload (required for HMAC)
@@ -1408,8 +1409,8 @@ def payment_webhook():
         payment_link_id = payment_link["id"]
         payment_link_status = payment_link["status"]
 
-        paid_amount = payment.get("amount")      # paise
-        paid_currency = payment.get("currency") # INR
+        paid_amount = payment.get("amount")
+        paid_currency = payment.get("currency")
 
         # -------------------------------------------------
         # 6. FINAL CONFIRMATION CHECK
@@ -1429,94 +1430,89 @@ def payment_webhook():
             return "Not finalized", 200
 
         # -------------------------------------------------
-        # 7. AMOUNT + CURRENCY VALIDATION (MANDATORY)
+        # 7. AMOUNT VALIDATION
         # -------------------------------------------------
         EXPECTED_AMOUNT = int(BOOKING_PRICE * 100)
 
         if paid_currency != "INR" or paid_amount != EXPECTED_AMOUNT:
-            logger.error(
-                "❌ Amount mismatch | expected=%s | got=%s %s",
-                EXPECTED_AMOUNT,
-                paid_amount,
-                paid_currency
-            )
+            logger.error("❌ Amount mismatch")
             return "Amount mismatch", 400
 
         # -------------------------------------------------
-        # 8. IDEMPOTENCY CHECK (DB LEVEL)
+        # 8. IDEMPOTENCY CHECK
         # -------------------------------------------------
-        db = get_db()
-        try:
-            existing = (
-                db.query(Booking)
-                .filter(Booking.razorpay_payment_id == payment_id)
-                .first()
-            )
-        
-            if existing:
-                logger.info(
-                    "🔁 Duplicate webhook ignored | payment_id=%s",
-                    payment_id
-                )
-                return "OK", 200
-        
-            # -------------------------------------------------
-            # 9. ATOMIC PAYMENT CONFIRMATION
-            # -------------------------------------------------
-            booking = mark_booking_as_paid(
-                payment_link_id=payment_link_id,
-                payment_id=payment_id,
-                payment_mode=razorpay_mode
-            )
-        
-            if not booking:
-                return "Ignored", 200
-        
-            # -------------------------------------------------
-            # 🔒 CLOSE USER PAYMENT STATE (CRITICAL)
-            # -------------------------------------------------
-            user = (
-                db.query(User)
-                .filter(User.whatsapp_id == booking.whatsapp_id)
-                .first()
-            )
-        
-            if user:
-                user.state = PAYMENT_CONFIRMED
-                user.last_payment_link = None
-                db.commit()
-        
-            # -------------------------------------------------
-            # 10. RECEIPT FLOW (NON-BLOCKING)
-            # -------------------------------------------------
-            receipt_sent = False
-        
-            try:
-                send_payment_success_message(booking)
-        
-                pdf_path = generate_pdf_receipt(booking)
-        
-                send_payment_receipt_pdf(
-                    booking.whatsapp_id,
-                    pdf_path
-                )
-        
-                receipt_sent = True
-        
-            except Exception:
-                logger.exception(
-                    "⚠️ Receipt flow failed | booking_id=%s",
-                    booking.id
-                )
-        
-            if not receipt_sent:
-                send_text(
-                    booking.whatsapp_id,
-                    "Didn’t receive receipt? Type RECEIPT"
-                )
-        
-            logger.info("✅ PAYMENT CONFIRMED & BOOKING UPDATED")
+        existing = (
+            db.query(Booking)
+            .filter(Booking.razorpay_payment_id == payment_id)
+            .first()
+        )
+
+        if existing:
+            logger.info("🔁 Duplicate webhook ignored")
             return "OK", 200
-        
-        finally:
-            db.close()
+
+        # -------------------------------------------------
+        # 9. CONFIRM PAYMENT
+        # -------------------------------------------------
+        booking = mark_booking_as_paid(
+            payment_link_id=payment_link_id,
+            payment_id=payment_id,
+            payment_mode=razorpay_mode
+        )
+
+        if not booking:
+            return "Ignored", 200
+
+        # -------------------------------------------------
+        # 10. CLOSE USER PAYMENT STATE
+        # -------------------------------------------------
+        user = (
+            db.query(User)
+            .filter(User.whatsapp_id == booking.whatsapp_id)
+            .first()
+        )
+
+        if user:
+            user.state = PAYMENT_CONFIRMED
+            user.last_payment_link = None
+            db.commit()
+
+        # -------------------------------------------------
+        # 11. RECEIPT FLOW (NON-BLOCKING)
+        # -------------------------------------------------
+        receipt_sent = False
+
+        try:
+            send_payment_success_message(booking)
+
+            pdf_path = generate_pdf_receipt(booking)
+
+            send_payment_receipt_pdf(
+                booking.whatsapp_id,
+                pdf_path
+            )
+
+            receipt_sent = True
+
+        except Exception:
+            logger.exception(
+                "⚠️ Receipt flow failed | booking_id=%s",
+                booking.id
+            )
+
+        if not receipt_sent:
+            send_text(
+                booking.whatsapp_id,
+                "Didn’t receive receipt? Type RECEIPT"
+            )
+
+        logger.info("✅ PAYMENT CONFIRMED & BOOKING UPDATED")
+        return "OK", 200
+
+    except Exception:
+        logger.exception("🔥 Razorpay webhook processing error")
+        return "Internal error", 500
+
+    finally:
+        db.close()
+
