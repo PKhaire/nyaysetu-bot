@@ -18,7 +18,7 @@ from subcategory_labels import SUBCATEGORY_LABELS
 # ===============================
 # CONFIG
 # ===============================
-RESET_DB = True   # ⚠️ MUST BE FALSE IN PROD
+RESET_DB = False   # ⚠️ MUST BE FALSE IN PROD
 #RESET_DB = ENV != "production"
 
 if RESET_DB:
@@ -477,7 +477,7 @@ def webhook():
 
         lower_text = text_body.lower().strip()
         # =================================================
-        # POST-PAYMENT HANDLING (SAFE & FINAL)
+        # POST-PAYMENT SESSION CONTROL (CRITICAL)
         # =================================================
         paid_booking = (
             db.query(Booking)
@@ -490,12 +490,43 @@ def webhook():
         )
         
         if paid_booking:
-            # Allow receipt command
-            if lower_text.strip().lower() == "receipt":
-                pass  # handled in receipt logic below
+            # Parse booking end time
+            booking_end = datetime.combine(
+                paid_booking.date,
+                SLOT_MAP.get(paid_booking.slot_code)[1]
+            )
         
-            # Block restart / menu / booking after payment
-            elif lower_text in RESTART_KEYWORDS:
+            now = datetime.utcnow()
+        
+            # -------------------------------
+            # A) Consultation already OVER
+            # → Start fresh session (same language)
+            # -------------------------------
+            if now > booking_end:
+                user.state = NORMAL
+                user.ai_enabled = False
+                user.free_ai_count = 0
+                user.temp_date = None
+                user.temp_slot = None
+                user.last_payment_link = None
+                db.commit()
+        
+                # Welcome again, but WITHOUT language selection
+                send_text(
+                    wa_id,
+                    t(user, "welcome_back_after_consultation")
+                )
+                return jsonify({"status": "ok"}), 200
+        
+            # -------------------------------
+            # B) Consultation UPCOMING / DONE
+            # -------------------------------
+            lower = lower_text.strip().lower()
+        
+            if lower == "receipt":
+                pass  # handled below
+        
+            elif lower in RESTART_KEYWORDS or lower in WELCOME_KEYWORDS:
                 send_text(
                     wa_id,
                     "✅ Your consultation is confirmed.\n\n"
@@ -504,21 +535,14 @@ def webhook():
                 )
                 return jsonify({"status": "ok"}), 200
         
-            # Allow AI preparation help
             elif text_body:
-                reply = ai_reply(
-                    text_body,
-                    user,
-                    context="post_payment"
-                )
-        
+                reply = ai_reply(text_body, user, context="post_payment")
                 send_text(
                     wa_id,
-                    "🤖 *Consultation Preparation Assistant*\n\n"
-                    f"{reply}"
+                    "🤖 *Consultation Preparation Assistant*\n\n" + reply
                 )
                 return jsonify({"status": "ok"}), 200
-     
+
         # -------------------------------
         # Global rate limiting
         # -------------------------------
