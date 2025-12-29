@@ -709,9 +709,9 @@ def webhook():
                 db.commit()
         
                 # ✅ Marathi default state (prefill only)
-                if user.language == "mr":
+                if user.language == "mr" and not user.state_name:
                     user.state_name = "Maharashtra"
-                    user.auto_state_prefilled = True   # ⭐ ADD THIS LINE
+                    user.auto_state_prefilled = True   
         
                     # ✅ Marathi greeting — ONLY ONCE
                     if not getattr(user, "marathi_greeted", False):
@@ -817,7 +817,7 @@ def webhook():
             db.commit()
         
             # ✅ Marathi users: auto-apply Maharashtra AFTER name
-            if user.language == "mr":
+            if user.language == "mr" and not user.state_name:
                 user.state_name = "Maharashtra"
                 user.auto_state_applied = True
                 db.commit()
@@ -937,6 +937,26 @@ def webhook():
         # Ask District (STRICT & SAFE)
         # -------------------------------
         if user.state == ASK_DISTRICT:
+            # ===============================
+            # HARD SAFETY: district without state must NEVER happen
+            # ===============================
+            if not user.state_name:
+                logger.error(
+                    "District selection attempted without state | wa_id=%s",
+                    wa_id
+                )
+            
+                save_state(db, user, ASK_STATE)
+            
+                send_list_picker(
+                    wa_id,
+                    header=safe_header(t(user, "select_state")),
+                    body=t(user, "choose_state"),
+                    rows=build_state_list_rows(page=1),
+                    section_title=t(user, "indian_states"),
+                )
+                return jsonify({"status": "ok"}), 200
+
             district = None
         
             # ---------------------------------
@@ -1279,9 +1299,16 @@ def webhook():
                 user.temp_date,
             ]
         
-            if not all(required_fields):
-                send_text(wa_id, t(user, "booking_missing"))
-                save_state(db, user, ASK_NAME)
+            if not user.state_name:
+                logger.error(
+                    "Booking blocked due to missing state | wa_id=%s",
+                    wa_id
+                )
+                send_text(
+                    wa_id,
+                    "⚠️ State information is missing. Please select your state again."
+                )
+                save_state(db, user, ASK_STATE)
                 return jsonify({"status": "ok"}), 200
         
             # ---------------------------------
