@@ -1,12 +1,13 @@
 import os
 import json
 import logging
-import time
+import time as time_module
 import hmac
 import hashlib
 
 from collections import defaultdict, deque
-from datetime import datetime, time, timedelta
+from datetime import datetime, time as dt_time, timedelta
+
 from flask import Flask, request, jsonify
 
 # ===============================
@@ -234,7 +235,7 @@ def get_or_create_user(db, wa_id):
 # RATE LIMIT HELPERS
 # ===============================
 def is_user_rate_limited(wa_id):
-    now = time.time()
+    now = time_module.time()
     times = user_message_times[wa_id]
 
     while times and now - times[0] > USER_MSG_WINDOW:
@@ -248,7 +249,7 @@ def is_user_rate_limited(wa_id):
 
 
 def is_ai_rate_limited(wa_id):
-    now = time.time()
+    now = time_module.time()
     last_call = user_last_ai_call.get(wa_id, 0)
 
     if now - last_call < AI_CALL_COOLDOWN:
@@ -259,7 +260,7 @@ def is_ai_rate_limited(wa_id):
 
 
 def is_global_rate_limited():
-    now = time.time()
+    now = time_module.time()
 
     while global_request_times and now - global_request_times[0] > GLOBAL_REQ_WINDOW:
         global_request_times.popleft()
@@ -543,7 +544,7 @@ def webhook():
             
             booking_start = datetime.combine(
                 booking_date,
-                time(start_hour, 0)
+                dt_time(start_hour, 0)
             )
             
             # Each consultation = 1 hour
