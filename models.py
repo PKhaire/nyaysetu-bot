@@ -1,5 +1,5 @@
 # models.py
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Date
 from sqlalchemy.orm import declarative_base
 from datetime import datetime
 
@@ -65,7 +65,7 @@ class Booking(Base):
     # -------------------------
     # APPOINTMENT
     # -------------------------
-    date = Column(String, nullable=False)
+    date = Column(Date, nullable=False)
     slot_code = Column(String, nullable=True)
     slot_readable = Column(String, nullable=False)
 
