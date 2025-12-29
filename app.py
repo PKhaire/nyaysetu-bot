@@ -491,11 +491,16 @@ def webhook():
         
         if paid_booking:
             # Parse booking end time
+            booking_date = paid_booking.date
+            
+            if isinstance(booking_date, str):
+                booking_date = datetime.strptime(booking_date, "%Y-%m-%d").date()
+            
             booking_end = datetime.combine(
-                paid_booking.date,
-                SLOT_MAP.get(paid_booking.slot_code)[1]
+                booking_date,
+                SLOT_MAP[paid_booking.slot_code][1]
             )
-        
+
             now = datetime.utcnow()
         
             # -------------------------------
