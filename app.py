@@ -6,7 +6,7 @@ import hmac
 import hashlib
 
 from collections import defaultdict, deque
-from datetime import datetime
+from datetime import time, timedelta
 from flask import Flask, request, jsonify
 
 # ===============================
@@ -529,11 +529,26 @@ def webhook():
                     paid_booking.slot_code
                 )
                 return jsonify({"status": "ignored"}), 200
-        
-            booking_end = datetime.combine(
+                    
+            # slot_code format: "10_11"
+            try:
+                start_hour = int(paid_booking.slot_code.split("_")[0])
+            except Exception:
+                logger.error(
+                    "Invalid slot_code format | booking_id=%s | slot=%s",
+                    paid_booking.id,
+                    paid_booking.slot_code
+                )
+                return jsonify({"status": "ignored"}), 200
+            
+            booking_start = datetime.combine(
                 booking_date,
-                slot_info[1]
+                time(start_hour, 0)
             )
+            
+            # Each consultation = 1 hour
+            booking_end = booking_start + timedelta(hours=1)
+
         
             now = datetime.utcnow()
         
