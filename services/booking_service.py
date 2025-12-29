@@ -139,15 +139,13 @@ def create_booking_temp(db, user, name, state, district, category, date, slot_co
     booking = Booking(
         whatsapp_id=user.whatsapp_id,
         name=name,
-        phone=user.whatsapp_id,              # ✅ FIX 1: phone required
-        state_name=state,
+        phone=user.whatsapp_id,              
         district_name=district,
         category=category,
-        date=date,
+        date=datetime.strptime(date, "%Y-%m-%d").date(),
         slot_code=slot_code,
         slot_readable=SLOT_MAP[slot_code],
-        amount=BOOKING_PRICE,                # ✅ FIX 2: amount required
-        payment_token=token,
+        amount=BOOKING_PRICE,                
         status="PENDING",
         created_at=datetime.utcnow()
     )
