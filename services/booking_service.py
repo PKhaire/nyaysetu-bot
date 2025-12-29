@@ -130,6 +130,17 @@ def validate_slot(date_str, slot_code):
 # Booking creation
 # --------------------
 def create_booking_temp(db, user, name, state, district, category, date, slot_code):
+    # ===============================
+    # SAFETY CHECK
+    # ===============================
+    if not state:
+        logger.critical(
+            "create_booking_temp blocked | NULL state | wa_id=%s | user_id=%s",
+            user.whatsapp_id,
+            user.id
+        )
+        return None, "State information missing. Please restart booking."
+    
     ok, error = validate_slot(date, slot_code)
     if not ok:
         return None, error
