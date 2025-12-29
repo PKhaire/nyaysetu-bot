@@ -6,8 +6,10 @@ from zoneinfo import ZoneInfo
 IST = ZoneInfo("Asia/Kolkata")
 import razorpay
 from config import BOOKING_PRICE, BOOKING_CUTOFF_HOURS, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
-from models import Booking   # ✅ REQUIRED IMPORT
+from models import Booking  
 from db import SessionLocal
+import logging                      
+logger = logging.getLogger("booking_service")  
 
 SLOT_BUFFER_HOURS = 2  # Same buffer as backend
 
@@ -150,13 +152,17 @@ def create_booking_temp(db, user, name, state, district, category, date, slot_co
     booking = Booking(
         whatsapp_id=user.whatsapp_id,
         name=name,
-        phone=user.whatsapp_id,              
+        phone=user.whatsapp_id,
+    
+        state_name=state,          # ✅ FIX
         district_name=district,
+    
         category=category,
         date=datetime.strptime(date, "%Y-%m-%d").date(),
         slot_code=slot_code,
         slot_readable=SLOT_MAP[slot_code],
-        amount=BOOKING_PRICE,                
+        amount=BOOKING_PRICE,
+        payment_token=token,
         status="PENDING",
         created_at=datetime.utcnow()
     )
