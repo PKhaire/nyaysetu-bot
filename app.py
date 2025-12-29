@@ -488,19 +488,53 @@ def webhook():
             .order_by(Booking.id.desc())
             .first()
         )
+        # -------------------------------
+        # DEFENSIVE GUARD – NEVER CRASH
+        # -------------------------------
+        if paid_booking:
+            if not paid_booking.date or not paid_booking.slot_code:
+                logger.warning(
+                    "Incomplete paid booking | booking_id=%s | date=%s | slot=%s",
+                    paid_booking.id,
+                    paid_booking.date,
+                    paid_booking.slot_code,
+                )
+                return jsonify({"status": "ignored"}), 200
         
         if paid_booking:
-            # Parse booking end time
+        
+            # -------------------------------
+            # SAFE booking_end calculation
+            # -------------------------------
             booking_date = paid_booking.date
-            
+        
+            # Convert string → date (required)
             if isinstance(booking_date, str):
-                booking_date = datetime.strptime(booking_date, "%Y-%m-%d").date()
-            
+                try:
+                    booking_date = datetime.strptime(booking_date, "%Y-%m-%d").date()
+                except ValueError:
+                    logger.error(
+                        "Invalid booking date | booking_id=%s | value=%s",
+                        paid_booking.id,
+                        booking_date
+                    )
+                    return jsonify({"status": "ignored"}), 200
+        
+            # Validate slot
+            slot_info = SLOT_MAP.get(paid_booking.slot_code)
+            if not slot_info:
+                logger.error(
+                    "Invalid slot_code | booking_id=%s | slot=%s",
+                    paid_booking.id,
+                    paid_booking.slot_code
+                )
+                return jsonify({"status": "ignored"}), 200
+        
             booking_end = datetime.combine(
                 booking_date,
-                SLOT_MAP[paid_booking.slot_code][1]
+                slot_info[1]
             )
-
+        
             now = datetime.utcnow()
         
             # -------------------------------
