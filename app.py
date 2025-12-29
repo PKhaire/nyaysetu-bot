@@ -709,21 +709,18 @@ def webhook():
                 db.commit()
         
                 # ✅ Marathi default state (prefill only)
-                if user.language == "mr" and not user.state_name:
+                if user.language == "mr":
                     user.state_name = "Maharashtra"
-                    user.auto_state_prefilled = True   
-        
-                    # ✅ Marathi greeting — ONLY ONCE
+                
                     if not getattr(user, "marathi_greeted", False):
                         send_text(
                             wa_id,
-                            "🙏 जय महाराष्ट्र! 🇮🇳\n"
-                            "आपण NyaySetu मध्ये स्वागत आहे ⚖️"
+                            "🙏 जय महाराष्ट्र! 🇮🇳\nआपण NyaySetu मध्ये स्वागत आहे ⚖️"
                         )
                         user.marathi_greeted = True
-        
+                
                     db.commit()
-        
+                        
                 save_state(db, user, ASK_AI_OR_BOOK)
         
                 send_buttons(
@@ -817,21 +814,18 @@ def webhook():
             db.commit()
         
             # ✅ Marathi users: auto-apply Maharashtra AFTER name
-            if user.language == "mr" and not user.state_name:
-                user.state_name = "Maharashtra"
-                user.auto_state_applied = True
-                db.commit()
-        
+            if user.language == "mr":
                 save_state(db, user, ASK_DISTRICT)
-        
+            
                 send_list_picker(
                     wa_id,
-                    header=t(user, "select_district_in", state=user.state_name),
+                    header=t(user, "select_district_in", state="Maharashtra"),
                     body=t(user, "choose_district"),
-                    rows=build_district_list_rows(user.state_name),
-                    section_title=get_safe_section_title(user.state_name),
+                    rows=build_district_list_rows("Maharashtra"),
+                    section_title=get_safe_section_title("Maharashtra"),
                 )
                 return jsonify({"status": "ok"}), 200
+
         
             # ✅ All other users → ask state
             save_state(db, user, ASK_STATE)
@@ -851,23 +845,16 @@ def webhook():
         # -------------------------------
         if user.state == ASK_STATE:
             state_name = None
-        
-            # ✅ Safety auto-skip (Marathi fallback only, no spam)
-            if (
-                user.language == "mr"
-                and user.state_name == "Maharashtra"
-                and getattr(user, "auto_state_applied", False)
-                and not interactive_id
-                and not text_body
-            ):
+            # Marathi users never select state
+            if user.language == "mr":
                 save_state(db, user, ASK_DISTRICT)
-        
+            
                 send_list_picker(
                     wa_id,
-                    header=t(user, "select_district_in", state=user.state_name),
+                    header=t(user, "select_district_in", state="Maharashtra"),
                     body=t(user, "choose_district"),
-                    rows=build_district_list_rows(user.state_name),
-                    section_title=get_safe_section_title(user.state_name),
+                    rows=build_district_list_rows("Maharashtra"),
+                    section_title=get_safe_section_title("Maharashtra"),
                 )
                 return jsonify({"status": "ok"}), 200
         
@@ -919,7 +906,6 @@ def webhook():
             # Save & move forward
             # ---------------------------------
             user.state_name = state_name
-            user.auto_state_applied = False
             db.commit()
         
             save_state(db, user, ASK_DISTRICT)
@@ -946,7 +932,7 @@ def webhook():
                     wa_id
                 )
             
-                save_state(db, user, ASK_STATE)
+                save_state(db, user, ASK_DISTRICT if user.language == "mr" else ASK_STATE)
             
                 send_list_picker(
                     wa_id,
