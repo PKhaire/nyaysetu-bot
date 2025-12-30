@@ -216,6 +216,7 @@ def generate_case_id():
 
 def get_or_create_user(db, wa_id):
     user = db.query(User).filter_by(whatsapp_id=wa_id).first()
+
     if not user:
         user = User(
             whatsapp_id=wa_id,
@@ -224,12 +225,15 @@ def get_or_create_user(db, wa_id):
             state=NORMAL,
             ai_enabled=False,
             free_ai_count=0,
+            welcome_sent=False,     
             created_at=datetime.utcnow(),
         )
         db.add(user)
         db.commit()
         db.refresh(user)
+
     return user
+
 
 # ===============================
 # RATE LIMIT HELPERS
@@ -409,7 +413,12 @@ def t(user, key, **kwargs):
         "English": "en",
         "Hinglish": "hi",
         "Hindi": "hi",
+    
+        # ✅ Marathi variants
         "Marathi": "mr",
+        "मराठी": "mr",
+    
+        # normalized keys
         "en": "en",
         "hi": "hi",
         "mr": "mr",
@@ -628,16 +637,22 @@ def webhook():
         # WELCOME
         # ===============================
         if user.state == NORMAL and lower_text in WELCOME_KEYWORDS:
-            save_state(db, user, ASK_LANGUAGE)
-            send_buttons(
-                wa_id,
-                t(user, "welcome", case_id=user.case_id),
-                [
-                    {"id": "lang_en", "title": "English"},
-                    {"id": "lang_hi", "title": "Hinglish"},
-                    {"id": "lang_mr", "title": "Marathi"},
-                ],
-            )
+            if not user.welcome_sent:
+                save_state(db, user, ASK_LANGUAGE)
+        
+                send_buttons(
+                    wa_id,
+                    t(user, "welcome", case_id=user.case_id),
+                    [
+                        {"id": "lang_en", "title": "English"},
+                        {"id": "lang_hi", "title": "Hinglish"},
+                        {"id": "lang_mr", "title": "मराठी"},
+                    ],
+                )
+        
+                user.welcome_sent = True
+                db.commit()
+        
             return jsonify({"status": "ok"}), 200
             
         # -------------------------------
