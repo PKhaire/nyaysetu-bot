@@ -582,30 +582,56 @@ def webhook():
                 )
                 return jsonify({"status": "ok"}), 200
         
-            # -------------------------------
-            # B) Consultation UPCOMING / DONE
-            # -------------------------------
-            lower = lower_text.strip().lower()
-        
-            if lower == "receipt":
-                pass  # handled below
-        
-            elif lower in RESTART_KEYWORDS or lower in WELCOME_KEYWORDS:
-                send_text(
-                    wa_id,
-                    "✅ Your consultation is confirmed.\n\n"
-                    "📄 Type RECEIPT to get your payment receipt again.\n"
-                    "📞 Our team will contact you shortly."
-                )
-                return jsonify({"status": "ok"}), 200
-        
-            elif text_body:
-                reply = ai_reply(text_body, user, context="post_payment")
-                send_text(
-                    wa_id,
-                    "🤖 *Consultation Preparation Assistant*\n\n" + reply
-                )
-                return jsonify({"status": "ok"}), 200
+            # ===============================
+            # POST-PAYMENT MESSAGE HANDLING
+            # ===============================
+            if paid_booking:
+            
+                message = text_body.strip()
+                lower = message.lower()
+            
+                # ---------------------------
+                # 1️⃣ RECEIPT REQUEST
+                # ---------------------------
+                if lower == "receipt":
+                    send_payment_receipt_again(db, wa_id)
+                    return jsonify({"status": "ok"}), 200
+            
+                # ---------------------------
+                # 2️⃣ FIRST HI / RESTART AFTER PAYMENT
+                # ---------------------------
+                elif lower in RESTART_KEYWORDS or lower in WELCOME_KEYWORDS:
+            
+                    if user.state != PAYMENT_CONFIRMED:
+                        send_text(
+                            wa_id,
+                            "✅ *Your consultation has been successfully confirmed.*\n\n"
+                            "📄 Type *RECEIPT* to receive your payment receipt again.\n"
+                            "💬 You may type *Hi* to ask preliminary questions related to your case before the consultation.\n\n"
+                            "📞 Our legal team will connect with you at your scheduled appointment time."
+                        )
+                        user.state = PAYMENT_CONFIRMED
+                        db.commit()
+                        return jsonify({"status": "ok"}), 200
+            
+                    # Already confirmed → allow AI
+                    reply = ai_reply(message, user, context="post_payment")
+                    send_text(
+                        wa_id,
+                        "🤖 *Consultation Preparation Assistant*\n\n" + reply
+                    )
+                    return jsonify({"status": "ok"}), 200
+            
+                # ---------------------------
+                # 3️⃣ ANY OTHER MESSAGE → AI
+                # ---------------------------
+                elif user.state == PAYMENT_CONFIRMED and message:
+                    reply = ai_reply(message, user, context="post_payment")
+                    send_text(
+                        wa_id,
+                        "🤖 *Consultation Preparation Assistant*\n\n" + reply
+                    )
+                    return jsonify({"status": "ok"}), 200
 
         # -------------------------------
         # Global rate limiting
