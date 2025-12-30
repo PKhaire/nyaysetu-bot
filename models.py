@@ -103,3 +103,17 @@ class CategoryAnalytics(Base):
     subcategory = Column(String, index=True)
     count = Column(Integer, default=0)
 
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True)
+    whatsapp_id = Column(String, unique=True, index=True)
+
+    state = Column(String)
+    language = Column(String)
+
+    # ✅ ADD THIS
+    welcome_sent = Column(Boolean, default=False)
+
+    created_at = Column(DateTime)
+
