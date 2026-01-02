@@ -19,8 +19,8 @@ from subcategory_labels import SUBCATEGORY_LABELS
 # ===============================
 # CONFIG
 # ===============================
-RESET_DB = False   # ⚠️ MUST BE FALSE IN PROD
-#RESET_DB = ENV != "production"
+#RESET_DB = False   # ⚠️ MUST BE FALSE IN PROD HARD CODED
+RESET_DB = ENV != "production"
 
 if RESET_DB:
     if os.path.exists("nyaysetu.db"):
