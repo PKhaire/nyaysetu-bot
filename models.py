@@ -11,23 +11,52 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     whatsapp_id = Column(String, unique=True, index=True, nullable=False)
-    free_ai_count = Column(Integer, default=0)
+
+    # -------------------------
+    # FLOW STATE (IMPORTANT)
+    # -------------------------
+    flow_state = Column(String, default="NORMAL")   # conversation state
+
+    # -------------------------
+    # USER / CONTEXT
+    # -------------------------
     case_id = Column(String, unique=True, index=True)
-    ai_enabled = Column(Boolean, default=False)
+    language = Column(String, default="English")
     name = Column(String)
+
+    # -------------------------
+    # LOCATION (GEOGRAPHIC)
+    # -------------------------
     state_name = Column(String)
     district_name = Column(String)
+
+    # -------------------------
+    # LEGAL CONTEXT
+    # -------------------------
     category = Column(String)
     subcategory = Column(String)
-    language = Column(String, default="English")
+
+    # -------------------------
+    # AI / SESSION FLAGS
+    # -------------------------
+    ai_enabled = Column(Boolean, default=False)
+    free_ai_count = Column(Integer, default=0)
     welcome_sent = Column(Boolean, default=False)
-    state = Column(String, default="NORMAL")
+    session_started = Column(Boolean, default=False)
+    query_count = Column(Integer, default=0)
+
+    # -------------------------
+    # TEMP BOOKING DATA
+    # -------------------------
     temp_date = Column(String)
     temp_slot = Column(String)
     last_payment_link = Column(String)
-    session_started = Column(Boolean, default=False)
-    query_count = Column(Integer, default=0)
+
+    # -------------------------
+    # AUDIT
+    # -------------------------
     created_at = Column(DateTime, default=datetime.utcnow)
+
 
 
 class Booking(Base):
