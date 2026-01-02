@@ -206,9 +206,15 @@ PAYMENT_CONFIRMED = "PAYMENT_CONFIRMED"
 def get_db():
     return SessionLocal()
 
-def save_state(db, user, state):
-    user.state = state
+def get_flow_state(user):
+    return user.flow_state
+
+def set_flow_state(db, user, value):
+    user.flow_state = value
     db.commit()
+
+def save_state(db, user, state):
+    set_flow_state(db, user, state)
 
 def generate_case_id():
     import random, string
@@ -222,7 +228,7 @@ def get_or_create_user(db, wa_id):
             whatsapp_id=wa_id,
             case_id=generate_case_id(),
             language=None,
-            state=NORMAL,
+            flow_state=NORMAL,
             ai_enabled=False,
             free_ai_count=0,
             welcome_sent=False,     
@@ -314,7 +320,7 @@ def send_subcategory_list(wa_id, user, category):
         logger.error(
             "send_subcategory_list called with category=None | wa_id=%s | state=%s",
             wa_id,
-            user.state,
+            user.flow_state,
         )
         save_state(db, user, ASK_CATEGORY)
         send_category_list(wa_id, user)
@@ -402,6 +408,58 @@ def get_category_label(category_key, user):
 def get_subcategory_label(subcategory, user):
     lang = user.language or "en"
     return SUBCATEGORY_LABELS.get(subcategory, {}).get(lang, subcategory)
+    
+def send_payment_receipt_again(db, wa_id):
+    booking = (
+        db.query(Booking)
+        .filter(
+            Booking.whatsapp_id == wa_id,
+            Booking.status == "PAID"
+        )
+        .order_by(Booking.id.desc())
+        .first()
+    )
+
+    if not booking:
+        send_text(wa_id, "❌ No completed payment found.")
+        return
+
+    try:
+        # ---------------------------------
+        # Generate PDF if required
+        # ---------------------------------
+        if not booking.receipt_generated:
+            pdf_path = generate_pdf_receipt(booking)
+            booking.receipt_generated = True
+            booking.receipt_path = pdf_path
+        else:
+            pdf_path = getattr(booking, "receipt_path", None)
+
+        if not pdf_path:
+            raise RuntimeError("Receipt PDF path missing")
+
+        # ---------------------------------
+        # Send receipt
+        # ---------------------------------
+        send_payment_receipt_pdf(
+            booking.whatsapp_id,
+            pdf_path
+        )
+
+        booking.receipt_sent = True
+        db.commit()
+
+        send_text(
+            wa_id,
+            "📄 Your payment receipt has been sent again."
+        )
+
+    except Exception:
+        logger.exception("Receipt resend failed | booking_id=%s", booking.id)
+        send_text(
+            wa_id,
+            "⚠️ Unable to resend receipt right now. Please try later."
+        )
 
 def t(user, key, **kwargs):
     """
@@ -580,7 +638,7 @@ def webhook():
                 # 2️⃣ FIRST HI AFTER PAYMENT
                 # ---------------------------
                 if lower in RESTART_KEYWORDS or lower in WELCOME_KEYWORDS:
-                    if user.state != PAYMENT_CONFIRMED:
+                    if user.flow_state != PAYMENT_CONFIRMED:
                         send_text(
                             wa_id,
                             "✅ *Your consultation has been successfully confirmed.*\n\n"
@@ -588,8 +646,7 @@ def webhook():
                             "💬 You may ask preliminary questions related to your case.\n\n"
                             "📞 Our legal team will connect with you at your scheduled appointment time."
                         )
-                        user.state = PAYMENT_CONFIRMED
-                        db.commit()
+                        set_flow_state(db, user, PAYMENT_CONFIRMED)
                         return jsonify({"status": "ok"}), 200
             
                     # Already confirmed → AI
@@ -616,12 +673,14 @@ def webhook():
             # → Start fresh session (same language)
             # -------------------------------
             if now > booking_end:
-                user.state = NORMAL
+                set_flow_state(db, user, NORMAL)
                 user.ai_enabled = False
                 user.free_ai_count = 0
                 user.temp_date = None
                 user.temp_slot = None
                 user.last_payment_link = None
+                user.welcome_sent = False
+                user.language = None
                 db.commit()
         
                 # Welcome again, but WITHOUT language selection
@@ -642,11 +701,11 @@ def webhook():
         # RESTART
         # ===============================
         if lower_text in RESTART_KEYWORDS:
-            if user.state == WAITING_PAYMENT:
+            if user.flow_state == WAITING_PAYMENT:
                 send_text(wa_id, t(user, "payment_in_progress"))
                 return jsonify({"status": "ok"}), 200
 
-            user.state = NORMAL
+            set_flow_state(db, user, NORMAL)
             user.ai_enabled = False
             user.free_ai_count = 0
             user.temp_date = None
@@ -660,7 +719,7 @@ def webhook():
         # ===============================
         # WELCOME
         # ===============================
-        if user.state == NORMAL and lower_text in WELCOME_KEYWORDS:
+        if user.flow_state == NORMAL and lower_text in WELCOME_KEYWORDS:
             if not user.welcome_sent:
                 save_state(db, user, ASK_LANGUAGE)
         
@@ -693,72 +752,13 @@ def webhook():
         # RECEIPT RETRY (USER INITIATED)
         # ===============================
         if lower_text.strip().lower() == "receipt":
-            booking = (
-                db.query(Booking)
-                .filter(
-                    Booking.whatsapp_id == wa_id,
-                    Booking.status == "PAID"
-                )
-                .order_by(Booking.id.desc())
-                .first()
-            )
-        
-            if not booking:
-                send_text(
-                    wa_id,
-                    "❌ No completed payment found for your number."
-                )
-                return jsonify({"status": "ok"}), 200
-            # -------------------------------------------------
-            # 🔒 CLOSE PAYMENT FLOW (CRITICAL)
-            # -------------------------------------------------
-            user = (
-                db.query(User)
-                .filter(User.whatsapp_id == booking.whatsapp_id)
-                .first()
-            )
-            
-            if user:
-                user.state = PAYMENT_CONFIRMED
-                user.last_payment_link = None
-                db.commit()
-      
-            try:
-                # Generate PDF if not already done
-                if not booking.receipt_generated:
-                    pdf_path = generate_pdf_receipt(booking)
-                else:
-                    pdf_path = booking.receipt_path if hasattr(booking, "receipt_path") else None
-        
-                # Send receipt if not already sent
-                if not booking.receipt_sent:
-                    send_payment_receipt_pdf(
-                        booking.whatsapp_id,
-                        pdf_path
-                    )
-        
-                send_text(
-                    wa_id,
-                    "📄 Your payment receipt has been re-sent successfully."
-                )
-        
-            except Exception:
-                logger.exception(
-                    "❌ Receipt resend failed | booking_id=%s",
-                    booking.id
-                )
-                send_text(
-                    wa_id,
-                    "⚠️ Sorry, we couldn’t resend your receipt right now.\n"
-                    "Please try again later."
-                )
-        
+            send_payment_receipt_again(db, wa_id)
             return jsonify({"status": "ok"}), 200
 
         # ===============================
         # LANGUAGE SELECTION
         # ===============================
-        if user.state == ASK_LANGUAGE:
+        if user.flow_state == ASK_LANGUAGE:
             if interactive_id in ("lang_en", "lang_hi", "lang_mr"):
                 user.language = interactive_id.replace("lang_", "")
                 db.commit()
@@ -792,7 +792,7 @@ def webhook():
         # ===============================
         # AI OR BOOK
         # ===============================
-        if user.state == ASK_AI_OR_BOOK:
+        if user.flow_state == ASK_AI_OR_BOOK:
             if interactive_id == "opt_ai":
                 user.ai_enabled = True
                 save_state(db, user, NORMAL)
@@ -821,7 +821,7 @@ def webhook():
         # ===============================
         # FREE AI CHAT
         # ===============================
-        if user.state == NORMAL and user.ai_enabled:
+        if user.flow_state == NORMAL and user.ai_enabled:
             if not text_body:
                 return jsonify({"status": "ignored"}), 200
 
@@ -860,7 +860,7 @@ def webhook():
         # -------------------------------
         # Ask Name
         # -------------------------------
-        if user.state == ASK_NAME:
+        if user.flow_state == ASK_NAME:
             if not text_body or len(text_body.strip()) < 2:
                 send_text(wa_id, t(user, "ask_name_retry"))
                 return jsonify({"status": "ok"}), 200
@@ -898,7 +898,7 @@ def webhook():
         # -------------------------------
         # Ask State (STRICT & SAFE)
         # -------------------------------
-        if user.state == ASK_STATE:
+        if user.flow_state == ASK_STATE:
             state_name = None
             # Marathi users never select state
             if user.language == "mr":
@@ -977,7 +977,7 @@ def webhook():
         # -------------------------------
         # Ask District (STRICT & SAFE)
         # -------------------------------
-        if user.state == ASK_DISTRICT:
+        if user.flow_state == ASK_DISTRICT:
             # ===============================
             # HARD SAFETY: district without state must NEVER happen
             # ===============================
@@ -1090,7 +1090,7 @@ def webhook():
         # -------------------------------
         # Category (STRICT & SAFE)
         # -------------------------------
-        if user.state == ASK_CATEGORY:
+        if user.flow_state == ASK_CATEGORY:
             category = None
         
             # ---------------------------------
@@ -1134,7 +1134,7 @@ def webhook():
         # -------------------------------
         # Sub Category (STRICT & SAFE)
         # -------------------------------
-        if user.state == ASK_SUBCATEGORY:
+        if user.flow_state == ASK_SUBCATEGORY:
         
             if not interactive_id:
                 return jsonify({"status": "ignored"}), 200
@@ -1206,7 +1206,7 @@ def webhook():
         # -------------------------------
         # Date (STRICT & SAFE)
         # -------------------------------
-        if user.state == ASK_DATE:
+        if user.flow_state == ASK_DATE:
             # ---------------------------------
             # Ignore empty / status events
             # ---------------------------------
@@ -1292,7 +1292,7 @@ def webhook():
         # -------------------------------
         # Slot (STRICT & SAFE)
         # -------------------------------
-        if user.state == ASK_SLOT:
+        if user.flow_state == ASK_SLOT:
             # ---------------------------------
             # Ignore empty / status events
             # ---------------------------------
@@ -1436,7 +1436,7 @@ def webhook():
         # ===============================
         # WAITING PAYMENT (SAFE MODE)
         # ===============================
-        if user.state == WAITING_PAYMENT:
+        if user.flow_state == WAITING_PAYMENT:
         
             # Ignore delivery/status callbacks
             if not text_body:
@@ -1604,7 +1604,7 @@ def payment_webhook():
         )
 
         if user:
-            user.state = PAYMENT_CONFIRMED
+            set_flow_state(db, user, PAYMENT_CONFIRMED)
             user.last_payment_link = None
             db.commit()
 
