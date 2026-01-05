@@ -175,6 +175,7 @@ from services.location_service import (
     build_district_list_rows,
     get_safe_section_title
 )
+from services.email_service import send_new_booking_email
 
 # ===============================
 # APP
@@ -1607,9 +1608,20 @@ def payment_webhook():
             set_flow_state(db, user, PAYMENT_CONFIRMED)
             user.last_payment_link = None
             db.commit()
+            
+        # -------------------------------------------------
+        #  INSTANT ADMIN EMAIL Notifiactions
+        # -------------------------------------------------
+        try:
+            send_new_booking_email(booking)
+        except Exception:
+            logger.exception(
+                "⚠️ Failed to send admin booking email | booking_id=%s",
+                booking.id
+            )
 
         # -------------------------------------------------
-        # 11. RECEIPT FLOW (NON-BLOCKING)
+        # RECEIPT FLOW 
         # -------------------------------------------------
         receipt_sent = False
 
