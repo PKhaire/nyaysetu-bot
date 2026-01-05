@@ -5,6 +5,7 @@ import time as time_module
 import hmac
 import hashlib
 
+from threading import Thread
 from collections import defaultdict, deque
 from datetime import datetime, time as dt_time, timedelta
 from flask import Flask, request, jsonify
@@ -460,6 +461,38 @@ def send_payment_receipt_again(db, wa_id):
             wa_id,
             "⚠️ Unable to resend receipt right now. Please try later."
         )
+        
+def post_payment_background_tasks(booking_id):
+    db = SessionLocal()
+    try:
+        booking = db.query(Booking).get(booking_id)
+        if not booking:
+            return
+
+        # 1️⃣ Admin email (slow – SMTP)
+        try:
+            send_new_booking_email(booking)
+        except Exception:
+            logger.exception(
+                "⚠️ Admin email failed | booking_id=%s",
+                booking_id
+            )
+
+        # 2️⃣ PDF receipt + WhatsApp document (slow)
+        try:
+            pdf_path = generate_pdf_receipt(booking)
+            send_payment_receipt_pdf(
+                booking.whatsapp_id,
+                pdf_path
+            )
+        except Exception:
+            logger.exception(
+                "⚠️ Receipt PDF flow failed | booking_id=%s",
+                booking_id
+            )
+
+    finally:
+        db.close()
 
 def t(user, key, **kwargs):
     """
@@ -1590,10 +1623,10 @@ def payment_webhook():
             payment_id=payment_id,
             payment_mode=razorpay_mode
         )
-
+        
         if not booking:
             return "Ignored", 200
-
+        
         # -------------------------------------------------
         # 10. CLOSE USER PAYMENT STATE
         # -------------------------------------------------
@@ -1602,59 +1635,29 @@ def payment_webhook():
             .filter(User.whatsapp_id == booking.whatsapp_id)
             .first()
         )
-
+        
         if user:
             set_flow_state(db, user, PAYMENT_CONFIRMED)
             user.last_payment_link = None
             db.commit()
-            
+        
         # -------------------------------------------------
-        #  INSTANT ADMIN EMAIL Notifiactions
+        # 11. FAST USER CONFIRMATION (TEXT ONLY)
         # -------------------------------------------------
-        try:
-            send_new_booking_email(booking)
-        except Exception:
-            logger.exception(
-                "⚠️ Failed to send admin booking email | booking_id=%s",
-                booking.id
-            )
-
-        # -------------------------------------------------
-        # RECEIPT FLOW 
-        # -------------------------------------------------
-        receipt_sent = False
-
         try:
             send_payment_success_message(booking)
-
-            pdf_path = generate_pdf_receipt(booking)
-
-            send_payment_receipt_pdf(
-                booking.whatsapp_id,
-                pdf_path
-            )
-
-            receipt_sent = True
-
         except Exception:
-            logger.exception(
-                "⚠️ Receipt flow failed | booking_id=%s",
-                booking.id
-            )
-
-        if not receipt_sent:
-            send_text(
-                booking.whatsapp_id,
-                "Didn’t receive receipt? Type RECEIPT"
-            )
-
+            logger.exception("⚠️ Payment success message failed")
+        
+        # -------------------------------------------------
+        # 12. BACKGROUND HEAVY TASKS (EMAIL + PDF)
+        # -------------------------------------------------
+        Thread(
+            target=post_payment_background_tasks,
+            args=(booking.id,),
+            daemon=True
+        ).start()
+        
         logger.info("✅ PAYMENT CONFIRMED & BOOKING UPDATED")
+        
         return "OK", 200
-
-    except Exception:
-        logger.exception("🔥 Razorpay webhook processing error")
-        return "Internal error", 500
-
-    finally:
-        db.close()
-
