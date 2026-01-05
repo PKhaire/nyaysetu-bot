@@ -7,8 +7,8 @@ import hashlib
 
 from collections import defaultdict, deque
 from datetime import datetime, time as dt_time, timedelta
-
 from flask import Flask, request, jsonify
+from config import ENV, WHATSAPP_VERIFY_TOKEN, BOOKING_PRICE, RAZORPAY_WEBHOOK_SECRET
 
 # ===============================
 # TRANSLATIONS
@@ -149,7 +149,6 @@ from db import SessionLocal, init_db
 init_db()
 
 from models import User, Booking
-from config import WHATSAPP_VERIFY_TOKEN, BOOKING_PRICE, RAZORPAY_WEBHOOK_SECRET
 
 from utils import format_date_readable
 from services.whatsapp_service import (
