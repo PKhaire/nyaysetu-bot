@@ -1661,3 +1661,11 @@ def payment_webhook():
         logger.info("✅ PAYMENT CONFIRMED & BOOKING UPDATED")
         
         return "OK", 200
+    except Exception:
+        logger.exception("🔥 Razorpay webhook processing error")
+        return "Internal error", 500
+    
+    finally:
+        db.close()    
+        
+
