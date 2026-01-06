@@ -50,7 +50,7 @@ WELCOME_KEYWORDS = {"hi", "hello", "hey", "start"}
 
 RESTART_KEYWORDS = {
     "restart", "reset", "start over", "begin again",
-    "help", "menu", "main menu", "home", "start",
+    "help", "menu", "main menu", "home",
     "cancel", "stop", "exit"
 }
 
@@ -589,10 +589,11 @@ def webhook():
             .order_by(Booking.id.desc())
             .first()
         )
-        # -------------------------------
-        # DEFENSIVE GUARD – NEVER CRASH
-        # -------------------------------
+        
         if paid_booking:
+            # -------------------------------
+            # DEFENSIVE GUARD — NEVER CRASH
+            # -------------------------------
             if not paid_booking.date or not paid_booking.slot_code:
                 logger.warning(
                     "Incomplete paid booking | booking_id=%s | date=%s | slot=%s",
@@ -602,14 +603,11 @@ def webhook():
                 )
                 return jsonify({"status": "ignored"}), 200
         
-        if paid_booking:
-        
             # -------------------------------
             # SAFE booking_end calculation
             # -------------------------------
             booking_date = paid_booking.date
         
-            # Convert string → date (required)
             if isinstance(booking_date, str):
                 try:
                     booking_date = datetime.strptime(booking_date, "%Y-%m-%d").date()
@@ -621,7 +619,6 @@ def webhook():
                     )
                     return jsonify({"status": "ignored"}), 200
         
-            # Validate slot
             slot_info = SLOT_MAP.get(paid_booking.slot_code)
             if not slot_info:
                 logger.error(
@@ -630,8 +627,7 @@ def webhook():
                     paid_booking.slot_code
                 )
                 return jsonify({"status": "ignored"}), 200
-                    
-            # slot_code format: "10_11"
+        
             try:
                 start_hour = int(paid_booking.slot_code.split("_")[0])
             except Exception:
@@ -641,88 +637,55 @@ def webhook():
                     paid_booking.slot_code
                 )
                 return jsonify({"status": "ignored"}), 200
-            
+        
             booking_start = datetime.combine(
                 booking_date,
                 dt_time(start_hour, 0)
             )
-            
-            # Each consultation = 1 hour
+        
             booking_end = booking_start + timedelta(hours=1)
-
-        
             now = datetime.utcnow()
-            # =====================================
-            # 🔒 HARD GUARD: POST-PAYMENT SESSION
-            # =====================================
-            if paid_booking and now <= booking_end:
-            
-                message = (text_body or "").strip()
-                lower = message.lower()
-            
-                # ---------------------------
-                # 1️⃣ RECEIPT REQUEST
-                # ---------------------------
-                if lower == "receipt":
-                    send_payment_receipt_again(db, wa_id)
-                    return jsonify({"status": "ok"}), 200
-            
-                # ---------------------------
-                # 2️⃣ FIRST HI AFTER PAYMENT
-                # ---------------------------
-                if lower in RESTART_KEYWORDS or lower in WELCOME_KEYWORDS:
-                    if user.flow_state != PAYMENT_CONFIRMED:
-                        send_text(
-                            wa_id,
-                            "✅ *Your consultation has been successfully confirmed.*\n\n"
-                            "📄 Type *RECEIPT* to receive your payment receipt again.\n"
-                            "💬 You may ask preliminary questions related to your case.\n\n"
-                            "📞 Our legal team will connect with you at your scheduled appointment time."
-                        )
-                        set_flow_state(db, user, PAYMENT_CONFIRMED)
-                        return jsonify({"status": "ok"}), 200
-            
-                    # Already confirmed → AI
-                    reply = ai_reply(message, user, context="post_payment")
-                    send_text(
-                        wa_id,
-                        "🤖 *Consultation Preparation Assistant*\n\n" + reply
-                    )
-                    return jsonify({"status": "ok"}), 200
-            
-                # ---------------------------
-                # 3️⃣ ANY OTHER MESSAGE → AI
-                # ---------------------------
-                if message:
-                    reply = ai_reply(message, user, context="post_payment")
-                    send_text(
-                        wa_id,
-                        "🤖 *Consultation Preparation Assistant*\n\n" + reply
-                    )
-                    return jsonify({"status": "ok"}), 200
-        
+
             # -------------------------------
             # A) Consultation already OVER
-            # → Start fresh session (same language)
             # -------------------------------
-            if now > booking_end:
+            if paid_booking and now > booking_end:
                 set_flow_state(db, user, NORMAL)
                 user.ai_enabled = False
                 user.free_ai_count = 0
                 user.temp_date = None
                 user.temp_slot = None
                 user.last_payment_link = None
-                user.welcome_sent = False
-                user.language = None
                 db.commit()
-        
-                # Welcome again, but WITHOUT language selection
+            
                 send_text(
                     wa_id,
                     t(user, "welcome_back_after_consultation")
                 )
                 return jsonify({"status": "ok"}), 200
+                        
+            # =================================================
+            # 🔒 HARD GUARD: POST-PAYMENT SESSION (TIME-BOUND)
+            # =================================================
+            if now <= booking_end:
+                # 🔒 Ensure state is aligned (webhook race-safe)
+                if user.flow_state != PAYMENT_CONFIRMED:
+                    set_flow_state(db, user, PAYMENT_CONFIRMED)
+            
+                message = (text_body or "").strip().lower()
+            
+                if message == "receipt":
+                    send_payment_receipt_again(db, wa_id)
+                    return jsonify({"status": "ok"}), 200
+            
+                reply = ai_reply(message, user, context="post_payment")
+                send_text(
+                    wa_id,
+                    "🤖 *Consultation Preparation Assistant*\n\n" + reply
+                )
+                return jsonify({"status": "ok"}), 200
 
+            
         # -------------------------------
         # Global rate limiting
         # -------------------------------
@@ -731,13 +694,23 @@ def webhook():
                 return jsonify({"status": "rate_limited"}), 200
                
         # ===============================
-        # RESTART
+        # RESTART (BLOCKED AFTER PAYMENT)
         # ===============================
         if lower_text in RESTART_KEYWORDS:
+            # 🔒 Never allow restart after payment
+            if user.flow_state == PAYMENT_CONFIRMED:
+                send_text(
+                    wa_id,
+                    "✅ Your consultation is already confirmed.\n\n"
+                    "📄 Type *RECEIPT* for payment receipt.\n"
+                    "💬 You may ask questions to prepare for your consultation."
+                )
+                return jsonify({"status": "ok"}), 200
+        
             if user.flow_state == WAITING_PAYMENT:
                 send_text(wa_id, t(user, "payment_in_progress"))
                 return jsonify({"status": "ok"}), 200
-
+        
             set_flow_state(db, user, NORMAL)
             user.ai_enabled = False
             user.free_ai_count = 0
@@ -745,29 +718,33 @@ def webhook():
             user.temp_slot = None
             user.last_payment_link = None
             db.commit()
-
+        
             send_text(wa_id, t(user, "restart"))
             return jsonify({"status": "ok"}), 200
 
         # ===============================
-        # WELCOME
+        # WELCOME (ONE-TIME ONLY)
         # ===============================
-        if user.flow_state == NORMAL and lower_text in WELCOME_KEYWORDS:
-            if not user.welcome_sent:
-                save_state(db, user, ASK_LANGUAGE)
+        if (
+            user.flow_state == NORMAL
+            and not user.welcome_sent
+            and lower_text in WELCOME_KEYWORDS
+        ):
+            save_state(db, user, ASK_LANGUAGE)
         
-                send_buttons(
-                    wa_id,
-                    t(user, "welcome", case_id=user.case_id),
-                    [
-                        {"id": "lang_en", "title": "English"},
-                        {"id": "lang_hi", "title": "Hinglish"},
-                        {"id": "lang_mr", "title": "मराठी"},
-                    ],
-                )
+            send_buttons(
+                wa_id,
+                t(user, "welcome", case_id=user.case_id),
+                [
+                    {"id": "lang_en", "title": "English"},
+                    {"id": "lang_hi", "title": "Hinglish"},
+                    {"id": "lang_mr", "title": "मराठी"},
+                ],
+            )
         
-                user.welcome_sent = True
-                db.commit()
+            # 🔒 mark onboarding permanently done
+            user.welcome_sent = True
+            db.commit()
         
             return jsonify({"status": "ok"}), 200
             
@@ -781,13 +758,6 @@ def webhook():
             )
             return jsonify({"status": "ok"}), 200
             
-        # ===============================
-        # RECEIPT RETRY (USER INITIATED)
-        # ===============================
-        if lower_text.strip().lower() == "receipt":
-            send_payment_receipt_again(db, wa_id)
-            return jsonify({"status": "ok"}), 200
-
         # ===============================
         # LANGUAGE SELECTION
         # ===============================
