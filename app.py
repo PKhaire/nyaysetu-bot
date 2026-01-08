@@ -200,6 +200,12 @@ ASK_DATE = "ASK_DATE"
 ASK_SLOT = "ASK_SLOT"
 WAITING_PAYMENT = "WAITING_PAYMENT"
 PAYMENT_CONFIRMED = "PAYMENT_CONFIRMED"
+FLOW_VERIFY_DETAILS = "VERIFY_DETAILS"
+BTN_ASK_AI = "ASK_AI"
+BTN_BOOK_CONSULT = "BOOK_CONSULT"
+BTN_DETAILS_OK = "DETAILS_OK"
+BTN_DETAILS_EDIT = "DETAILS_EDIT"
+
 
 # ===============================
 # HELPERS
@@ -493,6 +499,28 @@ def post_payment_background_tasks(booking_id):
 
     finally:
         db.close()
+        
+def send_verification_screen(db, user, wa_id):
+    save_state(db, user, FLOW_VERIFY_DETAILS)
+    send_buttons(
+        wa_id,
+        (
+            "Please verify your details:\n\n"
+            f"👤 Name: {user.name}\n"
+            f"📍 State: {user.state_name}\n"
+            f"🏙 District: {user.district_name}"
+        ),
+        [
+            {"id": BTN_DETAILS_OK, "title": "✅ Verified"},
+            {"id": BTN_DETAILS_EDIT, "title": "✏️ Edit Details"},
+        ],
+    )
+        
+def has_completed_consultation(db, wa_id):
+    return db.query(Booking).filter(
+        Booking.whatsapp_id == wa_id,
+        Booking.status == "PAID"
+    ).count() > 0
 
 def t(user, key, **kwargs):
     """
@@ -575,6 +603,28 @@ def webhook():
             itype = message["interactive"]["type"]
             interactive_id = message["interactive"][itype]["id"]
             text_body = interactive_id
+        if (
+            interactive_id == BTN_ASK_AI
+            and user.flow_state == NORMAL
+            and user.welcome_sent
+            and has_completed_consultation(db, wa_id)
+        ):
+            user.ai_enabled = True
+            user.free_ai_count = 0
+            db.commit()
+            send_text(
+                wa_id,
+                "🤖 You can ask your legal question now."
+            )
+            return jsonify({"status": "ok"}), 200
+
+        if (
+            interactive_id == BTN_BOOK_CONSULT
+            and user.welcome_sent
+            and has_completed_consultation(db, wa_id)
+        ):
+            send_verification_screen(db, user, wa_id)
+            return jsonify({"status": "ok"}), 200
 
         lower_text = text_body.lower().strip()
         # =================================================
@@ -721,6 +771,30 @@ def webhook():
         
             send_text(wa_id, t(user, "restart"))
             return jsonify({"status": "ok"}), 200
+            
+        # ===============================
+        # RETURNING USER HOME
+        # ===============================
+        if (
+            user.flow_state == NORMAL
+            and user.welcome_sent
+            and has_completed_consultation(db, wa_id)
+            and not user.ai_enabled
+            and user.free_ai_count == 0
+            and lower_text in WELCOME_KEYWORDS
+        ):
+            send_buttons(
+                wa_id,
+                (
+                    f"👋 Welcome back to NyaySetu, {user.name}!\n\n"
+                    "What would you like to do today?"
+                ),
+                [
+                    {"id": BTN_ASK_AI, "title": "🤖 Ask AI"},
+                    {"id": BTN_BOOK_CONSULT, "title": "📅 Book Consultation"},
+                ],
+            )
+            return jsonify({"status": "ok"}), 200
 
         # ===============================
         # WELCOME (ONE-TIME ONLY)
@@ -813,7 +887,17 @@ def webhook():
         # ===============================
         # BOOKING KEYWORD (GLOBAL)
         # ===============================
-        if lower_text in BOOKING_KEYWORDS or interactive_id == "book_now":
+        if (
+            (lower_text in BOOKING_KEYWORDS or interactive_id == "book_now")
+            and user.flow_state == NORMAL
+        ):     
+            # 🔁 Returning user → go to verification
+            if user.welcome_sent and has_completed_consultation(db, wa_id):
+                send_verification_screen(db, user, wa_id)
+                return jsonify({"status": "ok"}), 200
+
+        
+            # 🆕 New user → normal onboarding
             user.ai_enabled = False
             user.free_ai_count = 0
             save_state(db, user, ASK_NAME)
@@ -859,7 +943,21 @@ def webhook():
         # =================================================
         # BOOKING FLOW CONTINUATION
         # =================================================     
- 
+        if (
+            user.flow_state == FLOW_VERIFY_DETAILS
+            and interactive_id == BTN_DETAILS_OK
+        ):
+            save_state(db, user, ASK_CATEGORY)
+            send_category_list(wa_id, user)
+            return jsonify({"status": "ok"}), 200
+        if (
+            user.flow_state == FLOW_VERIFY_DETAILS
+            and interactive_id == BTN_DETAILS_EDIT
+        ):
+            save_state(db, user, ASK_NAME)
+            send_text(wa_id, t(user, "ask_name"))
+            return jsonify({"status": "ok"}), 200
+
         # -------------------------------
         # Ask Name
         # -------------------------------
