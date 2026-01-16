@@ -192,6 +192,7 @@ app = Flask(__name__)
 # DEBUG: DB DOWNLOAD
 # ===============================
 print("DB absolute path:", os.path.abspath("nyaysetu.db"))
+print("REGISTERING /debug/db ROUTE")
 
 @app.route("/debug/db", methods=["GET"])
 def download_db():
@@ -205,10 +206,6 @@ def download_db():
         as_attachment=True,
         download_name="nyaysetu.db"
     )
-
-
-
-
 
 # ===============================
 # STATES
