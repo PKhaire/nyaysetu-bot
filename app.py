@@ -10,6 +10,9 @@ from collections import defaultdict, deque
 from datetime import datetime, time as dt_time, timedelta
 from flask import Flask, request, jsonify, send_file
 from config import ENV, WHATSAPP_VERIFY_TOKEN, BOOKING_PRICE, RAZORPAY_WEBHOOK_SECRET
+from models import User, Booking
+from db import engine, SessionLocal, init_db
+init_db()
 
 # ===============================
 # TRANSLATIONS
@@ -24,11 +27,12 @@ from subcategory_labels import SUBCATEGORY_LABELS
 
 #RESET_DB = False   # ⚠️ MUST BE FALSE IN PROD HARD CODED
 RESET_DB = ENV != "production"
-
 if RESET_DB:
-    if os.path.exists("nyaysetu.db"):
-        os.remove("nyaysetu.db")
-        print("⚠️ DEV MODE: Existing SQLite DB removed")
+    db_path = engine.url.database
+    if db_path and os.path.exists(db_path):
+        os.remove(db_path)
+        print(f"⚠️ DEV MODE: Existing SQLite DB removed at {db_path}")
+
 
 FREE_AI_LIMIT = 5
 FREE_AI_SOFT_PROMPT_AT = 4
@@ -148,10 +152,7 @@ CATEGORY_SUBCATEGORIES = {
 # ===============================
 # INIT
 # ===============================
-from db import SessionLocal, init_db
-init_db()
 
-from models import User, Booking
 
 from utils import format_date_readable
 from services.whatsapp_service import (
@@ -191,14 +192,14 @@ app = Flask(__name__)
 # ===============================
 # DEBUG: DB DOWNLOAD
 # ===============================
-print("DB absolute path:", os.path.abspath("nyaysetu.db"))
+print("DB absolute path:", engine.url.database)
 print("REGISTERING /debug/db ROUTE")
 
 @app.route("/debug/db", methods=["GET"])
 def download_db():
-    db_path = os.path.abspath("nyaysetu.db")
+    db_path = engine.url.database
 
-    if not os.path.exists(db_path):
+    if not db_path or not os.path.exists(db_path):
         return f"DB not found at {db_path}", 404
 
     return send_file(
@@ -206,6 +207,7 @@ def download_db():
         as_attachment=True,
         download_name="nyaysetu.db"
     )
+
 
 # ===============================
 # STATES
