@@ -20,6 +20,9 @@ from subcategory_labels import SUBCATEGORY_LABELS
 # ===============================
 # CONFIG
 # ===============================
+
+print("DB absolute path:", os.path.abspath("nyaysetu.db")) //use only needed
+
 #RESET_DB = False   # ⚠️ MUST BE FALSE IN PROD HARD CODED
 RESET_DB = ENV != "production"
 
