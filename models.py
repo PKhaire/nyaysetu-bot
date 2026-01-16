@@ -131,4 +131,13 @@ class CategoryAnalytics(Base):
     subcategory = Column(String, index=True)
     count = Column(Integer, default=0)
 
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    id = Column(Integer, primary_key=True)
+    user_whatsapp_id = Column(String, index=True)
+    direction = Column(String)
+    text = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 
