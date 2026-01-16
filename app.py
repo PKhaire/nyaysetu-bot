@@ -25,14 +25,16 @@ from subcategory_labels import SUBCATEGORY_LABELS
 # CONFIG
 # ===============================
 
-#RESET_DB = False   # ⚠️ MUST BE FALSE IN PROD HARD CODED
-RESET_DB = ENV != "production"
+# =================================================
+# DB RESET (EXPLICIT ONLY — NEVER AUTOMATIC)
+# =================================================
+RESET_DB = os.getenv("RESET_DB", "false").lower() == "true"  # ⚠️ MUST BE FALSE IN PROD HARD CODED
+
 if RESET_DB:
     db_path = engine.url.database
     if db_path and os.path.exists(db_path):
         os.remove(db_path)
-        print(f"⚠️ DEV MODE: Existing SQLite DB removed at {db_path}")
-
+        print(f"⚠️ MANUAL DB RESET DONE at {db_path}")
 
 FREE_AI_LIMIT = 5
 FREE_AI_SOFT_PROMPT_AT = 4
