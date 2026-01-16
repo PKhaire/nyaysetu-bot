@@ -22,23 +22,6 @@ from subcategory_labels import SUBCATEGORY_LABELS
 # CONFIG
 # ===============================
 
-print("DB absolute path:", os.path.abspath("nyaysetu.db"))  # use only if needed
-
-if ENV != "production":
-    @app.route("/debug/db", methods=["GET"])
-    def download_db():
-        db_path = os.path.abspath("nyaysetu.db")
-
-        if not os.path.exists(db_path):
-            return f"DB not found at {db_path}", 404
-
-        return send_file(
-            db_path,
-            as_attachment=True,
-            download_name="nyaysetu.db"
-        )
-
-
 #RESET_DB = False   # ⚠️ MUST BE FALSE IN PROD HARD CODED
 RESET_DB = ENV != "production"
 
@@ -203,6 +186,29 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("app")
 
 app = Flask(__name__)
+
+
+# ===============================
+# DEBUG: DB DOWNLOAD
+# ===============================
+print("DB absolute path:", os.path.abspath("nyaysetu.db"))
+
+@app.route("/debug/db", methods=["GET"])
+def download_db():
+    db_path = os.path.abspath("nyaysetu.db")
+
+    if not os.path.exists(db_path):
+        return f"DB not found at {db_path}", 404
+
+    return send_file(
+        db_path,
+        as_attachment=True,
+        download_name="nyaysetu.db"
+    )
+
+
+
+
 
 # ===============================
 # STATES
