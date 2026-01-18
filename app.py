@@ -562,10 +562,36 @@ def send_verification_screen(db, user, wa_id):
     )
         
 def has_completed_consultation(db, wa_id):
-    return db.query(Booking).filter(
-        Booking.whatsapp_id == wa_id,
-        Booking.status == "PAID"
-    ).count() > 0
+    booking = (
+        db.query(Booking)
+        .filter(
+            Booking.whatsapp_id == wa_id,
+            Booking.status == "PAID"
+        )
+        .order_by(Booking.id.desc())
+        .first()
+    )
+
+    if not booking or not booking.date or not booking.slot_code:
+        return False
+
+    booking_date = booking.date
+    if isinstance(booking_date, str):
+        booking_date = datetime.strptime(booking_date, "%Y-%m-%d").date()
+
+    try:
+        start_hour = int(booking.slot_code.split("_")[0])
+    except Exception:
+        return False
+
+    booking_start = datetime.combine(
+        booking_date,
+        dt_time(start_hour, 0)
+    )
+    booking_end = booking_start + timedelta(hours=1)
+
+    return datetime.utcnow() > booking_end
+
 
 def t(user, key, **kwargs):
     """
@@ -753,11 +779,9 @@ def webhook():
                 user.last_payment_link = None
                 db.commit()
             
-                send_text(
-                    wa_id,
-                    t(user, "welcome_back_after_consultation")
-                )
-                return jsonify({"status": "ok"}), 200
+                # ⚠️ DO NOT auto-send welcome here
+                # Let "Hi" trigger welcome naturally
+                return jsonify({"status": "ignored"}), 200
                         
             # =================================================
             # 🔒 HARD GUARD: POST-PAYMENT SESSION (TIME-BOUND)
