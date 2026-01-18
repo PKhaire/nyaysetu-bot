@@ -12,18 +12,16 @@ from flask import Flask, request, jsonify, send_file
 from config import ENV, WHATSAPP_VERIFY_TOKEN, BOOKING_PRICE, RAZORPAY_WEBHOOK_SECRET
 from models import User, Booking
 from db import engine, SessionLocal, init_db
+from sqlalchemy import inspect, text
 init_db()
 
 # ===============================
-# TRANSLATIONS
+# APP
 # ===============================
-from translations import TRANSLATIONS
-from category_labels import CATEGORY_LABELS
-from subcategory_labels import SUBCATEGORY_LABELS
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("app")
 
-# ===============================
-# CONFIG
-# ===============================
+app = Flask(__name__)
 
 # =================================================
 # DB RESET (EXPLICIT ONLY — NEVER AUTOMATIC)
@@ -36,6 +34,56 @@ if RESET_DB:
         os.remove(db_path)
         print(f"⚠️ MANUAL DB RESET DONE at {db_path}")
 
+# =================================================
+# DB PRINT  (DEBUG== true)
+# =============================================
+def log_entire_database():
+    logger.info("========== DB DUMP START ==========")
+
+    inspector = inspect(engine)
+    tables = inspector.get_table_names()
+
+    if not tables:
+        logger.info("No tables found in DB")
+        return
+
+    with engine.connect() as connection:
+        for table in tables:
+            logger.info("----- TABLE: %s -----", table)
+
+            try:
+                result = connection.execute(text(f"SELECT * FROM {table}"))
+                rows = result.fetchall()
+
+                if not rows:
+                    logger.info("Table %s is EMPTY", table)
+                    continue
+
+                for idx, row in enumerate(rows, start=1):
+                    logger.info("[%s][ROW %d] %s", table, idx, dict(row._mapping))
+
+            except Exception:
+                logger.exception("Failed to read table %s", table)
+
+    logger.info("========== DB DUMP END ==========")
+
+DEBUG_DB_LOG = os.getenv("DEBUG", "false").lower() == "true"
+
+if DEBUG_DB_LOG:
+    logger.warning("⚠️ DEBUG=true → Dumping entire database to logs")
+    log_entire_database()
+
+
+# ===============================
+# TRANSLATIONS
+# ===============================
+from translations import TRANSLATIONS
+from category_labels import CATEGORY_LABELS
+from subcategory_labels import SUBCATEGORY_LABELS
+
+# ===============================
+# CONFIG
+# ===============================
 FREE_AI_LIMIT = 5
 FREE_AI_SOFT_PROMPT_AT = 4
 # ===============================
@@ -181,35 +229,6 @@ from services.location_service import (
     get_safe_section_title
 )
 from services.email_service import send_new_booking_email
-
-# ===============================
-# APP
-# ===============================
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("app")
-
-app = Flask(__name__)
-
-
-# ===============================
-# DEBUG: DB DOWNLOAD
-# ===============================
-print("DB absolute path:", engine.url.database)
-print("REGISTERING /debug/db ROUTE")
-
-@app.route("/debug/db", methods=["GET"])
-def download_db():
-    db_path = engine.url.database
-
-    if not db_path or not os.path.exists(db_path):
-        return f"DB not found at {db_path}", 404
-
-    return send_file(
-        db_path,
-        as_attachment=True,
-        download_name="nyaysetu.db"
-    )
-
 
 # ===============================
 # STATES
