@@ -68,11 +68,25 @@ def log_entire_database():
     logger.info("========== DB DUMP END ==========")
 
 DEBUG_DB_LOG = os.getenv("DEBUG", "false").lower() == "true"
+DB_DUMP_DONE_FLAG = "/tmp/db_dump_done.flag"
 
 if DEBUG_DB_LOG:
-    logger.warning("⚠️ DEBUG=true → Dumping entire database to logs")
-    log_entire_database()
+    if not os.path.exists(DB_DUMP_DONE_FLAG):
+        logger.warning(
+            "⚠️ DEBUG=true → Dumping entire database to logs (ONCE per container)"
+        )
+        log_entire_database()
 
+        # Mark dump as done
+        try:
+            with open(DB_DUMP_DONE_FLAG, "w") as f:
+                f.write(str(datetime.utcnow()))
+        except Exception:
+            logger.exception("Failed to create DB dump flag file")
+    else:
+        logger.debug(
+            "DB dump already performed for this container — skipping"
+        )
 
 # ===============================
 # TRANSLATIONS
@@ -560,7 +574,51 @@ def send_verification_screen(db, user, wa_id):
             {"id": BTN_DETAILS_EDIT, "title": "✏️ Edit Details"},
         ],
     )
-        
+
+def get_booking_window(booking):
+    """
+    Returns (booking_start, booking_end) in UTC
+    or (None, None) if booking is invalid
+    """
+
+    # 1️⃣ Booking object must exist
+    if not booking or not booking.date or not booking.slot_code:
+        return None, None
+
+    # 2️⃣ Normalize date
+    booking_date = booking.date
+    if isinstance(booking_date, str):
+        try:
+            booking_date = datetime.strptime(
+                booking_date, "%Y-%m-%d"
+            ).date()
+        except ValueError:
+            return None, None
+
+    # 3️⃣ Extract start hour from slot_code
+    try:
+        start_hour = int(booking.slot_code.split("_")[0])
+    except Exception:
+        return None, None
+
+    # 4️⃣ Compute window
+    booking_start = datetime.combine(
+        booking_date,
+        dt_time(start_hour, 0)
+    )
+    booking_end = booking_start + timedelta(hours=1)
+
+    logger.debug(
+        "BOOKING_WINDOW | booking_id=%s | date=%s | slot=%s | start=%s | end=%s",
+        getattr(booking, "id", None),
+        booking.date if booking else None,
+        booking.slot_code if booking else None,
+        booking_start,
+        booking_end,
+    )
+    
+    return booking_start, booking_end
+
 def has_completed_consultation(db, wa_id):
     booking = (
         db.query(Booking)
@@ -572,26 +630,22 @@ def has_completed_consultation(db, wa_id):
         .first()
     )
 
-    if not booking or not booking.date or not booking.slot_code:
+    booking_start, booking_end = get_booking_window(booking)
+
+    now = datetime.utcnow()
+    
+    logger.debug(
+        "CONSULTATION_CHECK | wa_id=%s | now=%s | booking_end=%s | completed=%s",
+        wa_id,
+        now,
+        booking_end,
+        now > booking_end,
+    )        
+
+    if not booking_start or not booking_end:
         return False
-
-    booking_date = booking.date
-    if isinstance(booking_date, str):
-        booking_date = datetime.strptime(booking_date, "%Y-%m-%d").date()
-
-    try:
-        start_hour = int(booking.slot_code.split("_")[0])
-    except Exception:
-        return False
-
-    booking_start = datetime.combine(
-        booking_date,
-        dt_time(start_hour, 0)
-    )
-    booking_end = booking_start + timedelta(hours=1)
 
     return datetime.utcnow() > booking_end
-
 
 def t(user, key, **kwargs):
     """
@@ -712,6 +766,12 @@ def webhook():
         )
         
         if paid_booking:
+            logger.debug(
+                "POST_PAYMENT_BLOCK_ENTER | wa_id=%s | booking_id=%s | state=%s",
+                wa_id,
+                paid_booking.id,
+                user.flow_state,
+            )      
             # -------------------------------
             # DEFENSIVE GUARD — NEVER CRASH
             # -------------------------------
@@ -725,52 +785,31 @@ def webhook():
                 return jsonify({"status": "ignored"}), 200
         
             # -------------------------------
-            # SAFE booking_end calculation
+            # SAFE booking window (single source of truth)
             # -------------------------------
-            booking_date = paid_booking.date
-        
-            if isinstance(booking_date, str):
-                try:
-                    booking_date = datetime.strptime(booking_date, "%Y-%m-%d").date()
-                except ValueError:
-                    logger.error(
-                        "Invalid booking date | booking_id=%s | value=%s",
-                        paid_booking.id,
-                        booking_date
-                    )
-                    return jsonify({"status": "ignored"}), 200
-        
-            slot_info = SLOT_MAP.get(paid_booking.slot_code)
-            if not slot_info:
+            booking_start, booking_end = get_booking_window(paid_booking)
+            
+            if not booking_start or not booking_end:
                 logger.error(
-                    "Invalid slot_code | booking_id=%s | slot=%s",
+                    "Invalid booking window | booking_id=%s | date=%s | slot=%s",
                     paid_booking.id,
-                    paid_booking.slot_code
+                    paid_booking.date,
+                    paid_booking.slot_code,
                 )
                 return jsonify({"status": "ignored"}), 200
-        
-            try:
-                start_hour = int(paid_booking.slot_code.split("_")[0])
-            except Exception:
-                logger.error(
-                    "Invalid slot_code format | booking_id=%s | slot=%s",
-                    paid_booking.id,
-                    paid_booking.slot_code
-                )
-                return jsonify({"status": "ignored"}), 200
-        
-            booking_start = datetime.combine(
-                booking_date,
-                dt_time(start_hour, 0)
-            )
-        
-            booking_end = booking_start + timedelta(hours=1)
+            
             now = datetime.utcnow()
 
             # -------------------------------
             # A) Consultation already OVER
             # -------------------------------
             if paid_booking and now > booking_end:
+                logger.debug(
+                    "POST_PAYMENT_EXPIRED | wa_id=%s | now=%s | booking_end=%s | resetting_state",
+                    wa_id,
+                    now,
+                    booking_end,
+                )              
                 set_flow_state(db, user, NORMAL)
                 user.ai_enabled = False
                 user.free_ai_count = 0
@@ -787,6 +826,14 @@ def webhook():
             # 🔒 HARD GUARD: POST-PAYMENT SESSION (TIME-BOUND)
             # =================================================
             if now <= booking_end:
+                logger.debug(
+                    "POST_PAYMENT_ACTIVE | wa_id=%s | now=%s | booking_end=%s | state_before=%s",
+                    wa_id,
+                    now,
+                    booking_end,
+                    user.flow_state,
+                )
+                
                 # 🔒 Ensure state is aligned (webhook race-safe)
                 if user.flow_state != PAYMENT_CONFIRMED:
                     set_flow_state(db, user, PAYMENT_CONFIRMED)
@@ -816,6 +863,11 @@ def webhook():
         # RESTART (BLOCKED AFTER PAYMENT)
         # ===============================
         if lower_text in RESTART_KEYWORDS:
+            logger.debug(
+                "RESTART_ATTEMPT | wa_id=%s | state=%s",
+                wa_id,
+                user.flow_state,
+            )
             # 🔒 Never allow restart after payment
             if user.flow_state == PAYMENT_CONFIRMED:
                 send_text(
@@ -868,6 +920,13 @@ def webhook():
         # ===============================
         # WELCOME (ONE-TIME ONLY)
         # ===============================
+        logger.debug(
+            "WELCOME_CHECK | wa_id=%s | state=%s | welcome_sent=%s | text=%s",
+            wa_id,
+            user.flow_state,
+            user.welcome_sent,
+            lower_text,
+        )
         if (
             user.flow_state == NORMAL
             and not user.welcome_sent
