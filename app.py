@@ -18,7 +18,9 @@ init_db()
 # ===============================
 # APP
 # ===============================
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.DEBUG if os.getenv("LOG_LEVEL") == "DEBUG" else logging.INFO
+)
 logger = logging.getLogger("app")
 
 app = Flask(__name__)
