@@ -20,7 +20,7 @@ def normalize(text: str) -> str:
 # ===============================
 
 BASE_DIR = os.path.dirname(__file__)
-DISTRICTS_PATH = os.path.join(BASE_DIR, "india_districts.json")
+DISTRICTS_PATH = os.path.join(BASE_DIR, "data", "india_districts.json")
 
 with open(DISTRICTS_PATH, "r", encoding="utf-8") as f:
     INDIA_DISTRICTS = json.load(f)
