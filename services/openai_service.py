@@ -1,7 +1,10 @@
 # services/openai_service.py
 import logging
-from config import OPENAI_API_KEY
 import httpx
+import time
+from typing import Dict, Tuple
+from config import OPENAI_API_KEY
+
 
 logger = logging.getLogger("services.openai_service")
 
@@ -20,6 +23,16 @@ BOOKING_CTA = {
     "hi": "Agar aapko personalised guidance chahiye, toh consultation book kar sakte ho 🙂",
     "mr": "आपल्याला वैयक्तिक मार्गदर्शन हवे असल्यास सल्ला बुक करू शकता.",
 }
+
+# =================================================
+# AI RESPONSE CACHE (PER-USER, SHORT-LIVED)
+# =================================================
+
+# key: (wa_id, normalized_prompt)
+# value: (timestamp, reply)
+AI_RESPONSE_CACHE: Dict[Tuple[str, str], Tuple[float, str]] = {}
+
+AI_CACHE_TTL = 20  # seconds (safe: 10–30)
 
 # =================================================
 # LANGUAGE BEHAVIOR CONTROLS
@@ -72,7 +85,41 @@ def _disclaimer_text(user):
 def _booking_cta(user):
     lang = getattr(user, "language", "en")
     return BOOKING_CTA.get(lang, BOOKING_CTA["en"])
+    
+def _normalize_prompt(prompt: str) -> str:
+    """
+    Normalize prompt to avoid cache misses due to spacing/case
+    """
+    return " ".join(prompt.lower().strip().split())
 
+def _get_cached_reply(wa_id: str, prompt: str):
+    key = (wa_id, _normalize_prompt(prompt))
+    cached = AI_RESPONSE_CACHE.get(key)
+
+    if not cached:
+        return None
+
+    ts, reply = cached
+    if time.time() - ts > AI_CACHE_TTL:
+        # expired
+        AI_RESPONSE_CACHE.pop(key, None)
+        return None
+
+    return reply
+
+def _set_cached_reply(wa_id: str, prompt: str, reply: str):
+    now = time.time()
+    key = (wa_id, _normalize_prompt(prompt))
+
+    # Lazy cleanup (O(n), safe for small cache)
+    expired = [
+        k for k, (ts, _) in AI_RESPONSE_CACHE.items()
+        if now - ts > AI_CACHE_TTL
+    ]
+    for k in expired:
+        AI_RESPONSE_CACHE.pop(k, None)
+
+    AI_RESPONSE_CACHE[key] = (now, reply)
 
 # =================================================
 # MAIN AI FUNCTION (FLOW UNCHANGED)
@@ -89,6 +136,25 @@ def ai_reply(prompt: str, user, context: str = "default"):
     if not prompt:
         return "Hi — tell me your legal question and I'll try to help."
 
+    # 🔒 Per-user short-term cache (protects OpenAI & UX)
+    wa_id = getattr(user, "whatsapp_id", None)
+    
+    cached = None
+    if wa_id and context != "post_payment":
+        cached = _get_cached_reply(wa_id, prompt)
+        if cached:
+            logger.debug("AI_CACHE_HIT | wa_id=%s", wa_id)
+            return cached
+    
+    # 📊 OBSERVABILITY LOG (ADD HERE)
+    logger.info(
+        "AI_CALL | wa_id=%s | cached=%s | context=%s",
+        wa_id,
+        bool(cached),
+        context,
+    )
+
+           
     # 🔒 Offline fallback (UNCHANGED)
     if not OPENAI_API_KEY:
         return f"I can help with that. (AI is offline) — you said: {prompt[:200]}"
@@ -119,16 +185,53 @@ Rules:
             {"role": "system", "content": system_prompt.strip()},
             {"role": "user", "content": prompt},
         ],
-        "max_tokens": 300,
+        "max_tokens": 200,
         "temperature": 0.2,
     }
 
     try:
-        with httpx.Client(timeout=15) as client:
+        with httpx.Client(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
             r = client.post(url, headers=headers, json=data)
-            j = r.json()
+        
+            # 🔁 Retry ONCE with fallback model if rate-limited
+            if r.status_code == 429:
+                # Paid users keep premium model, free users downgrade
+                fallback_model = "gpt-3.5-turbo"
+                if context == "post_payment":
+                    fallback_model = "gpt-4o-mini"
+            
+                logger.warning(
+                    "OpenAI rate-limited (429). Retrying with %s | wa_id=%s | context=%s",
+                    fallback_model,
+                    wa_id,
+                    context,
+                )
+            
+                fallback_data = data.copy()
+                fallback_data["model"] = fallback_model
+            
+                r = client.post(url, headers=headers, json=fallback_data)
 
+        
+            # 🔒 HARD GUARD — still failing
+            if r.status_code != 200:
+                logger.error(
+                    "OpenAI error | status=%s | response=%s",
+                    r.status_code,
+                    r.text,
+                )
+                raise RuntimeError("OpenAI API error")
+
+        
+            j = r.json()
+        
+            # 🔒 HARD GUARD — malformed response
+            if "choices" not in j or not j["choices"]:
+                logger.error("OpenAI malformed response: %s", j)
+                raise RuntimeError("Invalid OpenAI response")
+        
             reply = j["choices"][0]["message"]["content"].strip()
+
 
             # -------------------------------------------------
             # POST-PROCESSING (CRITICAL LOGIC)
@@ -141,9 +244,15 @@ Rules:
             # ✅ ALWAYS show legal disclaimer
             reply += _disclaimer_text(user)
 
+            # 💾 Cache reply for short duration (SUCCESS ONLY)
+            if wa_id:
+                _set_cached_reply(wa_id, prompt, reply)
+            
             return reply
 
-    except Exception:
-        logger.exception("OpenAI call failed")
+
+    except Exception as e:
+        logger.exception("OpenAI call failed: %s", str(e))
         return "Sorry, I couldn't reach the AI service right now. Please try again later."
+
 
