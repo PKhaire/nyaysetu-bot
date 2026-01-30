@@ -239,11 +239,6 @@ from services.booking_service import (
     mark_booking_as_paid,
     SLOT_MAP
 )
-from services.location_service import (
-    build_state_list_rows,
-    build_district_list_rows,
-    get_safe_section_title
-)
 from services.email_service import send_new_booking_email
 
 # ===============================
@@ -253,8 +248,8 @@ NORMAL = "NORMAL"
 ASK_LANGUAGE = "ASK_LANGUAGE"
 ASK_AI_OR_BOOK = "ASK_AI_OR_BOOK"
 ASK_NAME = "ASK_NAME"
-ASK_STATE = "ASK_STATE"
 ASK_DISTRICT = "ASK_DISTRICT"
+CONFIRM_LOCATION = "CONFIRM_LOCATION"
 ASK_CATEGORY = "ASK_CATEGORY"
 ASK_SUBCATEGORY = "ASK_SUBCATEGORY"
 ASK_DATE = "ASK_DATE"
@@ -978,9 +973,8 @@ def webhook():
                 user.language = interactive_id.replace("lang_", "")
                 db.commit()
         
-                # ✅ Marathi default state (prefill only)
+                # ✅ Marathi (Greetings)
                 if user.language == "mr":
-                    user.state_name = "Maharashtra"
                 
                     if not getattr(user, "marathi_greeted", False):
                         send_text(
@@ -1107,165 +1101,99 @@ def webhook():
             user.name = text_body.strip()
             db.commit()
         
-            # ✅ Marathi users: auto-apply Maharashtra AFTER name
-            if user.language == "mr":
-                save_state(db, user, ASK_DISTRICT)
-            
-                send_list_picker(
-                    wa_id,
-                    header=t(user, "select_district_in", state="Maharashtra"),
-                    body=t(user, "choose_district"),
-                    rows=build_district_list_rows("Maharashtra"),
-                    section_title=get_safe_section_title("Maharashtra"),
-                )
-                return jsonify({"status": "ok"}), 200
-
-        
-            # ✅ All other users → ask state
-            save_state(db, user, ASK_STATE)
-        
-            send_list_picker(
-                wa_id,
-                header=safe_header(t(user, "select_state")),
-                body=t(user, "choose_state"),
-                rows=build_state_list_rows(page=1),
-                section_title=t(user, "indian_states"),
-            )
-        
-            return jsonify({"status": "ok"}), 200
-    
-        # -------------------------------
-        # Ask State (STRICT & SAFE)
-        # -------------------------------
-        if user.flow_state == ASK_STATE:
-            state_name = None
-            # Marathi users never select state
-            if user.language == "mr":
-                save_state(db, user, ASK_DISTRICT)
-            
-                send_list_picker(
-                    wa_id,
-                    header=t(user, "select_district_in", state="Maharashtra"),
-                    body=t(user, "choose_district"),
-                    rows=build_district_list_rows("Maharashtra"),
-                    section_title=get_safe_section_title("Maharashtra"),
-                )
-                return jsonify({"status": "ok"}), 200
-        
-            # ---------------------------------
-            # Pagination
-            # ---------------------------------
-            if interactive_id and interactive_id.startswith("state_page_"):
-                page = int(interactive_id.replace("state_page_", ""))
-        
-                send_list_picker(
-                    wa_id,
-                    header=safe_header(t(user, "select_state")),
-                    body=t(user, "choose_state"),
-                    rows=build_state_list_rows(
-                        page=page,
-                        preferred_state=user.state_name,
-                    ),
-                    section_title=t(user, "indian_states"),
-                )
-                return jsonify({"status": "ok"}), 200
-        
-            # ---------------------------------
-            # State selected from list
-            # ---------------------------------
-            if interactive_id and interactive_id.startswith("state_"):
-                state_name = interactive_id.replace("state_", "")
-        
-            # ---------------------------------
-            # Save & move forward
-            # ---------------------------------
-            user.state_name = state_name
-            db.commit()
-        
+            # ✅ ALL users → ask DISTRICT directly
             save_state(db, user, ASK_DISTRICT)
         
-            send_list_picker(
+            send_text(
                 wa_id,
-                header=t(user, "select_district_in", state=user.state_name),
-                body=t(user, "choose_district"),
-                rows=build_district_list_rows(state_name),
-                section_title=get_safe_section_title(state_name),
+                "Please type your *district* (for example: Pune, Mumbai)."
             )
         
             return jsonify({"status": "ok"}), 200
+
         # -------------------------------
-        # Ask District (STRICT & SAFE)
+        # Ask District (SMART FLOW)
         # -------------------------------
         if user.flow_state == ASK_DISTRICT:
-            district = None
-            # ---------------------------------
-            # Pagination: "More districts..."
-            # ---------------------------------
-            if interactive_id and interactive_id.startswith("district_page_"):
-                page = int(interactive_id.replace("district_page_", ""))
         
-                send_list_picker(
-                    wa_id,
-                    header=f"Select district in {user.state_name}",
-                    body="Choose your district",
-                    rows=build_district_list_rows(
-                        user.state_name,
-                        page=page,
-                        preferred_district=user.district_name,
-                    ),
-                    section_title=get_safe_section_title(user.state_name),
-                )
-                return jsonify({"status": "ok"}), 200
-        
-            # ---------------------------------
-            # District selected from list (VALIDATE)
-            # ---------------------------------
-            if interactive_id and interactive_id.startswith("district_"):
-                candidate = interactive_id.replace("district_", "")
-        
-                from services.location_service import get_districts_for_state
-                if candidate in get_districts_for_state(user.state_name):
-                    district = candidate
-        
-            # ---------------------------------
-            # Ignore empty / status events
-            # ---------------------------------
-            if not district and not text_body:
-                return jsonify({"status": "ignored"}), 200
-        
-            # ---------------------------------
-            # Still invalid → force list
-            # ---------------------------------
-            if not district:
+            if not text_body:
                 send_text(
                     wa_id,
-                    t(
-                        user,
-                        "district_invalid",
-                        district=text_body,
-                        state=user.state_name,
-                    )
-                )
-
-                send_list_picker(
-                    wa_id,
-                    header=t(user, "select_district_in", state=user.state_name),
-                    body=t(user, "choose_district"),
-                    rows=build_district_list_rows(user.state_name),
-                    section_title=get_safe_section_title(user.state_name),
+                    "Please type your *district* (for example: Pune, Mumbai)."
                 )
                 return jsonify({"status": "ok"}), 200
         
-            # ---------------------------------
-            # Save & move forward
-            # ---------------------------------
-            user.district_name = district
-            db.commit()
+            district, state, confidence = detect_district_and_state(text_body)
         
-            save_state(db, user, ASK_CATEGORY)
-            send_category_list(wa_id, user)
+            # -------------------------------
+            # HIGH CONFIDENCE
+            # -------------------------------
+            if confidence == "HIGH":
+                user.temp_district = district
+                user.temp_state = state
+                db.commit()
         
+                save_state(db, user, CONFIRM_LOCATION)
+        
+                send_buttons(
+                    wa_id,
+                    f"📍 We found:\n*{district}, {state}*\n\nIs this correct?",
+                    [
+                        {"id": "loc_yes", "title": "✅ Yes"},
+                        {"id": "loc_change", "title": "✏️ Change"},
+                    ],
+                )
+                return jsonify({"status": "ok"}), 200
+        
+            # -------------------------------
+            # MULTIPLE MATCHES
+            # -------------------------------
+            if confidence == "MULTIPLE":
+                send_text(
+                    wa_id,
+                    "We found multiple matching districts.\n"
+                    "Please type the *full district name*."
+                )
+                return jsonify({"status": "ok"}), 200
+        
+            # -------------------------------
+            # LOW CONFIDENCE
+            # -------------------------------
+            send_text(
+                wa_id,
+                "❓ I couldn’t identify that district.\n"
+                "Please type your *district name* (for example: Pune, Mumbai)."
+            )
             return jsonify({"status": "ok"}), 200
+
+        # -------------------------------
+        # Confirm Location
+        # -------------------------------
+        if user.flow_state == CONFIRM_LOCATION:
+        
+            if interactive_id == "loc_yes":
+                user.district_name = user.temp_district
+                user.state_name = user.temp_state
+        
+                user.temp_district = None
+                user.temp_state = None
+                db.commit()
+        
+                save_state(db, user, ASK_CATEGORY)
+                send_category_list(wa_id, user)
+                return jsonify({"status": "ok"}), 200
+        
+            if interactive_id == "loc_change":
+                user.temp_district = None
+                user.temp_state = None
+                db.commit()
+        
+                save_state(db, user, ASK_DISTRICT)
+                send_text(
+                    wa_id,
+                    "No problem 🙂\nPlease type your *district* again."
+                )
+                return jsonify({"status": "ok"}), 200        
         
         # -------------------------------
         # Category (STRICT & SAFE)
@@ -1518,19 +1446,7 @@ def webhook():
                 user.district_name,
                 user.category,
                 user.temp_date,
-            ]
-        
-            if not user.state_name:
-                logger.error(
-                    "Booking blocked due to missing state | wa_id=%s",
-                    wa_id
-                )
-                send_text(
-                    wa_id,
-                    "⚠️ State information is missing. Please select your state again."
-                )
-                save_state(db, user, ASK_STATE)
-                return jsonify({"status": "ok"}), 200
+            ]        
         
             # ---------------------------------
             # Attempt booking (includes buffer & expiry validation)
