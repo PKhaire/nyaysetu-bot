@@ -1,22 +1,22 @@
-# translations.py
-
 TRANSLATIONS = {
+
     # =====================================================
     # 🇬🇧 ENGLISH (DEFAULT)
     # =====================================================
     "en": {
         # ---------- GENERAL ----------
         "welcome": (
-            "👋 Welcome to NyaySetu — The Bridge To Justice ⚖️\n\n"
+            "👋 Welcome to NyaySetu\n"
+            "⚖️ The Bridge To Justice\n\n"
             "🆔 Case ID: {case_id}\n\n"
-            "Please select your language:"
+            "Please choose your preferred language:"
         ),
         "restart": "🔄 Session reset.\nType *Hi* to start again.",
 
-        # ---------- AI ----------
+        # ---------- LEGAL GUIDANCE ----------
         "ask_ai_or_book": "How would you like to proceed?",
-        "ask_ai": "Ask AI",
-        "ask_ai_prompt": "🤖 Ask your legal question.",
+        "ask_ai": "Get Legal Guidance",
+        "ask_ai_prompt": "👨‍⚖️ Please share your legal question:",
         "ai_cooldown": "⏳ Please wait a moment before sending another message.",
         "book_consult": "Book Consultation",
 
@@ -27,14 +27,14 @@ TRANSLATIONS = {
         ),
 
         # ---------- USER DETAILS ----------
-        "ask_name": "Please tell me your *full name*.",
+        "ask_name": "May I know your *full name*?",
         "ask_name_retry": "Please enter your *full name* 🙂",
 
-        "ask_state": "Which *state* are you in?",
+        "ask_state": "Which *state* are you currently in?",
         "ask_state_retry": "Please select or type your *state* 🙂",
         "choose_state": "Choose your state",
         "choose_state_or_more": "Choose your state or tap More",
-        "thanks_state": "Thanks 🙏\nWhich state are you in?",
+        "thanks_state": "Thank you 🙏\nWhich state are you in?",
         "select_state": "Select State",
         "indian_states": "Indian States",
 
@@ -56,7 +56,7 @@ TRANSLATIONS = {
         "choose_subcategory": "Choose the issue type",
         "subcategory_retry": "Please select a sub-category from the list 👇",
         "subcategory_mismatch": (
-            "Selected sub-category does not match your category. "
+            "Selected sub-category does not match your category.\n"
             "Please try again 👇"
         ),
 
@@ -72,9 +72,8 @@ TRANSLATIONS = {
         "available_on": "Available on {date}",
         "next_7_days": "Next available days",
 
-
         # ---------- SLOT ----------
-        "select_slot": "Select time slot for",
+        "select_slot": "Select time slot",
         "available_slots": "Available time slots (IST)",
         "time_slots": "Time Slots",
         "slot_retry": "Please select a time slot from the list 👇",
@@ -86,16 +85,16 @@ TRANSLATIONS = {
 
         # ---------- BOOKING / PAYMENT ----------
         "booking_missing": (
-            "⚠️ Some booking details are missing. "
-            "Please restart booking."
+            "⚠️ Some booking details are missing.\n"
+            "Please restart the booking process."
         ),
         "free_limit_reached": (
-            "🚫 Free AI limit reached.\n"
+            "🚫 Free legal guidance limit reached.\n"
             "Please book a consultation."
         ),
         "payment_in_progress": (
-            "⚠️ Payment is in progress.\n"
-            "Please complete or wait."
+            "⚠️ Payment is currently in progress.\n"
+            "Please wait."
         ),
         "payment_success": (
             "💳 Payment successful.\n"
@@ -106,7 +105,7 @@ TRANSLATIONS = {
             "You may now ask your legal questions here.\n"
             "Our legal expert will also call you at the scheduled date and time."
         ),
-       "payment_link_text": "Your payment link is active:",
+        "payment_link_text": "Your payment link is active:",
 
         "appointment_summary": (
             "✅ Your appointment details:\n"
@@ -119,7 +118,7 @@ TRANSLATIONS = {
             "Fees: ₹{amount} (one-time session) 🙂\n\n"
             "Please complete payment:"
         ),
-        "receipt_help": "Didn’t receive receipt? Type RECEIPT",
+        "receipt_help": "Didn’t receive the receipt? Type RECEIPT",
 
         # ---------- COMMON ----------
         "invalid_selection": "Invalid selection. Please try again 👇",
@@ -130,15 +129,16 @@ TRANSLATIONS = {
     # =====================================================
     "hi": {
         "welcome": (
-            "👋 NyaySetu mein aapka swagat hai ⚖️\n\n"
+            "👋 NyaySetu mein aapka swagat hai\n"
+            "⚖️ The Bridge To Justice\n\n"
             "🆔 Case ID: {case_id}\n\n"
-            "Kripya apni language select karein:"
+            "Kripya apni language choose karein:"
         ),
         "restart": "🔄 Session reset ho gaya.\n*Hi* type karke dobara shuru karein.",
 
         "ask_ai_or_book": "Aap kaise aage badhna chahenge?",
-        "ask_ai": "AI se poochein",
-        "ask_ai_prompt": "🤖 Apna legal sawal poochein.",
+        "ask_ai": "Legal Salah Lein",
+        "ask_ai_prompt": "👨‍⚖️ Apna legal sawal yahan batayein:",
         "ai_cooldown": "⏳ Thoda ruk kar dobara message bhejein.",
         "book_consult": "Consultation book karein",
 
@@ -147,12 +147,12 @@ TRANSLATIONS = {
             "Thoda ruk kar dobara try karein."
         ),
 
-        "ask_name": "Apna *full name* batayein.",
+        "ask_name": "Kya main aapka *poora naam* jaan sakta hoon?",
         "ask_name_retry": "Kripya apna *poora naam* enter karein 🙂",
 
         "ask_state": "Aap kis *state* mein hain?",
         "ask_state_retry": "Apna *state* select ya type karein 🙂",
-        "choose_state": "Apna state choose karein",
+        "choose_state": "State choose karein",
         "choose_state_or_more": "State choose karein ya More par tap karein",
         "thanks_state": "Dhanyavaad 🙏\nAap kis state mein hain?",
         "select_state": "State select karein",
@@ -204,7 +204,7 @@ TRANSLATIONS = {
             "Kripya booking dobara start karein."
         ),
         "free_limit_reached": (
-            "🚫 Free AI limit khatam ho gayi hai.\n"
+            "🚫 Free legal guidance limit khatam ho gayi hai.\n"
             "Consultation book karein."
         ),
         "payment_in_progress": (
@@ -218,7 +218,7 @@ TRANSLATIONS = {
         "session_start": (
             "✅ *Payment successfully receive ho gaya.*\n\n"
             "Ab aap yahan apne legal questions pooch sakte hain.\n"
-            "Legal expert aapko scheduled date aur time par call karega."
+            "Hamare legal expert aapko scheduled date aur time par call karenge."
         ),
         "payment_link_text": "Aapka payment link active hai:",
 
@@ -233,7 +233,8 @@ TRANSLATIONS = {
             "Fees: ₹{amount} (one-time session) 🙂\n\n"
             "Kripya payment complete karein:"
         ),
-        "receipt_help": "रसीद नहीं मिली? RECEIPT लिखें",
+        "receipt_help": "Receipt nahi mili? RECEIPT type karein",
+
         "invalid_selection": "Galat selection. Dobara try karein 👇",
     },
 
@@ -242,15 +243,16 @@ TRANSLATIONS = {
     # =====================================================
     "mr": {
         "welcome": (
-            "👋 NyaySetu मध्ये आपले स्वागत आहे ⚖️\n\n"
+            "👋 NyaySetu मध्ये आपले स्वागत आहे\n"
+            "⚖️ The Bridge To Justice\n\n"
             "🆔 केस आयडी: {case_id}\n\n"
-            "कृपया आपली भाषा निवडा:"
+            "कृपया आपली पसंतीची भाषा निवडा:"
         ),
         "restart": "🔄 सत्र रीसेट झाले.\n*Hi* टाइप करून पुन्हा सुरू करा.",
 
         "ask_ai_or_book": "आपण पुढे कसे जायचे आहे?",
-        "ask_ai": "AI ला विचारा",
-        "ask_ai_prompt": "🤖 आपला कायदेशीर प्रश्न विचारा.",
+        "ask_ai": "कायदेशीर मार्गदर्शन घ्या",
+        "ask_ai_prompt": "👨‍⚖️ कृपया आपला कायदेशीर प्रश्न सांगा:",
         "ai_cooldown": "⏳ कृपया थोडा वेळ थांबून पुन्हा संदेश पाठवा.",
         "book_consult": "सल्ला बुक करा",
 
@@ -275,7 +277,7 @@ TRANSLATIONS = {
         "select_district_in": "{state} मधील जिल्हा निवडा",
         "district_invalid": (
             "❌ *{district}* हा जिल्हा {state} मध्ये आढळला नाही.\n"
-            "खालील यादीतून निवडा 👇"
+            "कृपया खालील यादीतून निवडा 👇"
         ),
 
         "select_category": "कायदेशीर श्रेणी निवडा",
@@ -293,10 +295,10 @@ TRANSLATIONS = {
         "select_date": "अपॉइंटमेंटची तारीख निवडा 👇",
         "select_date_retry": "कृपया यादीतून अपॉइंटमेंट *तारीख* निवडा 👇",
         "available_dates": "उपलब्ध तारखा",
-        "invalid_date": "चुकीची तारीख निवडली आहे. पुन्हा निवडा 👇",
+        "invalid_date": "चुकीची तारीख निवडली आहे. कृपया पुन्हा निवडा 👇",
         "past_date_error": (
             "⚠️ आपण मागील किंवा आजची तारीख निवडू शकत नाही.\n"
-            "भविष्यातील तारीख निवडा 👇"
+            "कृपया भविष्यातील तारीख निवडा 👇"
         ),
         "available_on": "{date} रोजी उपलब्ध",
         "next_7_days": "पुढील उपलब्ध दिवस",
@@ -305,10 +307,10 @@ TRANSLATIONS = {
         "available_slots": "उपलब्ध वेळा (IST)",
         "time_slots": "वेळा",
         "slot_retry": "कृपया यादीतून वेळ निवडा 👇",
-        "invalid_slot": "चुकीची वेळ निवडली आहे. पुन्हा प्रयत्न करा 👇",
+        "invalid_slot": "चुकीची वेळ निवडली आहे. कृपया पुन्हा प्रयत्न करा 👇",
         "no_slots": (
             "⚠️ या तारखेसाठी कोणतीही वेळ उपलब्ध नाही.\n"
-            "दुसरी तारीख निवडा 👇"
+            "कृपया दुसरी तारीख निवडा 👇"
         ),
 
         "booking_missing": (
@@ -316,11 +318,11 @@ TRANSLATIONS = {
             "कृपया बुकिंग पुन्हा सुरू करा."
         ),
         "free_limit_reached": (
-            "🚫 मोफत AI मर्यादा संपली आहे.\n"
-            "सल्ला बुक करा."
+            "🚫 मोफत कायदेशीर मार्गदर्शनाची मर्यादा संपली आहे.\n"
+            "कृपया सल्ला बुक करा."
         ),
         "payment_in_progress": (
-            "⚠️ पेमेंट सुरू आहे.\n"
+            "⚠️ पेमेंट प्रक्रिया सुरू आहे.\n"
             "कृपया पूर्ण होऊ द्या."
         ),
         "payment_success": (
@@ -330,10 +332,10 @@ TRANSLATIONS = {
         "session_start": (
             "✅ *पेमेंट यशस्वीरीत्या प्राप्त झाले आहे.*\n\n"
             "आता आपण येथे आपले कायदेशीर प्रश्न विचारू शकता.\n"
-            "नियोजित तारीख व वेळेस आमचे तज्ज्ञ आपल्याशी संपर्क साधतील."
+            "नियोजित तारीख व वेळेस आमचे कायदेशीर तज्ज्ञ आपल्याशी संपर्क साधतील."
         ),
         "payment_link_text": "आपला पेमेंट लिंक सक्रिय आहे:",
-        
+
         "appointment_summary": (
             "✅ आपल्या अपॉइंटमेंटचे तपशील:\n"
             "नाव: {name}\n"
@@ -346,6 +348,7 @@ TRANSLATIONS = {
             "कृपया पेमेंट पूर्ण करा:"
         ),
         "receipt_help": "पावती मिळाली नाही? RECEIPT टाइप करा",
+
         "invalid_selection": "चुकीची निवड. कृपया पुन्हा प्रयत्न करा 👇",
     },
 }
