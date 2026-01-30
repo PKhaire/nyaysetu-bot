@@ -634,20 +634,28 @@ def has_completed_consultation(db, wa_id):
 
     booking_start, booking_end = get_booking_window(booking)
 
+    # 🔒 HARD SAFETY CHECK — NEVER COMPARE None
+    if not booking_start or not booking_end:
+        logger.warning(
+            "CONSULTATION_CHECK_INVALID | wa_id=%s | booking_id=%s | start=%s | end=%s",
+            wa_id,
+            getattr(booking, "id", None),
+            booking_start,
+            booking_end,
+        )
+        return False
+
     now = datetime.utcnow()
-    
+
     logger.debug(
         "CONSULTATION_CHECK | wa_id=%s | now=%s | booking_end=%s | completed=%s",
         wa_id,
         now,
         booking_end,
         now > booking_end,
-    )        
+    )
 
-    if not booking_start or not booking_end:
-        return False
-
-    return datetime.utcnow() > booking_end
+    return now > booking_end
 
 def t(user, key, **kwargs):
     """
