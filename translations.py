@@ -31,7 +31,7 @@ TRANSLATIONS = {
         "ask_name_retry": "Please enter your *full name* 🙂",
 
         "ask_state": "Which *state* are you currently in?",
-        "ask_state_retry": "Please select or type your *state* 🙂",
+        "ask_state_retry": "Please select your state from the list below 🙂",
         "choose_state": "Choose your state",
         "choose_state_or_more": "Choose your state or tap More",
         "thanks_state": "Thank you 🙏\nWhich state are you in?",
@@ -151,7 +151,7 @@ TRANSLATIONS = {
         "ask_name_retry": "Kripya apna *poora naam* enter karein 🙂",
 
         "ask_state": "Aap kis *state* mein hain?",
-        "ask_state_retry": "Apna *state* select ya type karein 🙂",
+        "ask_state_retry": "Neeche di gayi list se apna state select karein 🙂",
         "choose_state": "State choose karein",
         "choose_state_or_more": "State choose karein ya More par tap karein",
         "thanks_state": "Dhanyavaad 🙏\nAap kis state mein hain?",
@@ -265,7 +265,7 @@ TRANSLATIONS = {
         "ask_name_retry": "कृपया आपले *पूर्ण नाव* पुन्हा टाका 🙂",
 
         "ask_state": "आपण कोणत्या *राज्यात* आहात?",
-        "ask_state_retry": "कृपया आपले *राज्य* निवडा किंवा लिहा 🙂",
+        "ask_state_retry": "कृपया खालील यादीतून आपले राज्य निवडा 🙂",
         "choose_state": "राज्य निवडा",
         "choose_state_or_more": "राज्य निवडा किंवा More वर टॅप करा",
         "thanks_state": "धन्यवाद 🙏\nआपण कोणत्या राज्यात आहात?",
