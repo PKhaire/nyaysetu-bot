@@ -10,6 +10,7 @@ from collections import defaultdict, deque
 from datetime import datetime, time as dt_time, timedelta
 from flask import Flask, request, jsonify, send_file
 from config import ENV, WHATSAPP_VERIFY_TOKEN, BOOKING_PRICE, RAZORPAY_WEBHOOK_SECRET
+from location_service import detect_district_and_state
 from models import User, Booking
 from db import engine, SessionLocal, init_db
 from sqlalchemy import inspect, text
@@ -239,7 +240,6 @@ from services.booking_service import (
     SLOT_MAP
 )
 from services.location_service import (
-    detect_state_from_text,
     build_state_list_rows,
     build_district_list_rows,
     get_safe_section_title
@@ -1177,26 +1177,6 @@ def webhook():
                 state_name = interactive_id.replace("state_", "")
         
             # ---------------------------------
-            # Typed fallback
-            # ---------------------------------
-            if not state_name and text_body:
-                state_name = detect_state_from_text(text_body)
-        
-            # ---------------------------------
-            # Invalid → retry
-            # ---------------------------------
-            if not state_name:
-                send_text(wa_id, t(user, "ask_state_retry"))
-                send_list_picker(
-                    wa_id,
-                    header=safe_header(t(user, "select_state")),
-                    body=t(user, "choose_state"),
-                    rows=build_state_list_rows(page=1),
-                    section_title=t(user, "indian_states"),
-                )
-                return jsonify({"status": "ok"}), 200
-        
-            # ---------------------------------
             # Save & move forward
             # ---------------------------------
             user.state_name = state_name
@@ -1217,28 +1197,7 @@ def webhook():
         # Ask District (STRICT & SAFE)
         # -------------------------------
         if user.flow_state == ASK_DISTRICT:
-            # ===============================
-            # HARD SAFETY: district without state must NEVER happen
-            # ===============================
-            if not user.state_name:
-                logger.error(
-                    "District selection attempted without state | wa_id=%s",
-                    wa_id
-                )
-            
-                save_state(db, user, ASK_DISTRICT if user.language == "mr" else ASK_STATE)
-            
-                send_list_picker(
-                    wa_id,
-                    header=safe_header(t(user, "select_state")),
-                    body=t(user, "choose_state"),
-                    rows=build_state_list_rows(page=1),
-                    section_title=t(user, "indian_states"),
-                )
-                return jsonify({"status": "ok"}), 200
-
             district = None
-        
             # ---------------------------------
             # Pagination: "More districts..."
             # ---------------------------------
@@ -1267,24 +1226,6 @@ def webhook():
                 from services.location_service import get_districts_for_state
                 if candidate in get_districts_for_state(user.state_name):
                     district = candidate
-        
-            # ---------------------------------
-            # Typed district (FUZZY + STATE ONLY)
-            # ---------------------------------
-            if not district and text_body:
-                from services.location_service import detect_district_in_state
-        
-                matched = detect_district_in_state(user.state_name, text_body)
-        
-                if matched:
-                    district = matched
-        
-                    # Auto-correction notice
-                    if matched.lower() != text_body.lower():
-                        send_text(
-                            wa_id,
-                            f"ℹ️ Interpreted *{text_body}* as *{matched}*."
-                        )
         
             # ---------------------------------
             # Ignore empty / status events
