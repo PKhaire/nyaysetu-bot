@@ -29,7 +29,9 @@ class User(Base):
     # -------------------------
     state_name = Column(String)
     district_name = Column(String)
-
+    temp_state = Column(String)
+    temp_district = Column(String)
+    
     # -------------------------
     # LEGAL CONTEXT
     # -------------------------
