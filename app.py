@@ -4,6 +4,8 @@ import logging
 import time as time_module
 import hmac
 import hashlib
+import re
+import unicodedata
 
 from threading import Thread
 from collections import defaultdict, deque
@@ -344,6 +346,52 @@ def is_global_rate_limited():
     global_request_times.append(now)
     return False
 
+# =================================================
+# Name
+# =================================================
+
+BUSINESS_KEYWORDS = {"pvt", "ltd", "limited", "company", "llp", "inc", "com", "in", "gov"}
+
+def normalize_name(raw: str):
+    if not raw:
+        return None
+
+    # Normalize unicode (removes zero-width chars)
+    name = unicodedata.normalize("NFKC", raw)
+
+    # Remove leading/trailing spaces & punctuation
+    name = name.strip(" .,-")
+
+    # Collapse multiple spaces
+    name = re.sub(r"\s+", " ", name)
+
+    # Reject digits
+    if re.search(r"\d", name):
+        return None
+
+    # Reject forbidden symbols
+    if re.search(r"[\/@#!$%^&*_=+<>?{}[\]|\\]", name):
+        return None
+
+    # Allow only letters, spaces and dot
+    if not re.fullmatch(r"[A-Za-z.\s]+", name):
+        return None
+
+    # Reject business names
+    lowered = name.lower()
+    for word in BUSINESS_KEYWORDS:
+        if word in lowered.split():
+            return None
+
+    # Optional: Title Case
+    name = name.title()
+
+    # Minimum length after cleanup
+    if len(name) < 2:
+        return None
+
+    return name
+    
 # =================================================
 # CATEGORY & SUB-CATEGORY HELPERS
 # =================================================
@@ -1098,8 +1146,18 @@ def webhook():
                 send_text(wa_id, t(user, "ask_name_retry"))
                 return jsonify({"status": "ok"}), 200
         
-            user.name = text_body.strip()
-            db.commit()
+            clean_name = normalize_name(text_body)
+            
+            if not clean_name:
+                send_text(
+                    wa_id,
+                    "❌ Please enter a valid *personal name*.\n"
+                    "Ex: Prashant Keshav Khaire"
+                )
+                return jsonify({"status": "ok"}), 200
+            
+            user.name = clean_name
+            db.commit()        
         
             # ✅ ALL users → ask DISTRICT directly
             save_state(db, user, ASK_DISTRICT)
