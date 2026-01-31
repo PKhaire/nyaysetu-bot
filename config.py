@@ -4,6 +4,11 @@ import os
 #Prevents booking/payment data loss on server restart.
 ENV = os.getenv("ENV", "production")
 
+BOOKING_NOTIFICATION_EMAILS = [
+    "outsidethecourt@gmail.com",
+    "nyaysetu@gmail.com",
+]
+
 # WhatsApp / Facebook config
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN", "")
 # choose phone id env checking multiple names
