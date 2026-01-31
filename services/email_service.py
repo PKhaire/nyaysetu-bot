@@ -19,22 +19,22 @@ ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 # ===============================
 # CORE EMAIL SENDER
 # ===============================
-def send_email(subject: str, body: str):
-    if not all([SMTP_HOST, SMTP_USER, SMTP_PASSWORD, ADMIN_EMAIL]):
-        raise RuntimeError("Email configuration missing")
 
-    msg = MIMEMultipart()
-    msg["From"] = SMTP_USER
-    msg["To"] = ADMIN_EMAIL
-    msg["Subject"] = subject
-
-    msg.attach(MIMEText(body, "plain"))
-
+def send_email(subject, body):
     server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
     server.starttls()
-    server.login(SMTP_USER, SMTP_PASSWORD)
-    server.sendmail(SMTP_USER, ADMIN_EMAIL, msg.as_string())
+    server.login(SMTP_USERNAME, SMTP_PASSWORD)
+
+    for recipient in BOOKING_NOTIFICATION_EMAILS:
+        message = f"Subject: {subject}\n\n{body}"
+        server.sendmail(
+            SMTP_FROM_EMAIL,
+            recipient,
+            message
+        )
+
     server.quit()
+
 
 
 # ===============================
@@ -131,10 +131,5 @@ Please take necessary action.
 – NyaySetu System
 """
 
-    for email in BOOKING_NOTIFICATION_EMAILS:
-        send_email(
-            email,    
-            subject,
-            body
-        )
-
+    # send_email already knows recipients internally
+    send_email(subject, body)
