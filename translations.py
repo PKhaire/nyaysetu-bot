@@ -6,122 +6,122 @@ TRANSLATIONS = {
     "en": {
         # ---------- GENERAL ----------
         "welcome": (
-            "👋 Welcome to NyaySetu\n"
+            "🙏  Welcome to NyaySetu\n"
             "⚖️ The Bridge To Justice\n\n"
             "🆔 Case ID: {case_id}\n\n"
-            "Please choose your preferred language:"
+            "Please select your preferred language:"
         ),
-        "restart": "🔄 Session reset.\nType *Hi* to start again.",
+        "restart": "Your session has been reset.\nPlease type \"Hi\" to start again.",
 
         # ---------- LEGAL GUIDANCE ----------
-        "ask_ai_or_book": "How would you like to proceed?",
+        "ask_ai_or_book": "Please select how you would like to proceed:",
         "ask_ai": "Get Legal Guidance",
-        "ask_ai_prompt": "👨‍⚖️ Please share your legal question:",
-        "ai_cooldown": "⏳ Please wait a moment before sending another message.",
+        "ask_ai_prompt": "Please enter your legal query:",
+        "ai_cooldown": "Please wait for a moment before sending another message.",
         "book_consult": "Book Consultation",
 
-        # ---------- RATE LIMIT ----------
         "rate_limit_exceeded": (
-            "⏳ You’re sending messages too quickly.\n"
-            "Please wait a moment and try again."
+            "You are sending messages too quickly.\n"
+            "Please wait for a moment and try again."
         ),
 
         # ---------- USER DETAILS ----------
-        "ask_name": "May I know your *full name*?",
-        "ask_name_retry": "Please enter your *full name* 🙂",
-
-        "ask_state": "Which *state* are you currently in?",
-        "ask_state_retry": "Please select your state from the list below 🙂",
-        "choose_state": "Choose your state",
-        "choose_state_or_more": "Choose your state or tap More",
-        "thanks_state": "Thank you 🙏\nWhich state are you in?",
+        "ask_name": "Please enter your full name.",
+        "ask_name_retry": "Please enter your full name.",
+        
+        "ask_state": "Please select the state you are currently residing in.",
+        "ask_state_retry": "Please select your state from the list below.",
+        "choose_state": "Select State",
+        "choose_state_or_more": "Select your state or tap More",
+        "thanks_state": "Thank you.\nPlease confirm your state.",
         "select_state": "Select State",
         "indian_states": "Indian States",
-
-        "ask_district": "Choose district",
-        "choose_district": "Choose your district",
+        
+        "ask_district": "Select District",
+        "choose_district": "Select your district",
         "select_district_in": "Select district in {state}",
         "district_invalid": (
-            "❌ Could not identify district *{district}* in {state}.\n"
-            "Please select from the list below 👇"
+            "The district \"{district}\" could not be identified in {state}.\n"
+            "Please select a valid district from the list below."
         ),
+
 
         # ---------- CATEGORY ----------
         "select_category": "Select Legal Category",
-        "choose_category": "Choose the category that best matches your issue",
-        "category_retry": "Please select a legal category from the list 👇",
-
+        "choose_category": "Please select the category that best describes your legal matter.",
+        "category_retry": "Please select a legal category from the list below.",
+        
         # ---------- SUB-CATEGORY ----------
         "select_subcategory": "Select Sub-Category",
-        "choose_subcategory": "Choose the issue type",
-        "subcategory_retry": "Please select a sub-category from the list 👇",
+        "choose_subcategory": "Please select the option that best describes your legal matter.",
+        "subcategory_retry": "Please select a sub-category from the list below.",
         "subcategory_mismatch": (
-            "Selected sub-category does not match your category.\n"
-            "Please try again 👇"
+            "The selected sub-category does not correspond to the chosen legal category.\n"
+            "Please select a valid sub-category."
         ),
 
         # ---------- DATE ----------
-        "select_date": "Select appointment date 👇",
-        "select_date_retry": "Please select an appointment *date* from the list 👇",
-        "available_dates": "Available dates",
-        "invalid_date": "Invalid date selected. Please choose again 👇",
+        "select_date": "Select appointment date",
+        "select_date_retry": "Please select an appointment date from the list below.",
+        "available_dates": "Available Dates",
+        "invalid_date": "The selected date is invalid. Please select again.",
         "past_date_error": (
-            "⚠️ You cannot select a past or same-day appointment.\n"
-            "Please choose a future date 👇"
+            "You cannot select a past or same-day appointment.\n"
+            "Please select a future date."
         ),
         "available_on": "Available on {date}",
-        "next_7_days": "Next available days",
-
+        "next_7_days": "Next Available Days",
+        
         # ---------- SLOT ----------
-        "select_slot": "Select time slot",
-        "available_slots": "Available time slots (IST)",
+        "select_slot": "Select Time Slot",
+        "available_slots": "Available Time Slots (IST)",
         "time_slots": "Time Slots",
-        "slot_retry": "Please select a time slot from the list 👇",
-        "invalid_slot": "Invalid time slot selected. Please choose again 👇",
+        "slot_retry": "Please select a time slot from the list below.",
+        "invalid_slot": "The selected time slot is invalid. Please select again.",
         "no_slots": (
-            "⚠️ No available time slots for this date.\n"
-            "Please select another date 👇"
+            "No time slots are available for the selected date.\n"
+            "Please select another date."
         ),
 
         # ---------- BOOKING / PAYMENT ----------
         "booking_missing": (
-            "⚠️ Some booking details are missing.\n"
+            "Some booking details are missing.\n"
             "Please restart the booking process."
         ),
         "free_limit_reached": (
-            "🚫 Free legal guidance limit reached.\n"
+            "The free legal guidance limit has been reached.\n"
             "Please book a consultation."
         ),
         "payment_in_progress": (
-            "⚠️ Payment is currently in progress.\n"
+            "Payment is currently in progress.\n"
             "Please wait."
         ),
         "payment_success": (
-            "💳 Payment successful.\n"
-            "Your consultation is confirmed."
+            "Payment completed successfully.\n"
+            "Your consultation has been confirmed."
         ),
         "session_start": (
-            "✅ *Payment received successfully.*\n\n"
-            "You may now ask your legal questions here.\n"
-            "Our legal expert will also call you at the scheduled date and time."
+            "Payment received successfully.\n\n"
+            "You may now submit your legal queries here.\n"
+            "Our legal expert will contact you on the scheduled date and time."
         ),
         "payment_link_text": "Your payment link is active:",
 
         "appointment_summary": (
-            "✅ Your appointment details:\n"
+            "Appointment Details:\n"
             "Name: {name}\n"
             "State: {state}\n"
             "District: {district}\n"
             "Category: {category}\n"
             "Date: {date}\n"
-            "Slot: {slot}\n"
-            "Fees: ₹{amount} (one-time session) 🙂\n\n"
-            "Please complete payment:"
+            "Time Slot: {slot}\n"
+            "Fees: ₹{amount} (one-time session)\n\n"
+            "Please proceed to complete the payment."
         ),
-        "receipt_help": "Didn’t receive the receipt? Type RECEIPT",
-
+        "receipt_help": "If you have not received the receipt, please type RECEIPT.",
+        
         # ---------- COMMON ----------
-        "invalid_selection": "Invalid selection. Please try again 👇",
+        "invalid_selection": "The selected option is invalid. Please try again.",
     },
 
     # =====================================================
@@ -129,113 +129,122 @@ TRANSLATIONS = {
     # =====================================================
     "hi": {
         "welcome": (
-            "👋 NyaySetu mein aapka swagat hai\n"
+            "🙏  NyaySetu mein aapka swagat hai\n"
             "⚖️ The Bridge To Justice\n\n"
             "🆔 Case ID: {case_id}\n\n"
-            "Kripya apni language choose karein:"
+            "Kripya apni pasand ki bhasha select karein:"
         ),
-        "restart": "🔄 Session reset ho gaya.\n*Hi* type karke dobara shuru karein.",
+        "restart": "Aapka session reset ho gaya hai.\nKripya \"Hi\" type karke dobara shuru karein.",
 
-        "ask_ai_or_book": "Aap kaise aage badhna chahenge?",
-        "ask_ai": "Legal Salah Lein",
-        "ask_ai_prompt": "👨‍⚖️ Apna legal sawal yahan batayein:",
-        "ai_cooldown": "⏳ Thoda ruk kar dobara message bhejein.",
-        "book_consult": "Consultation book karein",
+        # ---------- LEGAL GUIDANCE ----------
+        "ask_ai_or_book": "Kripya batayein aap kaise aage badhna chahte hain:",
+        "ask_ai": "Legal Guidance Prapt Karein",
+        "ask_ai_prompt": "Kripya apna legal prashn darj karein:",
+        "ai_cooldown": "Kripya agla message bhejne se pehle thoda intezaar karein.",
+        "book_consult": "Consultation Book Karein",
 
         "rate_limit_exceeded": (
-            "⏳ Aap bahut fast messages bhej rahe hain.\n"
-            "Thoda ruk kar dobara try karein."
+            "Aap bahut tezi se messages bhej rahe hain.\n"
+            "Kripya thoda intezaar karke dobara koshish karein."
         ),
 
-        "ask_name": "Kya main aapka *poora naam* jaan sakta hoon?",
-        "ask_name_retry": "Kripya apna *poora naam* enter karein 🙂",
-
-        "ask_state": "Aap kis *state* mein hain?",
-        "ask_state_retry": "Neeche di gayi list se apna state select karein 🙂",
-        "choose_state": "State choose karein",
-        "choose_state_or_more": "State choose karein ya More par tap karein",
-        "thanks_state": "Dhanyavaad 🙏\nAap kis state mein hain?",
-        "select_state": "State select karein",
-        "indian_states": "Indian States",
-
-        "ask_district": "District choose karein",
-        "choose_district": "Apna district choose karein",
-        "select_district_in": "{state} mein district select karein",
+        # ---------- USER DETAILS ----------
+        "ask_name": "Kripya apna poora naam darj karein.",
+        "ask_name_retry": "Kripya apna poora naam darj karein.",
+        
+        "ask_state": "Kripya batayein aap vartamaan mein kis rajya mein rehte hain.",
+        "ask_state_retry": "Kripya neeche di gayi list se apna rajya select karein.",
+        "choose_state": "Rajya Select Karein",
+        "choose_state_or_more": "Apna rajya select karein ya More par tap karein",
+        "thanks_state": "Dhanyavaad.\nKripya apna rajya confirm karein.",
+        "select_state": "Rajya Select Karein",
+        "indian_states": "Bharatiya Rajya",
+        
+        "ask_district": "Zila Select Karein",
+        "choose_district": "Apna zila select karein",
+        "select_district_in": "{state} mein zila select karein",
         "district_invalid": (
-            "❌ *{district}* district {state} mein nahi mila.\n"
-            "Neeche list se select karein 👇"
+            "\"{district}\" zila {state} mein pehchana nahi ja saka.\n"
+            "Kripya neeche di gayi list se sahi zila select karein."
         ),
 
-        "select_category": "Legal Category select karein",
-        "choose_category": "Apni problem ke hisaab se category choose karein",
-        "category_retry": "List se legal category select karein 👇",
-
-        "select_subcategory": "Sub-Category select karein",
-        "choose_subcategory": "Issue type choose karein",
-        "subcategory_retry": "List se sub-category select karein 👇",
+        # ---------- CATEGORY ----------
+        "select_category": "Legal Category Select Karein",
+        "choose_category": "Kripya apne legal matter se sabse zyada milti-julti category select karein.",
+        "category_retry": "Kripya neeche di gayi list se ek legal category select karein.",
+        
+        # ---------- SUB-CATEGORY ----------
+        "select_subcategory": "Sub-Category Select Karein",
+        "choose_subcategory": "Kripya apne legal matter ko sabse achchhe se describe karne wala option select karein.",
+        "subcategory_retry": "Kripya neeche di gayi list se ek sub-category select karein.",
         "subcategory_mismatch": (
-            "Selected sub-category, category se match nahi karti.\n"
-            "Dobara try karein 👇"
+            "Select ki gayi sub-category, chuni hui legal category se sambandhit nahi hai.\n"
+            "Kripya ek valid sub-category select karein."
         ),
 
-        "select_date": "Appointment date select karein 👇",
-        "select_date_retry": "List se appointment *date* select karein 👇",
-        "available_dates": "Available dates",
-        "invalid_date": "Galat date select hui hai. Dobara choose karein 👇",
+        # ---------- DATE ----------
+        "select_date": "Appointment ki date select karein",
+        "select_date_retry": "Kripya neeche di gayi list se appointment ki date select karein.",
+        "available_dates": "Available Dates",
+        "invalid_date": "Select ki gayi date valid nahi hai. Kripya dobara select karein.",
         "past_date_error": (
-            "⚠️ Aap past ya same-day appointment select nahi kar sakte.\n"
-            "Future date choose karein 👇"
+            "Aap pichhli ya aaj ki date ke liye appointment select nahi kar sakte.\n"
+            "Kripya future ki date select karein."
         ),
-        "available_on": "{date} ko available",
-        "next_7_days": "Agale available din",
-
-        "select_slot": "Time slot select karein",
-        "available_slots": "Available time slots (IST)",
+        "available_on": "{date} ko uplabdh",
+        "next_7_days": "Agale uplabdh din",
+        
+        # ---------- SLOT ----------
+        "select_slot": "Time Slot Select Karein",
+        "available_slots": "Available Time Slots (IST)",
         "time_slots": "Time Slots",
-        "slot_retry": "List se time slot select karein 👇",
-        "invalid_slot": "Galat time slot select hua hai. Dobara try karein 👇",
+        "slot_retry": "Kripya neeche di gayi list se time slot select karein.",
+        "invalid_slot": "Select kiya gaya time slot valid nahi hai. Kripya dobara select karein.",
         "no_slots": (
-            "⚠️ Is date ke liye koi time slot available nahi hai.\n"
-            "Dusri date choose karein 👇"
+            "Is date ke liye koi time slot uplabdh nahi hai.\n"
+            "Kripya kisi aur date ko select karein."
         ),
 
+        # ---------- BOOKING / PAYMENT ----------
         "booking_missing": (
-            "⚠️ Kuch booking details missing hain.\n"
-            "Kripya booking dobara start karein."
+            "Kuch booking details uplabdh nahi hain.\n"
+            "Kripya booking process dobara shuru karein."
         ),
         "free_limit_reached": (
-            "🚫 Free legal guidance limit khatam ho gayi hai.\n"
-            "Consultation book karein."
+            "Free legal guidance ki limit poori ho chuki hai.\n"
+            "Kripya consultation book karein."
         ),
         "payment_in_progress": (
-            "⚠️ Payment process mein hai.\n"
-            "Kripya complete hone dein."
+            "Payment process chal rahi hai.\n"
+            "Kripya thoda intezaar karein."
         ),
         "payment_success": (
-            "💳 Payment successful.\n"
-            "Aapki consultation confirm ho gayi hai."
+            "Payment safalta se poori ho gayi hai.\n"
+            "Aapki consultation confirm ho chuki hai."
         ),
         "session_start": (
-            "✅ *Payment successfully receive ho gaya.*\n\n"
-            "Ab aap yahan apne legal questions pooch sakte hain.\n"
-            "Hamare legal expert aapko scheduled date aur time par call karenge."
+            "Payment safalta se prapt ho gaya hai.\n\n"
+            "Ab aap apne legal prashn yahan darj kar sakte hain.\n"
+            "Hamare legal expert nirdharit tareekh aur samay par aapse sampark karenge."
         ),
         "payment_link_text": "Aapka payment link active hai:",
 
         "appointment_summary": (
-            "✅ Aapke appointment details:\n"
+            "Appointment Details:\n"
             "Naam: {name}\n"
-            "State: {state}\n"
-            "District: {district}\n"
+            "Rajya: {state}\n"
+            "Zila: {district}\n"
             "Category: {category}\n"
-            "Date: {date}\n"
-            "Slot: {slot}\n"
-            "Fees: ₹{amount} (one-time session) 🙂\n\n"
-            "Kripya payment complete karein:"
+            "Tareekh: {date}\n"
+            "Time Slot: {slot}\n"
+            "Fees: ₹{amount} (one-time session)\n\n"
+            "Kripya payment poori karne ke liye aage badhein."
         ),
-        "receipt_help": "Receipt nahi mili? RECEIPT type karein",
+        "receipt_help": "Agar aapko receipt prapt nahi hui hai, to kripya RECEIPT type karein.",
+        
+        # ---------- COMMON ----------
+        "invalid_selection": "Select kiya gaya option valid nahi hai. Kripya dobara koshish karein.",
 
-        "invalid_selection": "Galat selection. Dobara try karein 👇",
     },
 
     # =====================================================
@@ -243,112 +252,121 @@ TRANSLATIONS = {
     # =====================================================
     "mr": {
         "welcome": (
-            "👋 NyaySetu मध्ये आपले स्वागत आहे\n"
+            "🙏  NyaySetu मध्ये आपले स्वागत आहे\n"
             "⚖️ The Bridge To Justice\n\n"
             "🆔 केस आयडी: {case_id}\n\n"
             "कृपया आपली पसंतीची भाषा निवडा:"
         ),
-        "restart": "🔄 सत्र रीसेट झाले.\n*Hi* टाइप करून पुन्हा सुरू करा.",
-
-        "ask_ai_or_book": "आपण पुढे कसे जायचे आहे?",
-        "ask_ai": "कायदेशीर मार्गदर्शन घ्या",
-        "ask_ai_prompt": "👨‍⚖️ कृपया आपला कायदेशीर प्रश्न सांगा:",
-        "ai_cooldown": "⏳ कृपया थोडा वेळ थांबून पुन्हा संदेश पाठवा.",
-        "book_consult": "सल्ला बुक करा",
+        "restart": "आपले सत्र रीसेट करण्यात आले आहे.\nकृपया \"Hi\" टाइप करून पुन्हा सुरू करा.",
+        
+        # ---------- LEGAL GUIDANCE ----------
+        "ask_ai_or_book": "कृपया पुढे कसे जायचे आहे ते निवडा:",
+        "ask_ai": "कायदेशीर मार्गदर्शन मिळवा",
+        "ask_ai_prompt": "कृपया आपला कायदेशीर प्रश्न नोंदवा:",
+        "ai_cooldown": "कृपया पुढील संदेश पाठवण्यापूर्वी थोडा वेळ थांबा.",
+        "book_consult": "सल्लामसलत बुक करा",
 
         "rate_limit_exceeded": (
-            "⏳ आपण खूप वेगाने संदेश पाठवत आहात.\n"
-            "कृपया थोडा वेळ थांबा."
+            "आपण खूप वेगाने संदेश पाठवत आहात.\n"
+            "कृपया थोडा वेळ थांबून पुन्हा प्रयत्न करा."
         ),
 
-        "ask_name": "कृपया आपले *पूर्ण नाव* सांगा.",
-        "ask_name_retry": "कृपया आपले *पूर्ण नाव* पुन्हा टाका 🙂",
-
-        "ask_state": "आपण कोणत्या *राज्यात* आहात?",
-        "ask_state_retry": "कृपया खालील यादीतून आपले राज्य निवडा 🙂",
+        # ---------- USER DETAILS ----------
+        "ask_name": "कृपया आपले पूर्ण नाव नोंदवा.",
+        "ask_name_retry": "कृपया आपले पूर्ण नाव नोंदवा.",
+        
+        "ask_state": "कृपया आपण सध्या कोणत्या राज्यात राहता ते निवडा.",
+        "ask_state_retry": "कृपया खाली दिलेल्या यादीतून आपले राज्य निवडा.",
         "choose_state": "राज्य निवडा",
-        "choose_state_or_more": "राज्य निवडा किंवा More वर टॅप करा",
-        "thanks_state": "धन्यवाद 🙏\nआपण कोणत्या राज्यात आहात?",
+        "choose_state_or_more": "आपले राज्य निवडा किंवा More वर टॅप करा",
+        "thanks_state": "धन्यवाद.\nकृपया आपले राज्य निश्चित करा.",
         "select_state": "राज्य निवडा",
         "indian_states": "भारतीय राज्ये",
-
+        
         "ask_district": "जिल्हा निवडा",
         "choose_district": "आपला जिल्हा निवडा",
         "select_district_in": "{state} मधील जिल्हा निवडा",
         "district_invalid": (
-            "❌ *{district}* हा जिल्हा {state} मध्ये आढळला नाही.\n"
-            "कृपया खालील यादीतून निवडा 👇"
+            "\"{district}\" हा जिल्हा {state} मध्ये आढळला नाही.\n"
+            "कृपया खालील यादीतून वैध जिल्हा निवडा."
         ),
-
+        
+        # ---------- CATEGORY ----------
         "select_category": "कायदेशीर श्रेणी निवडा",
-        "choose_category": "आपल्या समस्येशी जुळणारी श्रेणी निवडा",
-        "category_retry": "कृपया यादीतून कायदेशीर श्रेणी निवडा 👇",
-
+        "choose_category": "कृपया आपल्या कायदेशीर विषयाशी सर्वाधिक संबंधित असलेली श्रेणी निवडा.",
+        "category_retry": "कृपया खाली दिलेल्या यादीतून कायदेशीर श्रेणी निवडा.",
+        
+        # ---------- SUB-CATEGORY ----------
         "select_subcategory": "उप-श्रेणी निवडा",
-        "choose_subcategory": "समस्येचा प्रकार निवडा",
-        "subcategory_retry": "कृपया यादीतून उप-श्रेणी निवडा 👇",
+        "choose_subcategory": "कृपया आपल्या कायदेशीर विषयाचे योग्य वर्णन करणारा पर्याय निवडा.",
+        "subcategory_retry": "कृपया खाली दिलेल्या यादीतून उप-श्रेणी निवडा.",
         "subcategory_mismatch": (
-            "निवडलेली उप-श्रेणी मुख्य श्रेणीशी जुळत नाही.\n"
-            "कृपया पुन्हा प्रयत्न करा 👇"
+            "निवडलेली उप-श्रेणी निवडलेल्या कायदेशीर श्रेणीशी संबंधित नाही.\n"
+            "कृपया वैध उप-श्रेणी निवडा."
         ),
 
-        "select_date": "अपॉइंटमेंटची तारीख निवडा 👇",
-        "select_date_retry": "कृपया यादीतून अपॉइंटमेंट *तारीख* निवडा 👇",
+        # ---------- DATE ----------
+        "select_date": "अपॉइंटमेंटची तारीख निवडा",
+        "select_date_retry": "कृपया खाली दिलेल्या यादीतून अपॉइंटमेंटची तारीख निवडा.",
         "available_dates": "उपलब्ध तारखा",
-        "invalid_date": "चुकीची तारीख निवडली आहे. कृपया पुन्हा निवडा 👇",
+        "invalid_date": "निवडलेली तारीख वैध नाही. कृपया पुन्हा निवडा.",
         "past_date_error": (
-            "⚠️ आपण मागील किंवा आजची तारीख निवडू शकत नाही.\n"
-            "कृपया भविष्यातील तारीख निवडा 👇"
+            "मागील किंवा आजच्या तारखेसाठी अपॉइंटमेंट निवडता येणार नाही.\n"
+            "कृपया भविष्यातील तारीख निवडा."
         ),
         "available_on": "{date} रोजी उपलब्ध",
         "next_7_days": "पुढील उपलब्ध दिवस",
-
-        "select_slot": "वेळ निवडा",
-        "available_slots": "उपलब्ध वेळा (IST)",
-        "time_slots": "वेळा",
-        "slot_retry": "कृपया यादीतून वेळ निवडा 👇",
-        "invalid_slot": "चुकीची वेळ निवडली आहे. कृपया पुन्हा प्रयत्न करा 👇",
+        
+        # ---------- SLOT ----------
+        "select_slot": "वेळेचा स्लॉट निवडा",
+        "available_slots": "उपलब्ध वेळेचे स्लॉट (IST)",
+        "time_slots": "वेळेचे स्लॉट",
+        "slot_retry": "कृपया खाली दिलेल्या यादीतून वेळेचा स्लॉट निवडा.",
+        "invalid_slot": "निवडलेला वेळेचा स्लॉट वैध नाही. कृपया पुन्हा निवडा.",
         "no_slots": (
-            "⚠️ या तारखेसाठी कोणतीही वेळ उपलब्ध नाही.\n"
-            "कृपया दुसरी तारीख निवडा 👇"
+            "या तारखेसाठी कोणतेही वेळेचे स्लॉट उपलब्ध नाहीत.\n"
+            "कृपया दुसरी तारीख निवडा."
         ),
 
+        # ---------- BOOKING / PAYMENT ----------
         "booking_missing": (
-            "⚠️ काही बुकिंग तपशील अपूर्ण आहेत.\n"
-            "कृपया बुकिंग पुन्हा सुरू करा."
+            "काही बुकिंग तपशील उपलब्ध नाहीत.\n"
+            "कृपया बुकिंग प्रक्रिया पुन्हा सुरू करा."
         ),
         "free_limit_reached": (
-            "🚫 मोफत कायदेशीर मार्गदर्शनाची मर्यादा संपली आहे.\n"
-            "कृपया सल्ला बुक करा."
+            "मोफत कायदेशीर मार्गदर्शनाची मर्यादा पूर्ण झाली आहे.\n"
+            "कृपया सल्लामसलत बुक करा."
         ),
         "payment_in_progress": (
-            "⚠️ पेमेंट प्रक्रिया सुरू आहे.\n"
-            "कृपया पूर्ण होऊ द्या."
+            "पेमेंट प्रक्रिया सुरू आहे.\n"
+            "कृपया थोडा वेळ थांबा."
         ),
         "payment_success": (
-            "💳 पेमेंट यशस्वी.\n"
+            "पेमेंट यशस्वीरीत्या पूर्ण झाले आहे.\n"
             "आपली सल्लामसलत निश्चित झाली आहे."
         ),
         "session_start": (
-            "✅ *पेमेंट यशस्वीरीत्या प्राप्त झाले आहे.*\n\n"
-            "आता आपण येथे आपले कायदेशीर प्रश्न विचारू शकता.\n"
-            "नियोजित तारीख व वेळेस आमचे कायदेशीर तज्ज्ञ आपल्याशी संपर्क साधतील."
+            "पेमेंट यशस्वीरीत्या प्राप्त झाले आहे.\n\n"
+            "आता आपण आपले कायदेशीर प्रश्न येथे नोंदवू शकता.\n"
+            "आमचे कायदेशीर तज्ञ निश्चित केलेल्या तारीख आणि वेळेला आपल्याशी संपर्क साधतील."
         ),
         "payment_link_text": "आपला पेमेंट लिंक सक्रिय आहे:",
 
         "appointment_summary": (
-            "✅ आपल्या अपॉइंटमेंटचे तपशील:\n"
+            "अपॉइंटमेंट तपशील:\n"
             "नाव: {name}\n"
             "राज्य: {state}\n"
             "जिल्हा: {district}\n"
             "श्रेणी: {category}\n"
             "तारीख: {date}\n"
-            "वेळ: {slot}\n"
-            "फीस: ₹{amount} (एकदाच सत्र) 🙂\n\n"
-            "कृपया पेमेंट पूर्ण करा:"
+            "वेळेचा स्लॉट: {slot}\n"
+            "शुल्क: ₹{amount} (एकदाच होणारी सत्र शुल्क)\n\n"
+            "कृपया पेमेंट पूर्ण करण्यासाठी पुढे जा."
         ),
-        "receipt_help": "पावती मिळाली नाही? RECEIPT टाइप करा",
+        "receipt_help": "आपल्याला पावती प्राप्त झाली नसेल तर कृपया RECEIPT टाइप करा.",
+        
+        # ---------- COMMON ----------
+        "invalid_selection": "निवडलेला पर्याय वैध नाही. कृपया पुन्हा प्रयत्न करा.",
 
-        "invalid_selection": "चुकीची निवड. कृपया पुन्हा प्रयत्न करा 👇",
     },
 }
