@@ -572,6 +572,9 @@ def send_payment_receipt_again(db, wa_id):
             "⚠️ Unable to resend receipt right now. Please try later."
         )
         
+from services.advocate_service import find_advocate
+from services.email_service import send_advocate_booking_email
+
 def post_payment_background_tasks(booking_id):
     db = SessionLocal()
     try:
@@ -579,16 +582,28 @@ def post_payment_background_tasks(booking_id):
         if not booking:
             return
 
-        # 1️⃣ Admin email (slow – SMTP)
+        # 🔹 1. Advocate Email (CRITICAL)
+        advocate = find_advocate(db, booking)
+        if advocate:
+            try:
+                send_advocate_booking_email(advocate, booking)
+            except Exception:
+                logger.exception(
+                    "⚠️ Advocate email failed | booking_id=%s | advocate=%s",
+                    booking.id,
+                    advocate.email
+                )
+
+        # 🔹 2. Admin Email (existing)
         try:
             send_new_booking_email(booking)
         except Exception:
             logger.exception(
                 "⚠️ Admin email failed | booking_id=%s",
-                booking_id
+                booking.id
             )
 
-        # 2️⃣ PDF receipt + WhatsApp document (slow)
+        # 🔹 3. Receipt PDF + WhatsApp
         try:
             pdf_path = generate_pdf_receipt(booking)
             send_payment_receipt_pdf(
@@ -597,13 +612,13 @@ def post_payment_background_tasks(booking_id):
             )
         except Exception:
             logger.exception(
-                "⚠️ Receipt PDF flow failed | booking_id=%s",
-                booking_id
+                "⚠️ Receipt sending failed | booking_id=%s",
+                booking.id
             )
 
     finally:
         db.close()
-        
+
 def send_verification_screen(db, user, wa_id):
     save_state(db, user, FLOW_VERIFY_DETAILS)
     send_buttons(
