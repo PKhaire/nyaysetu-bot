@@ -2,7 +2,7 @@ import smtplib
 import os
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-
+from config import BOOKING_NOTIFICATION_EMAILS
 from db import SessionLocal
 from models import User
 
@@ -113,3 +113,27 @@ Please review and prepare accordingly.
         body=body
     )
 
+
+def send_booking_notification_email(booking):
+    subject = "🆕 New Consultation Booking Confirmed"
+
+    body = f"""
+A new consultation booking has been confirmed.
+
+Client Name: {booking.name}
+Category: {booking.category.replace('_', ' ').title()}
+District: {booking.district}
+Date: {booking.date}
+Time Slot: {booking.slot_code}
+
+Please take necessary action.
+
+– NyaySetu System
+"""
+
+    for email in BOOKING_NOTIFICATION_EMAILS:
+        send_email(
+            to=email,
+            subject=subject,
+            body=body
+        )
