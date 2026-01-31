@@ -87,3 +87,29 @@ Payment     : CONFIRMED
 
     finally:
         db.close()
+
+def send_advocate_booking_email(advocate, booking):
+    subject = f"🆕 New Legal Consultation Assigned"
+
+    body = f"""
+Hello {advocate.name},
+
+A new consultation has been assigned to you.
+
+Client Name: {booking.name}
+Category: {booking.category.replace('_', ' ').title()}
+District: {booking.district.title()}
+Date: {booking.date}
+Time Slot: {booking.slot_code.replace('_', ':00 - ')}
+
+Please review and prepare accordingly.
+
+– NyaySetu
+"""
+
+    send_email(
+        to=advocate.email,
+        subject=subject,
+        body=body
+    )
+
