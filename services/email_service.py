@@ -2,7 +2,6 @@ import smtplib
 import os
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from config import BOOKING_NOTIFICATION_EMAILS
 from db import SessionLocal
 from models import User
 
@@ -20,20 +19,49 @@ ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 # CORE EMAIL SENDER
 # ===============================
 
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
+import os
+import logging
+
+logger = logging.getLogger(__name__)
+
+BOOKING_NOTIFICATION_EMAILS = [
+    "outsidethecourt@gmail.com",
+    "nyaysetu@gmail.com",
+]
+
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+SENDGRID_FROM_EMAIL = os.getenv("SENDGRID_FROM_EMAIL")
+
+
 def send_email(subject, body):
-    server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
-    server.starttls()
-    server.login(SMTP_USERNAME, SMTP_PASSWORD)
+    """
+    Sends email using SendGrid (HTTPS-based, Render-safe)
+    """
 
-    for recipient in BOOKING_NOTIFICATION_EMAILS:
-        message = f"Subject: {subject}\n\n{body}"
-        server.sendmail(
-            SMTP_FROM_EMAIL,
-            recipient,
-            message
-        )
+    if not SENDGRID_API_KEY or not SENDGRID_FROM_EMAIL:
+        logger.error("❌ SendGrid env vars not configured")
+        return
 
-    server.quit()
+    try:
+        sg = SendGridAPIClient(SENDGRID_API_KEY)
+
+        for recipient in BOOKING_NOTIFICATION_EMAILS:
+            message = Mail(
+                from_email=SENDGRID_FROM_EMAIL,
+                to_emails=recipient,
+                subject=subject,
+                plain_text_content=body,
+            )
+
+            sg.send(message)
+
+        logger.info("📧 Booking notification email sent via SendGrid")
+
+    except Exception:
+        logger.exception("❌ SendGrid email send failed")
+
 
 
 
