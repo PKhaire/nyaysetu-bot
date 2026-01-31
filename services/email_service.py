@@ -2,6 +2,9 @@ import smtplib
 import os
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
+import logging
 from db import SessionLocal
 from models import User
 
@@ -18,11 +21,6 @@ ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 # ===============================
 # CORE EMAIL SENDER
 # ===============================
-
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail
-import os
-import logging
 
 logger = logging.getLogger(__name__)
 
