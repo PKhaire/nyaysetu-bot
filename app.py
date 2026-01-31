@@ -241,7 +241,6 @@ from services.booking_service import (
     mark_booking_as_paid,
     SLOT_MAP
 )
-from services.email_service import send_new_booking_email
 
 # ===============================
 # STATES
@@ -573,7 +572,7 @@ def send_payment_receipt_again(db, wa_id):
         )
         
 from services.advocate_service import find_advocate
-from services.email_service import send_advocate_booking_email
+from services.email_service import send_advocate_booking_email, send_new_booking_email, send_booking_notification_email
 
 def post_payment_background_tasks(booking_id):
     db = SessionLocal()
@@ -582,19 +581,16 @@ def post_payment_background_tasks(booking_id):
         if not booking:
             return
 
-        # 🔹 1. Advocate Email (CRITICAL)
-        advocate = find_advocate(db, booking)
-        if advocate:
-            try:
-                send_advocate_booking_email(advocate, booking)
-            except Exception:
-                logger.exception(
-                    "⚠️ Advocate email failed | booking_id=%s | advocate=%s",
-                    booking.id,
-                    advocate.email
-                )
+        # 🔹 1. Booking notification (TEMP – centralized)
+        try:
+            send_booking_notification_email(booking)
+        except Exception:
+            logger.exception(
+                "⚠️ Booking notification email failed | booking_id=%s",
+                booking.id
+            )
 
-        # 🔹 2. Admin Email (existing)
+        # 🔹 2. Admin email (keep existing behaviour)
         try:
             send_new_booking_email(booking)
         except Exception:
