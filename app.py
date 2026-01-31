@@ -121,7 +121,7 @@ user_message_times = defaultdict(lambda: deque())
 user_last_ai_call = {}
 global_request_times = deque()
 
-WELCOME_KEYWORDS = {"hi", "hello", "hey", "start"}
+WELCOME_KEYWORDS = {"hi","hii","hie", "hello", "hey", "start"}
 
 RESTART_KEYWORDS = {
     "restart", "reset", "start over", "begin again",
