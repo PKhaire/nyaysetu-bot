@@ -122,9 +122,10 @@ A new consultation booking has been confirmed.
 
 Client Name: {booking.name}
 Category: {booking.category.replace('_', ' ').title()}
-District: {booking.district}
+State: {booking.state_name}
+District: {booking.district_name}
 Date: {booking.date}
-Time Slot: {booking.slot_code}
+Time Slot: {booking.slot_readable}
 
 Please take necessary action.
 
@@ -137,3 +138,4 @@ Please take necessary action.
             subject=subject,
             body=body
         )
+
