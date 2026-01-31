@@ -113,7 +113,6 @@ Please review and prepare accordingly.
         body=body
     )
 
-
 def send_booking_notification_email(booking):
     subject = "🆕 New Consultation Booking Confirmed"
 
@@ -134,8 +133,8 @@ Please take necessary action.
 
     for email in BOOKING_NOTIFICATION_EMAILS:
         send_email(
-            to=email,
-            subject=subject,
-            body=body
+            email,    
+            subject,
+            body
         )
 
