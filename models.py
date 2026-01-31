@@ -2,6 +2,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Date
 from sqlalchemy.orm import declarative_base
 from datetime import datetime
+from db import Base
 
 Base = declarative_base()
 
@@ -141,5 +142,15 @@ class Conversation(Base):
     direction = Column(String)
     text = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class Advocate(Base):
+    __tablename__ = "advocates"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    email = Column(String, nullable=False)
+    category = Column(String, nullable=False)
+    district = Column(String, nullable=False)
+    active = Column(Boolean, default=True)
 
 
