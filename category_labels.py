@@ -1,49 +1,47 @@
-# category_labels.py
-
 CATEGORY_LABELS = {
     "Family": {
         "en": "Family",
-        "hi": "Family (Parivar)",
+        "hi": "Parivaarik",
         "mr": "कौटुंबिक",
     },
     "Criminal": {
         "en": "Criminal",
-        "hi": "Criminal (Aparadh)",
+        "hi": "Aparadhik",
         "mr": "फौजदारी",
     },
     "Accident": {
         "en": "Accident",
-        "hi": "Accident (Hadsa)",
+        "hi": "Durghatna",
         "mr": "अपघात",
     },
     "Property": {
         "en": "Property",
-        "hi": "Property (Jaaydad)",
+        "hi": "Sampatti",
         "mr": "मालमत्ता",
     },
     "Business": {
         "en": "Business",
-        "hi": "Business (Vyapar)",
+        "hi": "Vyapar",
         "mr": "व्यवसाय",
     },
     "Job": {
-        "en": "Job",
-        "hi": "Job (Naukri)",
+        "en": "Employment",
+        "hi": "Naukri",
         "mr": "नोकरी",
     },
     "Consumer": {
         "en": "Consumer",
-        "hi": "Consumer (Grahak)",
+        "hi": "Upbhokta",
         "mr": "ग्राहक",
     },
     "Banking & Finance": {
         "en": "Banking & Finance",
         "hi": "Banking aur Finance",
-        "mr": "बँकिंग व आर्थिक",
+        "mr": "बँकिंग व वित्त",
     },
     "Other": {
         "en": "Other",
-        "hi": "Other (Any)",
+        "hi": "Anya",
         "mr": "इतर",
     },
 }
