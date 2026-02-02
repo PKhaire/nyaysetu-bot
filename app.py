@@ -14,6 +14,7 @@ from flask import Flask, request, jsonify, send_file
 from config import ENV, WHATSAPP_VERIFY_TOKEN, BOOKING_PRICE, RAZORPAY_WEBHOOK_SECRET
 from location_service import detect_district_and_state
 from models import User, Booking
+from utils.i18n import t
 from db import engine, SessionLocal, init_db
 from sqlalchemy import inspect, text
 init_db()
@@ -707,41 +708,6 @@ def has_completed_consultation(db, wa_id):
     )
 
     return now > booking_end
-
-def t(user, key, **kwargs):
-    """
-    Translation helper with language normalization and safe fallback
-    """
-
-    # Normalize user.language → translation key
-    lang_map = {
-        "English": "en",
-        "Hinglish": "hi",
-        "Hindi": "hi",
-    
-        # ✅ Marathi variants
-        "Marathi": "mr",
-        "मराठी": "mr",
-    
-        # normalized keys
-        "en": "en",
-        "hi": "hi",
-        "mr": "mr",
-    }
-
-    lang = lang_map.get(user.language, "en")
-
-    translations = TRANSLATIONS.get(lang, {})
-
-    if key not in translations:
-        logger.warning("⚠️ Missing translation: %s.%s", lang, key)
-
-    text = translations.get(
-        key,
-        TRANSLATIONS["en"].get(key, key)
-    )
-
-    return text.format(**kwargs) if kwargs else text
 
 def safe_header(text: str) -> str:
     # WhatsApp list headers do NOT allow markdown
