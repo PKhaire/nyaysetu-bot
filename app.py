@@ -1175,7 +1175,7 @@ def webhook():
         
             send_text(
                 wa_id,
-                "Please type the *district* where the concerned court is located (for example: Pune, Mumbai)."
+                t(user, "ask_district_text")            
             )
         
             return jsonify({"status": "ok"}), 200
@@ -1188,7 +1188,7 @@ def webhook():
             if not text_body:
                 send_text(
                     wa_id,
-                    "Please type the *district* where the concerned court is located (for example: Pune, Mumbai)."
+                    t(user, "ask_district_text")            
                 )
                 return jsonify({"status": "ok"}), 200
         
@@ -1220,8 +1220,7 @@ def webhook():
             if confidence == "MULTIPLE":
                 send_text(
                     wa_id,
-                    "We found multiple matching districts.\n"
-                    "Please type the *full district name*."
+                    t(user, "district_multiple_matches")
                 )
                 return jsonify({"status": "ok"}), 200
         
@@ -1230,8 +1229,7 @@ def webhook():
             # -------------------------------
             send_text(
                 wa_id,
-                "❓ I couldn’t identify that district.\n"
-                "Please type your *district name* (for example: Pune, Mumbai)."
+                t(user, "district_not_identified")
             )
             return jsonify({"status": "ok"}), 200
 
@@ -1260,7 +1258,7 @@ def webhook():
                 save_state(db, user, ASK_DISTRICT)
                 send_text(
                     wa_id,
-                    "No problem 🙂\nPlease type your *district* again."
+                    t(user, "district_retry")
                 )
                 return jsonify({"status": "ok"}), 200        
         
