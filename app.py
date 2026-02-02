@@ -14,7 +14,6 @@ from flask import Flask, request, jsonify, send_file
 from config import ENV, WHATSAPP_VERIFY_TOKEN, BOOKING_PRICE, RAZORPAY_WEBHOOK_SECRET
 from location_service import detect_district_and_state
 from models import User, Booking
-from utils.i18n import t
 from db import engine, SessionLocal, init_db
 from sqlalchemy import inspect, text
 init_db()
@@ -223,9 +222,8 @@ CATEGORY_SUBCATEGORIES = {
 # ===============================
 # INIT
 # ===============================
-
-
-from utils import format_date_readable
+from utils.date_utils import format_date_readable
+from utils.i18n import t
 from services.whatsapp_service import (
     send_text, send_buttons,
     send_typing_on, send_typing_off,
