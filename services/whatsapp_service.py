@@ -133,6 +133,7 @@ def send_list_picker(
 def send_payment_success_message(booking):
     """
     Sends language-aware, audit-safe payment success message.
+    TEMP LOG ADDED to detect duplicate / ISO-date sends.
     """
 
     db = SessionLocal()
@@ -150,10 +151,20 @@ def send_payment_success_message(booking):
             )
             return
 
+        formatted_date = format_date_readable(booking.date)
+
+        # 🔴 TEMP DEBUG LOG (REMOVE AFTER FIX)
+        logger.error(
+            "TEMP_DEBUG | send_payment_success_message | booking_id=%s | raw_date=%s | formatted_date=%s",
+            booking.id,
+            booking.date,
+            formatted_date,
+        )
+
         message = t(
             user,
             "payment_success",
-            date=format_date_readable(booking.date),
+            date=formatted_date,
             slot=SLOT_MAP.get(booking.slot_code, "N/A"),
             amount=BOOKING_PRICE,
         )
@@ -162,6 +173,7 @@ def send_payment_success_message(booking):
 
     finally:
         db.close()
+
 
 
 # =================================================
