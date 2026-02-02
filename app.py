@@ -902,9 +902,15 @@ def webhook():
                 message = (text_body or "").strip().lower()
             
                 if message == "receipt":
-                    send_payment_receipt_again(db, wa_id)
+                   #send_payment_receipt_again(db, wa_id) when manual reciept required
+
+                    send_text(
+                        wa_id,
+                        "📄 Receipt will be available soon. Please contact support if needed."
+                    )
                     return jsonify({"status": "ok"}), 200
-            
+
+               
                 reply = ai_reply(message, user, context="post_payment")
                 send_text(
                     wa_id,
@@ -1780,11 +1786,12 @@ def payment_webhook():
         # -------------------------------------------------
         # 12. BACKGROUND HEAVY TASKS (EMAIL + PDF)
         # -------------------------------------------------
-        Thread(
-            target=post_payment_background_tasks,
-            args=(booking.id,),
-            daemon=True
-        ).start()
+        # 🔕 V1: Background tasks disabled (PDF will be enabled in V2)
+        # Thread(
+        #     target=post_payment_background_tasks,
+        #     args=(booking.id,),
+        #     daemon=True
+        # ).start()
         
         logger.info("✅ PAYMENT CONFIRMED & BOOKING UPDATED")
         
