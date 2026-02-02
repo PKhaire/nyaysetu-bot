@@ -44,7 +44,22 @@ TRANSLATIONS = {
             "The district \"{district}\" could not be identified in {state}.\n"
             "Please select a valid district from the list below."
         ),
-
+        
+        "ask_district_text": (
+            "Please type the *district* where the concerned court is located "
+            "(for example: Pune, Mumbai)."
+        ),
+        "district_not_identified": (
+            "❓ I couldn’t identify that district.\n"
+            "Please type your *district name* (for example: Pune, Mumbai)."
+        ),
+        "district_multiple_matches": (
+            "We found multiple matching districts.\n"
+            "Please type the *full district name*."
+        ),
+        "district_retry": (
+            "No problem 🙂\nPlease type your *district* again."
+        ),
 
         # ---------- CATEGORY ----------
         "select_category": "Select Legal Category",
@@ -166,6 +181,21 @@ TRANSLATIONS = {
         "district_invalid": (
             "\"{district}\" zila {state} mein pehchana nahi ja saka.\n"
             "Kripya neeche di gayi list se sahi zila select karein."
+        ),
+        "ask_district_text": (
+            "Kripya us *zile* ka naam likhein jahan sambandhit court sthit hai "
+            "(jaise: Pune, Mumbai)."
+        ),
+        "district_not_identified": (
+            "❓ Yeh zila pehchana nahi ja saka.\n"
+            "Kripya apne *zile* ka naam likhein (jaise: Pune, Mumbai)."
+        ),
+        "district_multiple_matches": (
+            "Humein kai milte-julte zilon ke naam mile hain.\n"
+            "Kripya *poora zila naam* likhein."
+        ),
+        "district_retry": (
+            "Koi baat nahi 🙂\nKripya apna *zila* dobara likhein."
         ),
 
         # ---------- CATEGORY ----------
@@ -290,7 +320,22 @@ TRANSLATIONS = {
             "\"{district}\" हा जिल्हा {state} मध्ये आढळला नाही.\n"
             "कृपया खालील यादीतून वैध जिल्हा निवडा."
         ),
-        
+          "ask_district_text": (
+            "कृपया संबंधित न्यायालय ज्या *जिल्ह्यात* आहे तो जिल्हा लिहा "
+            "(उदा.: Pune, Mumbai)."
+        ),
+        "district_not_identified": (
+            "❓ हा जिल्हा ओळखता आला नाही.\n"
+            "कृपया आपला *जिल्हा* लिहा (उदा.: Pune, Mumbai)."
+        ),
+         "district_multiple_matches": (
+            "एकाहून अधिक जुळणारे जिल्हे सापडले आहेत.\n"
+            "कृपया *पूर्ण जिल्ह्याचे नाव* लिहा."
+        ),
+           "district_retry": (
+            "काही हरकत नाही 🙂\nकृपया आपला *जिल्हा* पुन्हा लिहा."
+        ),
+  
         # ---------- CATEGORY ----------
         "select_category": "कायदेशीर श्रेणी निवडा",
         "choose_category": "कृपया आपल्या कायदेशीर विषयाशी सर्वाधिक संबंधित असलेली श्रेणी निवडा.",
