@@ -131,7 +131,7 @@ def validate_slot(date_str, slot_code):
 # --------------------
 # Booking creation
 # --------------------
-def create_booking_temp(db, user, name, state, district, category, date, slot_code):
+def create_booking_temp(db, user, name, state, district, category, subcategory, date, slot_code):
     # ===============================
     # SAFETY CHECK
     # ===============================
@@ -154,10 +154,11 @@ def create_booking_temp(db, user, name, state, district, category, date, slot_co
         name=name,
         phone=user.whatsapp_id,
     
-        state_name=state,          # ✅ FIX
+        state_name=state,         
         district_name=district,
     
         category=category,
+        subcategory=subcategory,
         date=datetime.strptime(date, "%Y-%m-%d").date(),
         slot_code=slot_code,
         slot_readable=SLOT_MAP[slot_code],
