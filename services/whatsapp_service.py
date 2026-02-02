@@ -8,7 +8,7 @@ from db import SessionLocal
 from models import Booking, User
 from utils import format_date_readable
 from services.booking_service import SLOT_MAP
-from app import t  # translation helper
+from utils.i18n import t
 
 logger = logging.getLogger("services.whatsapp_service")
 
