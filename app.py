@@ -1175,7 +1175,7 @@ def webhook():
         
             send_text(
                 wa_id,
-                "Please type your *district* (for example: Pune, Mumbai)."
+                "Please type the *district* where the concerned court is located (for example: Pune, Mumbai)."
             )
         
             return jsonify({"status": "ok"}), 200
@@ -1188,7 +1188,7 @@ def webhook():
             if not text_body:
                 send_text(
                     wa_id,
-                    "Please type your *district* (for example: Pune, Mumbai)."
+                    "Please type the *district* where the concerned court is located (for example: Pune, Mumbai)."
                 )
                 return jsonify({"status": "ok"}), 200
         
