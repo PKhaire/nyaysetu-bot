@@ -112,26 +112,31 @@ TRANSLATIONS = {
             "Please wait."
         ),
         "payment_success": (
-            "Payment completed successfully.\n"
-            "Your consultation has been confirmed."
+            "✅ Payment Successful\n\n"
+            "Your legal consultation has been confirmed.\n\n"
+            "📅 Date: {date}\n"
+            "⏰ Time: {slot}\n"
+            "💰 Fee Paid: ₹{amount}\n\n"
+            "You will be contacted by the legal expert before the scheduled session.\n\n"
+            "Thank you for choosing NyaySetu."
         ),
+
         "session_start": (
             "Payment received successfully.\n\n"
             "You may now submit your legal queries here.\n"
             "Our legal expert will contact you on the scheduled date and time."
         ),
-        "payment_link_text": "Your payment link is active:",
+        "payment_link_text": "Please use the secure link below to complete your payment:",
 
         "appointment_summary": (
-            "Appointment Details:\n"
+            "📄 Appointment Summary\n\n"
             "Name: {name}\n"
-            "State: {state}\n"
-            "District: {district}\n"
-            "Category: {category}\n"
+            "Service Category: {category}\n"
+            "Location: {district}, {state}\n"
             "Date: {date}\n"
-            "Time Slot: {slot}\n"
-            "Fees: ₹{amount} (one-time session)\n\n"
-            "Please proceed to complete the payment."
+            "Time: {slot}\n"
+            "Consultation Fee: ₹{amount} (one-time)\n\n"
+            "To confirm your appointment, please complete the payment below."
         ),
         "receipt_help": "If you have not received the receipt, please type RECEIPT.",
         
@@ -249,26 +254,31 @@ TRANSLATIONS = {
             "Kripya thoda intezaar karein."
         ),
         "payment_success": (
-            "Payment safalta se poori ho gayi hai.\n"
-            "Aapki consultation confirm ho chuki hai."
+            "✅ Payment Successful\n\n"
+            "Aapki legal consultation confirm ho chuki hai.\n\n"
+            "📅 Tareekh: {date}\n"
+            "⏰ Time: {slot}\n"
+            "💰 Fee Paid: ₹{amount}\n\n"
+            "Nirdharit session se pehle legal expert aapse sampark karenge.\n\n"
+            "NyaySetu chunne ke liye dhanyavaad."
         ),
+
         "session_start": (
             "Payment safalta se prapt ho gaya hai.\n\n"
             "Ab aap apne legal prashn yahan darj kar sakte hain.\n"
             "Hamare legal expert nirdharit tareekh aur samay par aapse sampark karenge."
         ),
-        "payment_link_text": "Aapka payment link active hai:",
+        "payment_link_text": "Kripya payment poori karne ke liye neeche diya gaya surakshit link use karein:",
 
         "appointment_summary": (
-            "Appointment Details:\n"
+            "📄 Appointment Summary\n\n"
             "Naam: {name}\n"
-            "Rajya: {state}\n"
-            "Zila: {district}\n"
-            "Category: {category}\n"
+            "Service Category: {category}\n"
+            "Location: {district}, {state}\n"
             "Tareekh: {date}\n"
-            "Time Slot: {slot}\n"
-            "Fees: ₹{amount} (one-time session)\n\n"
-            "Kripya payment poori karne ke liye aage badhein."
+            "Time: {slot}\n"
+            "Consultation Fee: ₹{amount} (one-time)\n\n"
+            "Appointment confirm karne ke liye kripya payment poori karein."
         ),
         "receipt_help": "Agar aapko receipt prapt nahi hui hai, to kripya RECEIPT type karein.",
         
@@ -387,27 +397,33 @@ TRANSLATIONS = {
             "कृपया थोडा वेळ थांबा."
         ),
         "payment_success": (
-            "पेमेंट यशस्वीरीत्या पूर्ण झाले आहे.\n"
-            "आपली सल्लामसलत निश्चित झाली आहे."
+            "✅ पेमेंट यशस्वी\n\n"
+            "आपली कायदेशीर सल्लामसलत निश्चित झाली आहे.\n\n"
+            "📅 तारीख: {date}\n"
+            "⏰ वेळ: {slot}\n"
+            "💰 भरलेली रक्कम: ₹{amount}\n\n"
+            "निश्चित केलेल्या सत्रापूर्वी कायदेशीर तज्ञ आपल्याशी संपर्क करतील.\n\n"
+            "NyaySetu निवडल्याबद्दल धन्यवाद."
         ),
+
         "session_start": (
             "पेमेंट यशस्वीरीत्या प्राप्त झाले आहे.\n\n"
             "आता आपण आपले कायदेशीर प्रश्न येथे नोंदवू शकता.\n"
             "आमचे कायदेशीर तज्ञ निश्चित केलेल्या तारीख आणि वेळेला आपल्याशी संपर्क साधतील."
         ),
-        "payment_link_text": "आपला पेमेंट लिंक सक्रिय आहे:",
+        "payment_link_text": "कृपया पेमेंट पूर्ण करण्यासाठी खाली दिलेला सुरक्षित लिंक वापरा:",
 
         "appointment_summary": (
-            "अपॉइंटमेंट तपशील:\n"
+            "📄 अपॉइंटमेंट सारांश\n\n"
             "नाव: {name}\n"
-            "राज्य: {state}\n"
-            "जिल्हा: {district}\n"
-            "श्रेणी: {category}\n"
+            "सेवा श्रेणी: {category}\n"
+            "ठिकाण: {district}, {state}\n"
             "तारीख: {date}\n"
-            "वेळेचा स्लॉट: {slot}\n"
-            "शुल्क: ₹{amount} (एकदाच होणारी सत्र शुल्क)\n\n"
-            "कृपया पेमेंट पूर्ण करण्यासाठी पुढे जा."
+            "वेळ: {slot}\n"
+            "सल्लामसलत शुल्क: ₹{amount} (एकदाच)\n\n"
+            "अपॉइंटमेंट निश्चित करण्यासाठी कृपया पेमेंट पूर्ण करा."
         ),
+
         "receipt_help": "आपल्याला पावती प्राप्त झाली नसेल तर कृपया RECEIPT टाइप करा.",
         
         # ---------- COMMON ----------
