@@ -590,14 +590,14 @@ def post_payment_background_tasks(booking_id):
                 booking.id
             )
 
-        # 🔹 2. Admin email (keep existing behaviour)
-        try:
-            send_new_booking_email(booking)
-        except Exception:
-            logger.exception(
-                "⚠️ Admin email failed | booking_id=%s",
-                booking.id
-            )
+        # 🔹 2. Admin email (keep existing behaviour for future used)
+        #try:
+        #    send_new_booking_email(booking)
+        #except Exception:
+        #    logger.exception(
+        #       "⚠️ Admin email failed | booking_id=%s",
+        #        booking.id
+        #    )
 
         # 🔹 3. Receipt PDF + WhatsApp
         try:
