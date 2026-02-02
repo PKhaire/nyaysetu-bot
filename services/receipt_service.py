@@ -3,10 +3,9 @@
 import os
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
-
 from db import SessionLocal
 from models import Booking
-
+from utils.date_utils import format_date_readable 
 RECEIPT_DIR = "receipts"
 
 
@@ -39,7 +38,7 @@ def generate_pdf_receipt(booking):
             f"Name: {booking.name}",
             f"Phone: {booking.phone}",
             f"Category: {booking.category}",
-            f"Date: {booking.date}",
+            f"Date: {format_date_readable(booking.date)}",
             f"Time: {booking.slot_readable}",
             f"Amount Paid: ₹{booking.amount}",
             f"Payment ID: {booking.razorpay_payment_id}",
