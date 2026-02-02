@@ -134,87 +134,88 @@ BOOKING_KEYWORDS = {
 }
 
 CATEGORY_SUBCATEGORIES = {
+
     "Family": [
-        "Divorce",
+        "Divorce and Separation",
         "Maintenance and Alimony",
-        "Domestic Violence",
-        "Child Custody",
-        "Dowry Harassment",
-        "Other Family Matter",
-        "Not Sure Need Guidance",
+        "Domestic Violence Case",
+        "Child Custody or Visitation",
+        "Dowry Harassment Case",
+        "Other Family Law Matter",
+        "Not Sure – Need Legal Guidance",
     ],
 
     "Criminal": [
-        "Police Case or FIR",
-        "Bail Matter",
-        "Cyber Crime",
-        "Theft or Assault",
-        "False FIR",
-        "Police Harassment",
-        "Not Sure Need Guidance",
+        "Police Case or FIR Matter",
+        "Bail Application",
+        "Cyber Crime Complaint",
+        "Theft, Assault, or Physical Harm",
+        "False or Malicious FIR",
+        "Police Harassment or Misuse of Power",
+        "Not Sure – Need Legal Guidance",
     ],
 
     "Accident": [
-        "Road Accident",
-        "Motor Accident Claim",
-        "Injury Compensation",
+        "Road Traffic Accident",
+        "Motor Accident Claim (MACT)",
+        "Personal Injury Compensation",
         "Death Due to Accident",
         "Hit and Run Accident",
-        "Not Sure Need Guidance",
+        "Not Sure – Need Legal Guidance",
     ],
 
     "Property": [
         "Property or Land Dispute",
-        "Illegal Possession",
-        "Builder Delay or Fraud",
-        "Sale Deed or Agreement Issue",
-        "Partition or Inheritance",
-        "Injunction Case",
-        "Not Sure Need Guidance",
+        "Illegal Possession or Encroachment",
+        "Builder Delay, Fraud, or Misrepresentation",
+        "Sale Deed or Agreement Dispute",
+        "Partition or Inheritance Dispute",
+        "Injunction or Stay Matter",
+        "Not Sure – Need Legal Guidance",
     ],
 
     "Business": [
-        "Cheque Bounce Case",
-        "Money Recovery",
-        "Contract Dispute",
-        "Partnership Dispute",
-        "Business Fraud",
-        "Not Sure Need Guidance",
+        "Cheque Bounce (Section 138)",
+        "Money Recovery or Outstanding Dues",
+        "Contractual Dispute",
+        "Partnership or Shareholder Dispute",
+        "Business Fraud or Cheating",
+        "Not Sure – Need Legal Guidance",
     ],
 
     "Job": [
         "Wrongful Termination",
-        "Salary Not Paid",
+        "Unpaid Salary or Dues",
         "Workplace Harassment",
-        "Employment Issue",
-        "PF or Gratuity Issue",
-        "Not Sure Need Guidance",
+        "Employment or Service Dispute",
+        "PF, Gratuity, or Retirement Benefits",
+        "Not Sure – Need Legal Guidance",
     ],
 
     "Consumer": [
         "Consumer Complaint",
-        "Refund Issue",
-        "Online Fraud",
-        "Service Deficiency",
-        "Warranty Issue",
-        "Not Sure Need Guidance",
+        "Refund or Cancellation Issue",
+        "Online Fraud or Scam",
+        "Deficiency in Service",
+        "Warranty or Product Defect",
+        "Not Sure – Need Legal Guidance",
     ],
 
     "Banking & Finance": [
         "Loan Recovery Harassment",
-        "Fraudulent Transaction",
-        "Credit Card Problem",
-        "Bank Account Freeze",
-        "Insurance Claim Issue",
-        "Not Sure Need Guidance",
+        "Fraudulent or Unauthorized Transaction",
+        "Credit Card or Loan Dispute",
+        "Bank Account Freeze or Lien",
+        "Insurance Claim Dispute",
+        "Not Sure – Need Legal Guidance",
     ],
 
     "Other": [
         "General Legal Query",
         "Legal Notice Drafting",
-        "Agreement Drafting",
-        "Document Verification",
-        "Not Sure Need Guidance",
+        "Agreement or Contract Drafting",
+        "Document Review or Verification",
+        "Not Sure – Need Legal Guidance",
     ],
 }
 
@@ -373,7 +374,7 @@ def normalize_name(raw: str):
         return None
 
     # Allow only letters, spaces and dot
-    if not re.fullmatch(r"[A-Za-z.\s]+", name):
+    if not re.fullmatch(r"[A-Za-z.\s'-]+", name):
         return None
 
     # Reject business names
@@ -399,11 +400,7 @@ def send_category_list(wa_id, user):
     rows = [
         {
             "id": f"cat_{category.lower().replace(' ', '_').replace('&', 'and')}",
-            # ✅ Use loop variable, NOT user.category
-            "title": get_category_label(
-                category.lower().replace(' ', '_').replace('&', 'and'),
-                user
-            ),
+            "title": get_category_label(category, user),
         }
         for category in CATEGORY_SUBCATEGORIES.keys()
     ]
@@ -1571,7 +1568,7 @@ def webhook():
                     category=get_category_label(user.category, user),
                     date=readable_date,
                     slot=slot_text,
-                    amount=499,
+                    amount=BOOKING_PRICE,
                 )
             )
             
