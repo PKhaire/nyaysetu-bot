@@ -138,6 +138,20 @@ Payment     : CONFIRMED
 #     pass
 # ============================================================
 
+def send_new_booking_email(booking) -> None:
+    """
+    FUTURE USE:
+    Admin-level booking notification email.
+
+    Currently disabled by design.
+    This stub exists to prevent ImportError during app startup.
+    """
+    logger.info(
+        "ℹ️ send_new_booking_email skipped (disabled) | booking_id=%s",
+        getattr(booking, "id", "N/A"),
+    )
+    return
+
 
 # ============================================================
 # FUTURE USE: Advocate booking assignment email
