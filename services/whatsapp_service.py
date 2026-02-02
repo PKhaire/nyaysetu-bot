@@ -6,8 +6,8 @@ import httpx
 from config import WHATSAPP_TOKEN, WHATSAPP_API_URL, BOOKING_PRICE
 from db import SessionLocal
 from models import Booking, User
-from utils import format_date_readable
 from services.booking_service import SLOT_MAP
+from utils.date_utils import format_date_readable
 from utils.i18n import t
 
 logger = logging.getLogger("services.whatsapp_service")
