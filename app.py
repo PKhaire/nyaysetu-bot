@@ -1527,6 +1527,7 @@ def webhook():
                 state=user.state_name,
                 district=user.district_name,
                 category=user.category,
+                subcategory=user.subcategory, 
                 date=user.temp_date,
                 slot_code=slot_code,
             )
