@@ -151,3 +151,14 @@ Payment     : CONFIRMED
 # def send_advocate_booking_email(advocate, booking):
 #     pass
 # ============================================================
+def send_advocate_booking_email(advocate, booking) -> None:
+    """
+    FUTURE USE:
+    Advocate-specific booking assignment email.
+    Currently disabled by design.
+    """
+    logger.info(
+        "ℹ️ send_advocate_booking_email skipped (disabled) | booking_id=%s",
+        getattr(booking, "id", "N/A"),
+    )
+    return
