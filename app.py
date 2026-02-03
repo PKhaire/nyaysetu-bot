@@ -134,88 +134,89 @@ BOOKING_KEYWORDS = {
 }
 
 CATEGORY_SUBCATEGORIES = {
-
     "Family": [
-        "Divorce and Separation",
-        "Maintenance and Alimony",
-        "Domestic Violence Case",
-        "Child Custody or Visitation",
-        "Dowry Harassment Case",
-        "Other Family Law Matter",
-        "Not Sure – Need Legal Guidance",
+        "Divorce",
+        "Separation",
+        "Maintenance",
+        "Alimony",
+        "Domestic Violence",
+        "Child Custody",
+        "Dowry Case",
+        "Other Family Issue",
+        "Not Sure",
     ],
 
     "Criminal": [
-        "Police Case or FIR Matter",
-        "Bail Application",
-        "Cyber Crime Complaint",
-        "Theft, Assault, or Physical Harm",
-        "False or Malicious FIR",
-        "Police Harassment or Misuse of Power",
-        "Not Sure – Need Legal Guidance",
+        "Police Case",
+        "Bail Matter",
+        "Cyber Crime",
+        "Theft or Assault",
+        "False FIR",
+        "Police Harassment",
+        "Not Sure",
     ],
 
     "Accident": [
-        "Road Traffic Accident",
-        "Motor Accident Claim (MACT)",
-        "Personal Injury Compensation",
-        "Death Due to Accident",
-        "Hit and Run Accident",
-        "Not Sure – Need Legal Guidance",
+        "Road Accident",
+        "MACT Claim",
+        "Personal Injury",
+        "Accidental Death",
+        "Hit and Run",
+        "Not Sure",
     ],
 
     "Property": [
-        "Property or Land Dispute",
-        "Illegal Possession or Encroachment",
-        "Builder Delay, Fraud, or Misrepresentation",
-        "Sale Deed or Agreement Dispute",
-        "Partition or Inheritance Dispute",
-        "Injunction or Stay Matter",
-        "Not Sure – Need Legal Guidance",
+        "Property Dispute",
+        "Illegal Possession",
+        "Builder Issue",
+        "Sale Deed Issue",
+        "Partition Dispute",
+        "Injunction Matter",
+        "Not Sure",
     ],
 
     "Business": [
-        "Cheque Bounce (Section 138)",
-        "Money Recovery or Outstanding Dues",
-        "Contractual Dispute",
-        "Partnership or Shareholder Dispute",
-        "Business Fraud or Cheating",
-        "Not Sure – Need Legal Guidance",
+        "Cheque Bounce",
+        "Money Recovery",
+        "Contract Dispute",
+        "Partner Dispute",
+        "Business Fraud",
+        "Not Sure",
     ],
 
     "Job": [
         "Wrongful Termination",
-        "Unpaid Salary or Dues",
+        "Unpaid Salary",
         "Workplace Harassment",
-        "Employment or Service Dispute",
-        "PF, Gratuity, or Retirement Benefits",
-        "Not Sure – Need Legal Guidance",
+        "Service Dispute",
+        "PF or Gratuity Issue",
+        "Not Sure",
     ],
 
     "Consumer": [
         "Consumer Complaint",
-        "Refund or Cancellation Issue",
-        "Online Fraud or Scam",
-        "Deficiency in Service",
-        "Warranty or Product Defect",
-        "Not Sure – Need Legal Guidance",
+        "Refund Issue",
+        "Online Fraud",
+        "Service Deficiency",
+        "Product Defect",
+        "Not Sure",
     ],
 
-    "Banking & Finance": [
-        "Loan Recovery Harassment",
-        "Fraudulent or Unauthorized Transaction",
-        "Credit Card or Loan Dispute",
-        "Bank Account Freeze or Lien",
-        "Insurance Claim Dispute",
-        "Not Sure – Need Legal Guidance",
+    "Banking and Finance": [
+        "Loan Harassment",
+        "Unauthorized Transaction",
+        "Loan or Card Dispute",
+        "Account Freeze",
+        "Insurance Claim",
+        "Not Sure",
     ],
 
     "Other": [
         "General Legal Query",
-        "Legal Notice Drafting",
-        "Agreement or Contract Drafting",
-        "Document Review or Verification",
-        "Not Sure – Need Legal Guidance",
+        "Legal Notice",
+        "Draft Agreement",
+        "Document Review",
+        "Not Sure",
     ],
 }
 
@@ -595,18 +596,18 @@ def post_payment_background_tasks(booking_id):
         #        booking.id
         #    )
 
-        # 🔹 3. Receipt PDF + WhatsApp
-        try:
-            pdf_path = generate_pdf_receipt(booking)
-            send_payment_receipt_pdf(
-                booking.whatsapp_id,
-                pdf_path
-            )
-        except Exception:
-            logger.exception(
-                "⚠️ Receipt sending failed | booking_id=%s",
-                booking.id
-            )
+        # 🔹 3. Receipt PDF + WhatsApp (keep existing behaviour for future used)
+        #try:
+        #    pdf_path = generate_pdf_receipt(booking)
+        #   send_payment_receipt_pdf(
+        #        booking.whatsapp_id,
+        #        pdf_path
+        #    )
+        #except Exception:
+        #    logger.exception(
+        #        "⚠️ Receipt sending failed | booking_id=%s",
+        #        booking.id
+        #    )
 
     finally:
         db.close()
@@ -1750,12 +1751,11 @@ def payment_webhook():
         # -------------------------------------------------
         # 12. BACKGROUND HEAVY TASKS (EMAIL + PDF)
         # -------------------------------------------------
-        # 🔕 V1: Background tasks disabled (PDF will be enabled in V2)
-        # Thread(
-        #     target=post_payment_background_tasks,
-        #     args=(booking.id,),
-        #     daemon=True
-        # ).start()
+         Thread(
+             target=post_payment_background_tasks,
+             args=(booking.id,),
+             daemon=True
+         ).start()
         
         logger.info("✅ PAYMENT CONFIRMED & BOOKING UPDATED")
         
