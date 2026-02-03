@@ -1,7 +1,7 @@
 CATEGORY_LABELS = {
     "Family": {
         "en": "Family",
-        "hi": "Parivaarik",
+        "hi": "Parivaar",
         "mr": "कौटुंबिक",
     },
     "Criminal": {
@@ -25,7 +25,7 @@ CATEGORY_LABELS = {
         "mr": "व्यवसाय",
     },
     "Job": {
-        "en": "Employment",
+        "en": "Job",
         "hi": "Naukri",
         "mr": "नोकरी",
     },
@@ -34,8 +34,8 @@ CATEGORY_LABELS = {
         "hi": "Upbhokta",
         "mr": "ग्राहक",
     },
-    "Banking & Finance": {
-        "en": "Banking & Finance",
+    "Banking and Finance": {
+        "en": "Banking and Finance",
         "hi": "Banking aur Finance",
         "mr": "बँकिंग व वित्त",
     },
