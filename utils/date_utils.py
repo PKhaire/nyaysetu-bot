@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 import uuid
 
 def generate_case_id():
