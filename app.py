@@ -233,7 +233,7 @@ from services.whatsapp_service import (
     send_payment_receipt_pdf
 )
 from services.receipt_service import generate_pdf_receipt
-from services.openai_service import ai_reply
+from services.ai_router import ai_reply_router
 from services.booking_service import (
     generate_dates_calendar,
     generate_slots_calendar,
@@ -876,7 +876,7 @@ def webhook():
                     return jsonify({"status": "ok"}), 200
 
                
-                reply = ai_reply(message, user, context="post_payment")
+                reply = ai_reply_router(message, user, context="post_payment")
                 send_text(
                     wa_id,
                     "🤖 *Consultation Preparation Assistant*\n\n" + reply
@@ -1087,7 +1087,7 @@ def webhook():
                 send_text(wa_id, t(user, "ai_cooldown"))
                 return jsonify({"status": "ok"}), 200
 
-            reply = ai_reply(text_body, user)
+            reply = ai_reply_router(text_body, user)
             send_typing_off(wa_id)
 
             user.free_ai_count += 1
