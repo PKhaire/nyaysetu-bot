@@ -14,7 +14,7 @@ TRANSLATIONS = {
         "restart": "Your session has been reset.\nPlease type \"Hi\" to start again.",
 
         # ---------- LEGAL GUIDANCE ----------
-        "ask_ai_or_book": "Please select how you would like to proceed:",
+        "ask_ai_or_book": "How would you like to proceed?",
         "ask_ai": "Ask a Legal Question",
         "ask_ai_prompt": "Please enter your legal query:",
         "ai_cooldown": "Please wait for a moment before sending another message.",
@@ -46,19 +46,19 @@ TRANSLATIONS = {
         ),
         
         "ask_district_text": (
-            "Please type the *district* where the concerned court is located "
-            "(for example: Pune, Mumbai)."
+            "Please type the district where the concerned court is located "
+            "(for example: Pune, Lucknow)."
         ),
         "district_not_identified": (
             "❓ I couldn’t identify that district.\n"
-            "Please type your *district name* (for example: Pune, Mumbai)."
+            "Please type your district name (for example: Pune, Lucknow)."
         ),
         "district_multiple_matches": (
             "We found multiple matching districts.\n"
-            "Please type the *full district name*."
+            "Please type the full district name."
         ),
         "district_retry": (
-            "No problem 🙂\nPlease type your *district* again."
+            "No problem 🙂\nPlease type your district again."
         ),
 
         # ---------- CATEGORY ----------
@@ -157,7 +157,7 @@ TRANSLATIONS = {
         "restart": "Aapka session reset ho gaya hai.\nKripya \"Hi\" type karke dobara shuru karein.",
 
         # ---------- LEGAL GUIDANCE ----------
-        "ask_ai_or_book": "Kripya batayein aap kaise aage badhna chahte hain:",
+        "ask_ai_or_book": "Aap kaise aage badhna chahenge?",
         "ask_ai": "Apna Legal Sawal Poochhein",
         "ask_ai_prompt": "Kripya apna legal prashn darj karein:",
         "ai_cooldown": "Kripya agla message bhejne se pehle thoda intezaar karein.",
@@ -188,19 +188,19 @@ TRANSLATIONS = {
             "Kripya neeche di gayi list se sahi zila select karein."
         ),
         "ask_district_text": (
-            "Kripya us *zile* ka naam likhein jahan sambandhit court sthit hai "
-            "(jaise: Pune, Mumbai)."
+            "Kripya us zile ka naam likhein jahan sambandhit court sthit hai "
+            "(jaise: Pune, Lucknow)."
         ),
         "district_not_identified": (
             "❓ Yeh zila pehchana nahi ja saka.\n"
-            "Kripya apne *zile* ka naam likhein (jaise: Pune, Mumbai)."
+            "Kripya apne zile ka naam likhein (jaise: Pune, Lucknow)."
         ),
         "district_multiple_matches": (
             "Humein kai milte-julte zilon ke naam mile hain.\n"
-            "Kripya *poora zila naam* likhein."
+            "Kripya poora zila naam likhein."
         ),
         "district_retry": (
-            "Koi baat nahi 🙂\nKripya apna *zila* dobara likhein."
+            "Koi baat nahi 🙂\nKripya apna zila dobara likhein."
         ),
 
         # ---------- CATEGORY ----------
@@ -300,7 +300,7 @@ TRANSLATIONS = {
         "restart": "आपले सत्र रीसेट करण्यात आले आहे.\nकृपया \"Hi\" टाइप करून पुन्हा सुरू करा.",
         
         # ---------- LEGAL GUIDANCE ----------
-        "ask_ai_or_book": "कृपया पुढे कसे जायचे आहे ते निवडा:",
+        "ask_ai_or_book": "आपण पुढे कसे जायचे आहे?",
         "ask_ai": "कायदेशीर प्रश्न विचाराा",
         "ask_ai_prompt": "कृपया आपला कायदेशीर प्रश्न नोंदवा:",
         "ai_cooldown": "कृपया पुढील संदेश पाठवण्यापूर्वी थोडा वेळ थांबा.",
@@ -331,19 +331,19 @@ TRANSLATIONS = {
             "कृपया खालील यादीतून वैध जिल्हा निवडा."
         ),
           "ask_district_text": (
-            "कृपया संबंधित न्यायालय ज्या *जिल्ह्यात* आहे तो जिल्हा लिहा "
-            "(उदा.: Pune, Mumbai)."
+            "कृपया संबंधित न्यायालय ज्या जिल्ह्यात आहे तो जिल्हा लिहा "
+            "(उदा.: Pune, Lucknow)."
         ),
         "district_not_identified": (
             "❓ हा जिल्हा ओळखता आला नाही.\n"
-            "कृपया आपला *जिल्हा* लिहा (उदा.: Pune, Mumbai)."
+            "कृपया आपला जिल्हा लिहा (उदा.: Pune, Lucknow)."
         ),
          "district_multiple_matches": (
             "एकाहून अधिक जुळणारे जिल्हे सापडले आहेत.\n"
-            "कृपया *पूर्ण जिल्ह्याचे नाव* लिहा."
+            "कृपया पूर्ण जिल्ह्याचे नाव लिहा."
         ),
            "district_retry": (
-            "काही हरकत नाही 🙂\nकृपया आपला *जिल्हा* पुन्हा लिहा."
+            "काही हरकत नाही 🙂\nकृपया आपला जिल्हा पुन्हा लिहा."
         ),
   
         # ---------- CATEGORY ----------
