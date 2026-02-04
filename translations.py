@@ -15,7 +15,7 @@ TRANSLATIONS = {
 
         # ---------- LEGAL GUIDANCE ----------
         "ask_ai_or_book": "Please select how you would like to proceed:",
-        "ask_ai": "Get Legal Guidance",
+        "ask_ai": "Ask a Legal Question",
         "ask_ai_prompt": "Please enter your legal query:",
         "ai_cooldown": "Please wait for a moment before sending another message.",
         "book_consult": "Book Consultation",
@@ -129,7 +129,7 @@ TRANSLATIONS = {
         "payment_link_text": "Please use the secure link below to complete your payment:",
 
         "appointment_summary": (
-            "📄 Appointment Summary\n\n"
+            "📋 Appointment Summary\n\n"
             "Name: {name}\n"
             "Service Category: {category}\n"
             "Location: {district}, {state}\n"
@@ -158,7 +158,7 @@ TRANSLATIONS = {
 
         # ---------- LEGAL GUIDANCE ----------
         "ask_ai_or_book": "Kripya batayein aap kaise aage badhna chahte hain:",
-        "ask_ai": "Legal Guidance Prapt Karein",
+        "ask_ai": "Apna Legal Sawal Poochhein",
         "ask_ai_prompt": "Kripya apna legal prashn darj karein:",
         "ai_cooldown": "Kripya agla message bhejne se pehle thoda intezaar karein.",
         "book_consult": "Consultation Book Karein",
@@ -271,7 +271,7 @@ TRANSLATIONS = {
         "payment_link_text": "Kripya payment poori karne ke liye neeche diya gaya surakshit link use karein:",
 
         "appointment_summary": (
-            "📄 Appointment Summary\n\n"
+            "📋 Appointment Summary\n\n"
             "Naam: {name}\n"
             "Service Category: {category}\n"
             "Location: {district}, {state}\n"
@@ -301,7 +301,7 @@ TRANSLATIONS = {
         
         # ---------- LEGAL GUIDANCE ----------
         "ask_ai_or_book": "कृपया पुढे कसे जायचे आहे ते निवडा:",
-        "ask_ai": "कायदेशीर मार्गदर्शन मिळवा",
+        "ask_ai": "कायदेशीर प्रश्न विचाराा",
         "ask_ai_prompt": "कृपया आपला कायदेशीर प्रश्न नोंदवा:",
         "ai_cooldown": "कृपया पुढील संदेश पाठवण्यापूर्वी थोडा वेळ थांबा.",
         "book_consult": "सल्लामसलत बुक करा",
@@ -414,7 +414,7 @@ TRANSLATIONS = {
         "payment_link_text": "कृपया पेमेंट पूर्ण करण्यासाठी खाली दिलेला सुरक्षित लिंक वापरा:",
 
         "appointment_summary": (
-            "📄 अपॉइंटमेंट सारांश\n\n"
+            "📋 अपॉइंटमेंट सारांश\n\n"
             "नाव: {name}\n"
             "सेवा श्रेणी: {category}\n"
             "ठिकाण: {district}, {state}\n"
