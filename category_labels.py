@@ -34,7 +34,7 @@ CATEGORY_LABELS = {
         "hi": "Upbhokta",
         "mr": "ग्राहक",
     },
-    "Banking and Finance": {
+    "Banking": {
         "en": "Banking and Finance",
         "hi": "Banking aur Finance",
         "mr": "बँकिंग व वित्त",
