@@ -474,7 +474,7 @@ def send_subcategory_list(wa_id, user, category):
     # ===============================
     send_list_picker(
         wa_id,
-        header=f"{category_key} – {t(user, 'select_subcategory')}",
+        header=t(user, "select_subcategory"),
         body=t(user, "choose_subcategory"),
         section_title=t(user, "select_subcategory"),
         rows=rows,
@@ -1001,16 +1001,16 @@ def webhook():
                 db.commit()
         
                 # ✅ Marathi (Greetings)
-                if user.language == "mr":
+                #if user.language == "mr":
                 
-                    if not getattr(user, "marathi_greeted", False):
-                        send_text(
-                            wa_id,
-                            "🙏 जय महाराष्ट्र! 🇮🇳\nआपण NyaySetu मध्ये स्वागत आहे ⚖️"
-                        )
-                        user.marathi_greeted = True
+                #    if not getattr(user, "marathi_greeted", False):
+                #        send_text(
+                #            wa_id,
+                #           "🙏 जय महाराष्ट्र! 🇮🇳\nआपण NyaySetu मध्ये स्वागत आहे ⚖️"
+                #        )
+                #        user.marathi_greeted = True
                 
-                    db.commit()
+                #    db.commit()
                         
                 save_state(db, user, ASK_AI_OR_BOOK)
         
