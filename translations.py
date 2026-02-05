@@ -50,7 +50,7 @@ TRANSLATIONS = {
             "(for example: Pune, Lucknow)."
         ),
         "district_not_identified": (
-            "❓ I couldn’t identify that district.\n"
+            "I couldn’t identify that district.\n"
             "Please type your district name (for example: Pune, Lucknow)."
         ),
         "district_multiple_matches": (
@@ -60,6 +60,12 @@ TRANSLATIONS = {
         "district_retry": (
             "No problem 🙂\nPlease type your district again."
         ),
+        
+        # ---------- LOCATION CONFIRMATION ----------
+        "location_found": "We found:",
+        "confirm_location": "Is this correct?",
+        "confirm_yes": "Yes",
+        "confirm_change": "Change",
 
         # ---------- CATEGORY ----------
         "select_category": "Select Legal Category",
@@ -192,7 +198,7 @@ TRANSLATIONS = {
             "(jaise: Pune, Lucknow)."
         ),
         "district_not_identified": (
-            "❓ Yeh zila pehchana nahi ja saka.\n"
+            "Yeh zila pehchana nahi ja saka.\n"
             "Kripya apne zile ka naam likhein (jaise: Pune, Lucknow)."
         ),
         "district_multiple_matches": (
@@ -202,6 +208,12 @@ TRANSLATIONS = {
         "district_retry": (
             "Koi baat nahi 🙂\nKripya apna zila dobara likhein."
         ),
+        
+        # ---------- LOCATION CONFIRMATION ----------
+        "location_found": "Humein yeh jagah mili hai:",
+        "confirm_location": "Kya yeh sahi hai?",
+        "confirm_yes": "Haan",
+        "confirm_change": "Badlein",
 
         # ---------- CATEGORY ----------
         "select_category": "Legal Category Select Karein",
@@ -301,7 +313,7 @@ TRANSLATIONS = {
         
         # ---------- LEGAL GUIDANCE ----------
         "ask_ai_or_book": "आपण पुढे कसे जायचे आहे?",
-        "ask_ai": "कायदेशीर प्रश्न विचाराा",
+        "ask_ai": "कायदेशीर प्रश्न विचारा",
         "ask_ai_prompt": "कृपया आपला कायदेशीर प्रश्न नोंदवा:",
         "ai_cooldown": "कृपया पुढील संदेश पाठवण्यापूर्वी थोडा वेळ थांबा.",
         "book_consult": "सल्लामसलत बुक करा",
@@ -335,7 +347,7 @@ TRANSLATIONS = {
             "(उदा.: Pune, Lucknow)."
         ),
         "district_not_identified": (
-            "❓ हा जिल्हा ओळखता आला नाही.\n"
+            "हा जिल्हा ओळखता आला नाही.\n"
             "कृपया आपला जिल्हा लिहा (उदा.: Pune, Lucknow)."
         ),
          "district_multiple_matches": (
@@ -345,6 +357,12 @@ TRANSLATIONS = {
            "district_retry": (
             "काही हरकत नाही 🙂\nकृपया आपला जिल्हा पुन्हा लिहा."
         ),
+        
+        # ---------- LOCATION CONFIRMATION ----------
+        "location_found": "आम्हाला खालील ठिकाण सापडले आहे:",
+        "confirm_location": "हे बरोबर आहे का?",
+        "confirm_yes": "होय",
+        "confirm_change": "बदला",
   
         # ---------- CATEGORY ----------
         "select_category": "कायदेशीर श्रेणी निवडा",
