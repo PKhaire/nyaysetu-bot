@@ -1172,14 +1172,21 @@ def webhook():
         
                 save_state(db, user, CONFIRM_LOCATION)
         
+                msg = (
+                    f"{t(user, 'location_found')}\n"
+                    f"*{district}, {state}*\n\n"
+                    f"{t(user, 'confirm_location')}"
+                )
+                
                 send_buttons(
                     wa_id,
-                    f"📍 We found:\n*{district}, {state}*\n\nIs this correct?",
+                    msg,
                     [
-                        {"id": "loc_yes", "title": "✅ Yes"},
-                        {"id": "loc_change", "title": "✏️ Change"},
+                        {"id": "loc_yes", "title": f"✅ {t(user, 'confirm_yes')}"},
+                        {"id": "loc_change", "title": f"✏️ {t(user, 'confirm_change')}"},
                     ],
                 )
+
                 return jsonify({"status": "ok"}), 200
         
             # -------------------------------
