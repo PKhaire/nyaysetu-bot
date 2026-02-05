@@ -202,7 +202,7 @@ CATEGORY_SUBCATEGORIES = {
         "Not Sure",
     ],
 
-    "Banking and Finance": [
+    "Banking": [
         "Loan Harassment",
         "Unauthorized Transaction",
         "Loan or Card Dispute",
