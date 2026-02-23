@@ -11,7 +11,14 @@ from threading import Thread
 from collections import defaultdict, deque
 from datetime import datetime, time as dt_time, timedelta
 from flask import Flask, request, jsonify, send_file
-from config import ENV, WHATSAPP_VERIFY_TOKEN, BOOKING_PRICE, RAZORPAY_WEBHOOK_SECRET
+from config import (
+    ENV,
+    WHATSAPP_VERIFY_TOKEN,
+    BOOKING_PRICE,
+    RAZORPAY_WEBHOOK_SECRET,
+    MAINTENANCE_MODE,
+    MAINTENANCE_ADMIN_BYPASS,
+)
 from location_service import detect_district_and_state
 from models import User, Booking, ProcessedMessage
 from db import engine, SessionLocal, init_db
@@ -750,6 +757,28 @@ def webhook():
         message = messages[0]
         wa_id = value["contacts"][0]["wa_id"]
         message_id = message.get("id")
+
+        # =================================================
+        # GLOBAL MAINTENANCE MODE (SAFE & EARLY EXIT)
+        # =================================================
+        if MAINTENANCE_MODE and message.get("type") in ("text", "interactive"):
+
+            if MAINTENANCE_ADMIN_BYPASS and wa_id == MAINTENANCE_ADMIN_BYPASS:
+                logger.info("🔓 Maintenance bypass for admin | wa_id=%s", wa_id)
+            else:
+                logger.warning("⚙️ Maintenance mode active | wa_id=%s", wa_id)
+
+                maintenance_message = (
+                    "⚙️ *NyaySetu is temporarily under maintenance.*\n\n"
+                    "We are upgrading our system to serve you better.\n"
+                    "Please try again after some time.\n\n"
+                    "आपल्या संयमाबद्दल धन्यवाद 🙏"
+                )
+
+                send_text(wa_id, maintenance_message)
+
+                return jsonify({"status": "maintenance"}), 200  
+    
     except Exception:
         return jsonify({"status": "ignored"}), 200
 
