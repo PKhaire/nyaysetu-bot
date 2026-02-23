@@ -164,10 +164,10 @@ TRANSLATIONS = {
 
         # ---------- LEGAL GUIDANCE ----------
         "ask_ai_or_book": "Aap kaise aage badhna chahenge?",
-        "ask_ai": "Apna Legal Sawal Poochhein",
+        "ask_ai": "Legal Sawal Poochhein",
         "ask_ai_prompt": "Kripya apna legal prashn darj karein",
         "ai_cooldown": "Kripya agla message bhejne se pehle thoda intezaar karein.",
-        "book_consult": "Consultation Book Karein",
+        "book_consult": "Book Consultation",
 
         "rate_limit_exceeded": (
             "Aap bahut tezi se messages bhej rahe hain.\n"
