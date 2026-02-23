@@ -149,4 +149,11 @@ class Advocate(Base):
     district = Column(String, nullable=False)
     active = Column(Boolean, default=True)
 
+class ProcessedMessage(Base):
+    __tablename__ = "processed_messages"
+
+    id = Column(Integer, primary_key=True)
+    message_id = Column(String, unique=True, index=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 
