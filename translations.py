@@ -6,7 +6,7 @@ TRANSLATIONS = {
     "en": {
         # ---------- GENERAL ----------
         "welcome": (
-            "🙏  Welcome to NyaySetu\n"
+            "🙏 Welcome to NyaySetu\n"
             "⚖️ The Bridge To Justice\n\n"
             "🆔 Case ID: {case_id}\n\n"
             "Please select your preferred language:"
@@ -16,7 +16,7 @@ TRANSLATIONS = {
         # ---------- LEGAL GUIDANCE ----------
         "ask_ai_or_book": "How would you like to proceed?",
         "ask_ai": "Ask a Legal Question",
-        "ask_ai_prompt": "Please enter your legal query:",
+        "ask_ai_prompt": "Please type your legal query",
         "ai_cooldown": "Please wait for a moment before sending another message.",
         "book_consult": "Book Consultation",
 
@@ -155,7 +155,7 @@ TRANSLATIONS = {
     # =====================================================
     "hi": {
         "welcome": (
-            "🙏  NyaySetu mein aapka swagat hai\n"
+            "🙏 NyaySetu mein aapka swagat hai\n"
             "⚖️ The Bridge To Justice\n\n"
             "🆔 Case ID: {case_id}\n\n"
             "Kripya apni pasand ki bhasha select karein:"
@@ -165,7 +165,7 @@ TRANSLATIONS = {
         # ---------- LEGAL GUIDANCE ----------
         "ask_ai_or_book": "Aap kaise aage badhna chahenge?",
         "ask_ai": "Apna Legal Sawal Poochhein",
-        "ask_ai_prompt": "Kripya apna legal prashn darj karein:",
+        "ask_ai_prompt": "Kripya apna legal prashn darj karein",
         "ai_cooldown": "Kripya agla message bhejne se pehle thoda intezaar karein.",
         "book_consult": "Consultation Book Karein",
 
@@ -304,7 +304,7 @@ TRANSLATIONS = {
     # =====================================================
     "mr": {
         "welcome": (
-            "🙏  NyaySetu मध्ये आपले स्वागत आहे\n"
+            "🙏 NyaySetu मध्ये आपले स्वागत आहे\n"
             "⚖️ The Bridge To Justice\n\n"
             "🆔 केस आयडी: {case_id}\n\n"
             "कृपया आपली पसंतीची भाषा निवडा:"
@@ -314,7 +314,7 @@ TRANSLATIONS = {
         # ---------- LEGAL GUIDANCE ----------
         "ask_ai_or_book": "आपण पुढे कसे जायचे आहे?",
         "ask_ai": "कायदेशीर प्रश्न विचारा",
-        "ask_ai_prompt": "कृपया आपला कायदेशीर प्रश्न नोंदवा:",
+        "ask_ai_prompt": "कृपया आपला कायदेशीर प्रश्न लिहा",
         "ai_cooldown": "कृपया पुढील संदेश पाठवण्यापूर्वी थोडा वेळ थांबा.",
         "book_consult": "सल्लामसलत बुक करा",
 
