@@ -7,6 +7,7 @@ ENV = os.getenv("ENV", "production")
 # MAINTENANCE MODE
 # ===============================
 MAINTENANCE_MODE = os.getenv("MAINTENANCE_MODE", "false").lower() == "true"
+MAINTENANCE_ADMIN_BYPASS = os.getenv("MAINTENANCE_ADMIN_BYPASS", "")
 
 BOOKING_NOTIFICATION_EMAILS = [
     "outsidethecourt@gmail.com",
