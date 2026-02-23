@@ -13,7 +13,7 @@ from datetime import datetime, time as dt_time, timedelta
 from flask import Flask, request, jsonify, send_file
 from config import ENV, WHATSAPP_VERIFY_TOKEN, BOOKING_PRICE, RAZORPAY_WEBHOOK_SECRET
 from location_service import detect_district_and_state
-from models import User, Booking
+from models import User, Booking, ProcessedMessage
 from db import engine, SessionLocal, init_db
 from sqlalchemy import inspect, text
 init_db()
@@ -345,7 +345,18 @@ def is_global_rate_limited():
 
     global_request_times.append(now)
     return False
+    
+def is_duplicate_message(db, message_id):
+    if not message_id:
+        return False
 
+    existing = db.query(ProcessedMessage).filter_by(message_id=message_id).first()
+    if existing:
+        return True
+
+    db.add(ProcessedMessage(message_id=message_id))
+    db.commit()
+    return False
 # =================================================
 # Name
 # =================================================
@@ -738,12 +749,17 @@ def webhook():
 
         message = messages[0]
         wa_id = value["contacts"][0]["wa_id"]
+        message_id = message.get("id")
     except Exception:
         return jsonify({"status": "ignored"}), 200
 
     db = get_db()
     try:
         user = get_or_create_user(db, wa_id)
+        
+        # 🔒 HARD DUPLICATE PROTECTION (Webhook retry safe)
+        if is_duplicate_message(db, message_id):
+            return jsonify({"status": "duplicate_ignored"}), 200       
 
         text_body = ""
         interactive_id = None
@@ -959,12 +975,19 @@ def webhook():
             user.welcome_sent,
             lower_text,
         )
+        # ===============================
+        # WELCOME (ONE-TIME ONLY — RACE SAFE)
+        # ===============================
         if (
             user.flow_state == NORMAL
             and not user.welcome_sent
             and lower_text in WELCOME_KEYWORDS
         ):
-            save_state(db, user, ASK_LANGUAGE)
+        
+            # 🔒 LOCK FIRST (atomic update before sending)
+            user.welcome_sent = True
+            user.flow_state = ASK_LANGUAGE
+            db.commit()
         
             send_buttons(
                 wa_id,
@@ -975,10 +998,6 @@ def webhook():
                     {"id": "lang_mr", "title": "मराठी"},
                 ],
             )
-        
-            # 🔒 mark onboarding permanently done
-            user.welcome_sent = True
-            db.commit()
         
             return jsonify({"status": "ok"}), 200
             
