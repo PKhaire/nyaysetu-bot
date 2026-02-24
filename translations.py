@@ -14,7 +14,7 @@ TRANSLATIONS = {
         "restart": "Your session has been reset.\nPlease type \"Hi\" to start again.",
 
         # ---------- LEGAL GUIDANCE ----------
-        "ask_ai_or_book": "How would you like to proceed?",
+        "_or_book": "How would you like to proceed?",
         "ask_ai": "Ask a Legal Question",
         "ask_ai_prompt": "Please type your legal query",
         "ai_cooldown": "Please wait for a moment before sending another message.",
@@ -164,7 +164,7 @@ TRANSLATIONS = {
 
         # ---------- LEGAL GUIDANCE ----------
         "ask_ai_or_book": "Aap kaise aage badhna chahenge?",
-        "ask_ai": "Legal Sawal Poochhein",
+        "ask_ai": "Legal Sawal Poochho",
         "ask_ai_prompt": "Kripya apna legal prashn darj karein",
         "ai_cooldown": "Kripya agla message bhejne se pehle thoda intezaar karein.",
         "book_consult": "Book Consultation",
