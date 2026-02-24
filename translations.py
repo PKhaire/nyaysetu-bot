@@ -14,7 +14,7 @@ TRANSLATIONS = {
         "restart": "Your session has been reset.\nPlease type \"Hi\" to start again.",
 
         # ---------- LEGAL GUIDANCE ----------
-        "_or_book": "How would you like to proceed?",
+        "ask_ai_or_book": "How would you like to proceed?",
         "ask_ai": "Ask a Legal Question",
         "ask_ai_prompt": "Please type your legal query",
         "ai_cooldown": "Please wait for a moment before sending another message.",
@@ -216,12 +216,12 @@ TRANSLATIONS = {
         "confirm_change": "Badlein",
 
         # ---------- CATEGORY ----------
-        "select_category": "Legal Category Select Karein",
+        "select_category": "Legal Category",
         "choose_category": "Kripya apne legal matter se sabse zyada milti-julti category select karein.",
         "category_retry": "Kripya neeche di gayi list se ek legal category select karein.",
         
         # ---------- SUB-CATEGORY ----------
-        "select_subcategory": "Sub-Category Select Karein",
+        "select_subcategory": "Sub-Category",
         "choose_subcategory": "Kripya apne legal matter ko sabse achchhe se describe karne wala option select karein.",
         "subcategory_retry": "Kripya neeche di gayi list se ek sub-category select karein.",
         "subcategory_mismatch": (
