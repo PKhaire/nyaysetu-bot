@@ -128,6 +128,12 @@ user_message_times = defaultdict(lambda: deque())
 user_last_ai_call = {}
 global_request_times = deque()
 
+# ===============================
+# MAINTENANCE DEDUPE (IN-MEMORY)
+# ===============================
+maintenance_last_sent = {}
+MAINTENANCE_DEDUPE_SECONDS = 3
+
 WELCOME_KEYWORDS = {"hi","hii","hie", "hello", "hey", "start"}
 
 RESTART_KEYWORDS = {
@@ -747,6 +753,7 @@ def verify():
 @app.route("/webhook", methods=["POST"])
 def webhook():
     payload = request.get_json(force=True, silent=True) or {}
+    wa_id = "UNKNOWN"
 
     try:
         value = payload["entry"][0]["changes"][0]["value"]
@@ -762,22 +769,32 @@ def webhook():
         # GLOBAL MAINTENANCE MODE (SAFE & EARLY EXIT)
         # =================================================
         if MAINTENANCE_MODE and message.get("type") in ("text", "interactive"):
-
+        
+            # Admin bypass
             if MAINTENANCE_ADMIN_BYPASS and wa_id == MAINTENANCE_ADMIN_BYPASS:
                 logger.info("🔓 Maintenance bypass for admin | wa_id=%s", wa_id)
             else:
+                now_ts = time_module.time()
+                last_sent = maintenance_last_sent.get(wa_id, 0)
+        
+                if now_ts - last_sent < MAINTENANCE_DEDUPE_SECONDS:
+                    return jsonify({"status": "maintenance_duplicate"}), 200
+        
+                maintenance_last_sent[wa_id] = now_ts
+        
                 logger.warning("⚙️ Maintenance mode active | wa_id=%s", wa_id)
-
+        
                 maintenance_message = (
                     "⚙️ *NyaySetu is temporarily under maintenance.*\n\n"
                     "We are upgrading our system to serve you better.\n"
                     "Please try again after some time.\n\n"
-                    "आपल्या संयमाबद्दल धन्यवाद 🙏"
+                    "🚨 For urgent legal assistance, please call us directly at +91 70-200-300-80.\n\n"
+                    "Thank you for your patience."
                 )
-
+                
                 send_text(wa_id, maintenance_message)
-
-                return jsonify({"status": "maintenance"}), 200  
+        
+                return jsonify({"status": "maintenance"}), 200
     
     except Exception:
         return jsonify({"status": "ignored"}), 200
@@ -1662,9 +1679,16 @@ def webhook():
         # -------------------------------
         return jsonify({"status": "ignored"}), 200
     except Exception as e:
-        safe_wa_id = wa_id[:5] + "*****" + wa_id[-2:]
+        try:
+            if wa_id and wa_id != "UNKNOWN":
+                safe_wa_id = wa_id[:5] + "*****" + wa_id[-2:]
+            else:
+                safe_wa_id = "UNKNOWN"
+        except Exception:
+            safe_wa_id = "UNKNOWN"
+    
         logger.exception("Webhook error for wa_id=%s", safe_wa_id)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "internal_error"}), 500
     finally:
         db.close()
 
