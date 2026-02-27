@@ -281,6 +281,32 @@ BTN_DETAILS_EDIT = "DETAILS_EDIT"
 # ===============================
 # HELPERS
 # ===============================
+# =================================================
+# WHATSAPP SIGNATURE VERIFICATION (PRODUCTION)
+# =================================================
+def verify_whatsapp_signature():
+    signature = request.headers.get("X-Hub-Signature-256")
+    if not signature:
+        return False
+
+    try:
+        sha_name, signature_hash = signature.split("=")
+        if sha_name != "sha256":
+            return False
+    except Exception:
+        return False
+
+    secret = os.getenv("WHATSAPP_APP_SECRET")
+    if not secret:
+        logger.critical("WHATSAPP_APP_SECRET missing in production")
+        return False
+    secret = secret.encode()
+
+    payload = request.data
+    expected_hash = hmac.new(secret, payload, hashlib.sha256).hexdigest()
+
+    return hmac.compare_digest(expected_hash, signature_hash)
+
 def get_db():
     return SessionLocal()
 
@@ -752,6 +778,14 @@ def verify():
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
+    # -------------------------------------------------
+    # SECURITY: Verify WhatsApp Signature (Production Only)
+    # -------------------------------------------------
+    if ENV == "production":
+        if not verify_whatsapp_signature():
+            logger.warning("❌ Invalid WhatsApp signature")
+            return "Forbidden", 403
+            
     payload = request.get_json(force=True, silent=True) or {}
     wa_id = "UNKNOWN"
 
@@ -1144,13 +1178,12 @@ def webhook():
                 )
                 return jsonify({"status": "ok"}), 200
 
-            send_typing_on(wa_id)
-            # -------------------------------
             # AI rate limiting
-            # -------------------------------
             if is_ai_rate_limited(wa_id):
                 send_text(wa_id, t(user, "ai_cooldown"))
                 return jsonify({"status": "ok"}), 200
+            
+            send_typing_on(wa_id)
 
             reply = ai_reply_router(text_body, user)
             send_typing_off(wa_id)
@@ -1634,7 +1667,6 @@ def webhook():
                     t(user, "payment_link_error")
                 )
             
-            save_state(db, user, WAITING_PAYMENT)
             return jsonify({"status": "ok"}), 200            
 
         # ===============================
@@ -1678,7 +1710,13 @@ def webhook():
         # Default fallback (safe)
         # -------------------------------
         return jsonify({"status": "ignored"}), 200
-    except Exception as e:
+    except Exception:
+        # 🔒 CRITICAL: Rollback any partial DB transaction
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    
         try:
             if wa_id and wa_id != "UNKNOWN":
                 safe_wa_id = wa_id[:5] + "*****" + wa_id[-2:]
@@ -1687,8 +1725,10 @@ def webhook():
         except Exception:
             safe_wa_id = "UNKNOWN"
     
-        logger.exception("Webhook error for wa_id=%s", safe_wa_id)
-        return jsonify({"error": "internal_error"}), 500
+        logger.exception("🔥 Webhook fatal error | wa_id=%s", safe_wa_id)
+    
+        # Always return 200 to prevent Meta retry storm
+        return jsonify({"status": "safe_fail"}), 200
     finally:
         db.close()
 
@@ -1841,7 +1881,7 @@ def payment_webhook():
         return "OK", 200
     except Exception:
         logger.exception("🔥 Razorpay webhook processing error")
-        return "Internal error", 500
+        return "OK", 200
     
     finally:
         db.close()    
