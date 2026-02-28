@@ -46,7 +46,7 @@ TRANSLATIONS = {
             "📄 Type RECEIPT for your receipt.\n"
             "💬 You may ask questions to prepare."
         ),
-        "consultation_assistant_header": "Consultation Preparation Assistant",  
+        "consultation_assistant_header": "Consultation Assistant",  
         "soft_booking_prompt": (
             "⚖️ Need personalised advice from a lawyer?"
         ),
@@ -75,65 +75,7 @@ TRANSLATIONS = {
             "What would you like to do today?"
         ),
         
-        "payment_link_error": (
-            "⚠️ Unable to generate payment link.\n"
-            "Please try again."
-        ),
-        # ---------- SYSTEM / STATUS ----------
-        
-        "ai_temporarily_unavailable": (
-            "⚠️ AI service filhaal uplabdh nahi hai.\n\n"
-            "Verified lawyer se personalised salah ke liye,\n"
-            "kripya paid consultation book karein."
-        ),
-        
-        "post_payment_ai_start": (
-            "🤖 Ab aap apna legal prashn pooch sakte hain."
-        ),
-        
-        "consultation_expired": (
-            "⏳ Aapki consultation window samapt ho gayi hai.\n\n"
-            "Agar abhi bhi madad chahiye, kripya nayi consultation book karein."
-        ),
-        
-        "consultation_already_confirmed": (
-            "✅ Aapki consultation confirm ho chuki hai.\n\n"
-            "📄 Receipt ke liye RECEIPT type karein.\n"
-            "💬 Aap prashn pooch sakte hain."
-        ),
-        "consultation_assistant_header": "Consultation Taiyari Assistant",        
-        "soft_booking_prompt": (
-            "⚖️ Personalised salah chahte hain?"
-        ),
-        
-        "ai_post_payment_cooldown": (
-            "⏳ Kripya agla prashn bhejne se pehle thoda intezaar karein."
-        ),
-        
-        "receipt_pending": (
-            "📄 Receipt jald uplabdh hogi.\n"
-            "Zarurat ho to support se sampark karein."
-        ),
-        
-        "name_invalid": (
-            "❌ Kripya ek valid personal naam darj karein.\n"
-            "Udaharan: Prashant Keshav Khaire"
-        ),
-        
-        "verify_details": "Kripya apni details verify karein:",
-        
-        "verified_button": "Verified",
-        "edit_details_button": "Edit Karein",
-        
-        "welcome_back": (
-            "👋 Swagat hai, {name}!\n\n"
-            "Aaj aap kya karna chahenge?"
-        ),
-        
-        "payment_link_error": (
-            "⚠️ Payment link generate nahi ho pa raha hai.\n"
-            "Kripya dobara koshish karein."
-        ),
+
         # ---------- USER DETAILS ----------
         "ask_name": "Please enter your full name.",
         "ask_name_retry": "Please enter your full name.",
@@ -242,8 +184,8 @@ TRANSLATIONS = {
             "Our legal expert will contact you on the scheduled date and time."
         ),
         "payment_link_text": "Please use the secure link below to complete your payment:",
-        "payment_link_error": "⚠️ Payment link generate nahi ho pa raha hai. Kripya dobara koshish karein.",
-        
+        "payment_link_error": "⚠️ Unable to generate payment link. Please try again.",
+    
         "appointment_summary": (
             "📋 Appointment Summary\n\n"
             "Name: {name}\n"
@@ -283,7 +225,57 @@ TRANSLATIONS = {
             "Aap bahut tezi se messages bhej rahe hain.\n"
             "Kripya thoda intezaar karke dobara koshish karein."
         ),
-
+        # ---------- SYSTEM / STATUS ----------
+        
+        "ai_temporarily_unavailable": (
+            "⚠️ AI service filhaal uplabdh nahi hai.\n\n"
+            "Verified lawyer se personalised salah ke liye,\n"
+            "kripya paid consultation book karein."
+        ),
+        
+        "post_payment_ai_start": (
+            "🤖 Ab aap apna legal prashn pooch sakte hain."
+        ),
+        
+        "consultation_expired": (
+            "⏳ Aapki consultation window samapt ho gayi hai.\n\n"
+            "Agar abhi bhi madad chahiye, kripya nayi consultation book karein."
+        ),
+        
+        "consultation_already_confirmed": (
+            "✅ Aapki consultation confirm ho chuki hai.\n\n"
+            "📄 Receipt ke liye RECEIPT type karein.\n"
+            "💬 Aap prashn pooch sakte hain."
+        ),
+        "consultation_assistant_header": "Consultation Taiyari Assistant",        
+        "soft_booking_prompt": (
+            "⚖️ Personalised salah chahte hain?"
+        ),
+        
+        "ai_post_payment_cooldown": (
+            "⏳ Kripya agla prashn bhejne se pehle thoda intezaar karein."
+        ),
+        
+        "receipt_pending": (
+            "📄 Receipt jald uplabdh hogi.\n"
+            "Zarurat ho to support se sampark karein."
+        ),
+        
+        "name_invalid": (
+            "❌ Kripya ek valid personal naam darj karein.\n"
+            "Udaharan: Prashant Keshav Khaire"
+        ),
+        
+        "verify_details": "Kripya apni details verify karein:",
+        
+        "verified_button": "Verified",
+        "edit_details_button": "Edit Karein",
+        
+        "welcome_back": (
+            "👋 Swagat hai, {name}!\n\n"
+            "Aaj aap kya karna chahenge?"
+        ),
+        
         # ---------- USER DETAILS ----------
         "ask_name": "Kripya apna poora naam darj karein.",
         "ask_name_retry": "Kripya apna poora naam darj karein.",
@@ -391,7 +383,8 @@ TRANSLATIONS = {
             "Hamare legal expert nirdharit tareekh aur samay par aapse sampark karenge."
         ),
         "payment_link_text": "Kripya payment poori karne ke liye neeche diya gaya surakshit link use karein:",
-        "payment_link_error": "⚠️ Unable to generate payment link. Please try again.",
+        "payment_link_error": "⚠️ Payment link generate nahi ho pa raha hai. Kripya dobara koshish karein.",
+
 
         "appointment_summary": (
             "📋 Appointment Summary\n\n"
@@ -485,10 +478,6 @@ TRANSLATIONS = {
             "आज आपण काय करू इच्छिता?"
         ),
         
-        "payment_link_error": (
-            "⚠️ पेमेंट लिंक तयार करता आली नाही.\n"
-            "कृपया पुन्हा प्रयत्न करा."
-        ),
         # ---------- USER DETAILS ----------
         "ask_name": "कृपया आपले पूर्ण नाव नोंदवा.",
         "ask_name_retry": "कृपया आपले पूर्ण नाव नोंदवा.",
