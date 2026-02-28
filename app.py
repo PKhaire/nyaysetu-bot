@@ -428,7 +428,7 @@ def normalize_name(raw: str):
         return None
 
     # Allow only letters, spaces and dot
-    if not re.fullmatch(r"[A-Za-z.\s'-]+", name):
+    if not re.fullmatch(r"[^\W\d_][\w\s.'-]*", name, re.UNICODE):
         return None
 
     # Reject business names
@@ -1199,15 +1199,15 @@ def webhook():
             # -------------------------------------------------
             if AI_DISABLED_UNTIL and datetime.utcnow() < AI_DISABLED_UNTIL:
             
-                # Disable AI mode so user exits AI loop
                 user.ai_enabled = False
+                save_state(db, user, ASK_AI_OR_BOOK)
                 db.commit()
             
                 send_buttons(
                     wa_id,
                     t(user, "ai_temporarily_unavailable"),
                     [
-                        {"id": "book_now", "title": t(user, "book_consult")}
+                        {"id": "opt_book", "title": t(user, "book_consult")}
                     ],
                 )
             
