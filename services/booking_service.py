@@ -294,3 +294,44 @@ def mark_booking_as_paid(payment_link_id, payment_id, payment_mode):
 
     finally:
         db.close()
+
+# =========================================================
+# AUTO EXPIRE OLD PENDING BOOKINGS
+# =========================================================
+
+def expire_old_pending_bookings():
+    """
+    Marks bookings as EXPIRED if:
+    - status = PENDING
+    - created more than 15 minutes ago
+    """
+
+    db = SessionLocal()
+    try:
+        from models import BookingStatus
+
+        expiry_time = datetime.utcnow() - timedelta(minutes=15)
+
+        expired_count = (
+            db.query(Booking)
+            .filter(
+                Booking.status == BookingStatus.PENDING,
+                Booking.created_at < expiry_time
+            )
+            .update(
+                {"status": BookingStatus.EXPIRED},
+                synchronize_session=False
+            )
+        )
+
+        if expired_count > 0:
+            logger.info("Auto-expired %s pending bookings", expired_count)
+
+        db.commit()
+
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to auto-expire bookings")
+
+    finally:
+        db.close()
