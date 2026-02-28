@@ -1193,23 +1193,20 @@ def webhook():
             # AI CIRCUIT BREAKER (DO NOT CALL AI IF DISABLED)
             # -------------------------------------------------
             if AI_DISABLED_UNTIL and datetime.utcnow() < AI_DISABLED_UNTIL:
-        
-                text_lower = text_body.strip().lower()
-        
-                # Allow user to move to booking
-                if text_lower in ["book", "book consultation"]:
-                    user.ai_enabled = False
-                    save_state(db, user, ASK_NAME)
-                    db.commit()
-                    send_text(wa_id, t(user, "ask_name"))
-                    return jsonify({"status": "ok"}), 200
-        
-                # Short clean fallback (no spam)
-                send_text(
+            
+                # Disable AI mode so user exits AI loop
+                user.ai_enabled = False
+                db.commit()
+            
+                send_buttons(
                     wa_id,
                     "⚠️ AI service is temporarily unavailable.\n\n"
-                    "Type *Book* to continue with a paid consultation."
+                    "You can continue with a paid consultation.",
+                    [
+                        {"id": "book_now", "title": "📅 Book Consultation"}
+                    ],
                 )
+            
                 return jsonify({"status": "ok"}), 200
         
             # -------------------------------------------------
