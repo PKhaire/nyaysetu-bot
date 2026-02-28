@@ -144,7 +144,9 @@ RESTART_KEYWORDS = {
 }
 
 BOOKING_KEYWORDS = {
-    "book consultation", "book consult", "consult", "lawyer"
+    "book",
+    "consult",
+    "lawyer",
 }
 
 CATEGORY_SUBCATEGORIES = {
@@ -923,13 +925,15 @@ def webhook():
             # -------------------------------
             # A) Consultation already OVER
             # -------------------------------
-            if paid_booking and now > booking_end:
+            if now > booking_end:            
                 logger.debug(
                     "POST_PAYMENT_EXPIRED | wa_id=%s | now=%s | booking_end=%s | resetting_state",
                     wa_id,
                     now,
                     booking_end,
-                )              
+                )
+            
+                # Reset session safely
                 set_flow_state(db, user, NORMAL)
                 user.ai_enabled = False
                 user.free_ai_count = 0
@@ -938,9 +942,17 @@ def webhook():
                 user.last_payment_link = None
                 db.commit()
             
-                # ⚠️ DO NOT auto-send welcome here
-                # Let "Hi" trigger welcome naturally
-                return jsonify({"status": "ignored"}), 200
+                # Inform user clearly
+                send_buttons(
+                    wa_id,
+                    "⏳ Your consultation window has ended.\n\n"
+                    "If you still need legal assistance, you may book a new consultation.",
+                    [
+                        {"id": "book_now", "title": "📅 Book Consultation"}
+                    ],
+                )
+            
+                return jsonify({"status": "ok"}), 200
                         
             # =================================================
             # 🔒 HARD GUARD: POST-PAYMENT SESSION (TIME-BOUND)
@@ -1164,9 +1176,9 @@ def webhook():
         # BOOKING KEYWORD (GLOBAL)
         # ===============================
         if (
-            (lower_text in BOOKING_KEYWORDS or interactive_id == "book_now")
-            and user.flow_state == NORMAL
-        ):     
+            any(keyword in lower_text for keyword in BOOKING_KEYWORDS)
+            or interactive_id == "book_now"
+        ) and user.flow_state == NORMAL:    
             # 🔁 Returning user → go to verification
             if user.welcome_sent and has_completed_consultation(db, wa_id):
                 send_verification_screen(db, user, wa_id)
@@ -1237,9 +1249,24 @@ def webhook():
             user.free_ai_count += 1
             db.commit()
         
+            # -------------------------------------------------
+            # SOFT BOOKING PROMPT (WITH BUTTON)
+            # -------------------------------------------------
             if user.free_ai_count == FREE_AI_SOFT_PROMPT_AT:
-                reply += "\n\n⚖️ Need personalised advice?\nType *Book*."
-        
+            
+                send_text(wa_id, reply)
+            
+                send_buttons(
+                    wa_id,
+                    "⚖️ Need personalised advice from a verified lawyer?",
+                    [
+                        {"id": "book_now", "title": "📅 Book Consultation"}
+                    ],
+                )
+            
+                return jsonify({"status": "ok"}), 200
+            
+            # Normal reply
             send_text(wa_id, reply)
             return jsonify({"status": "ok"}), 200
 
@@ -1730,6 +1757,7 @@ def webhook():
                     Booking.whatsapp_id == wa_id,
                     Booking.status == BookingStatus.PAID
                 )
+                .order_by(Booking.id.desc())
                 .first()
             )
         
@@ -1846,27 +1874,27 @@ def payment_webhook():
             logger.warning("⚠️ Invalid created_at in webhook")
             return "Invalid timestamp", 400
         
-            # -------------------------------------------------
-            # STRICT TIMESTAMP VALIDATION
-            # -------------------------------------------------
+        # -------------------------------------------------
+        # STRICT TIMESTAMP VALIDATION
+        # -------------------------------------------------
         
-            # Reject future timestamps beyond 5 minutes (clock skew protection)
-            if event_time > now + timedelta(minutes=5):
-                logger.warning(
-                    "⚠️ Invalid future webhook timestamp | event_time=%s | now=%s",
-                    event_time,
-                    now,
-                )
-                return "Invalid future timestamp", 400
+        # Reject future timestamps beyond 5 minutes
+        if event_time > now + timedelta(minutes=5):
+            logger.warning(
+                "⚠️ Invalid future webhook timestamp | event_time=%s | now=%s",
+                event_time,
+                now,
+            )
+            return "Invalid future timestamp", 400
         
-            # Reject old events beyond 10 minutes
-            if (now - event_time).total_seconds() > 600:
-                logger.warning(
-                    "⚠️ Expired webhook event | event_time=%s | now=%s",
-                    event_time,
-                    now,
-                )
-                return "Expired event", 400
+        # Reject old events beyond 10 minutes
+        if (now - event_time).total_seconds() > 600:
+            logger.warning(
+                "⚠️ Expired webhook event | event_time=%s | now=%s",
+                event_time,
+                now,
+            )
+            return "Expired event", 400
 
         # -------------------------------------------------
         # 5. Extract payment details
