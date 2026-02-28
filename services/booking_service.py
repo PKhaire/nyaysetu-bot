@@ -174,7 +174,7 @@ def create_booking_temp(db, user, name, state, district, category, subcategory, 
 
     # 🔐 CREATE RAZORPAY PAYMENT LINK
     payment_link = razorpay_client.payment_link.create({
-        "amount": BOOKING_PRICE * 100,  # paisa
+        "amount": int(BOOKING_PRICE * 100),  # paisa
         "currency": "INR",
         "accept_partial": False,
         "description": "NyaySetu Legal Consultation",
