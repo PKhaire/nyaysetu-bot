@@ -20,7 +20,7 @@ from config import (
     MAINTENANCE_ADMIN_BYPASS,
 )
 from location_service import detect_district_and_state
-from models import User, Booking, ProcessedMessage
+from models import User, Booking, ProcessedMessage, CategoryAnalytics, BookingStatus
 from db import engine, SessionLocal, init_db
 from sqlalchemy import inspect, text
 init_db()
@@ -253,7 +253,8 @@ from services.booking_service import (
     create_booking_temp,
     is_payment_already_processed,
     mark_booking_as_paid,
-    SLOT_MAP
+    SLOT_MAP,
+    expire_old_pending_bookings
 )
 
 # ===============================
@@ -571,7 +572,7 @@ def send_payment_receipt_again(db, wa_id):
         db.query(Booking)
         .filter(
             Booking.whatsapp_id == wa_id,
-            Booking.status == "PAID"
+            Booking.status == BookingStatus.PAID
         )
         .order_by(Booking.id.desc())
         .first()
@@ -583,26 +584,15 @@ def send_payment_receipt_again(db, wa_id):
 
     try:
         # ---------------------------------
-        # Generate PDF if required
+        # Always generate fresh PDF
         # ---------------------------------
-        if not booking.receipt_generated:
-            pdf_path = generate_pdf_receipt(booking)
-            booking.receipt_generated = True
-            booking.receipt_path = pdf_path
-        else:
-            pdf_path = getattr(booking, "receipt_path", None)
-
-        if not pdf_path:
-            raise RuntimeError("Receipt PDF path missing")
-
-        # ---------------------------------
-        # Send receipt
-        # ---------------------------------
+        pdf_path = generate_pdf_receipt(booking)
+        
         send_payment_receipt_pdf(
             booking.whatsapp_id,
             pdf_path
         )
-
+        
         booking.receipt_sent = True
         db.commit()
 
@@ -727,7 +717,7 @@ def has_completed_consultation(db, wa_id):
         db.query(Booking)
         .filter(
             Booking.whatsapp_id == wa_id,
-            Booking.status == "PAID"
+            Booking.status == BookingStatus.PAID
         )
         .order_by(Booking.id.desc())
         .first()
@@ -834,6 +824,10 @@ def webhook():
         return jsonify({"status": "ignored"}), 200
 
     db = get_db()
+    # =================================================
+    # AUTO EXPIRE OLD PENDING BOOKINGS (15 min timeout)
+    # =================================================
+    expire_old_pending_bookings(db)
     try:
         user = get_or_create_user(db, wa_id)
         
@@ -877,15 +871,18 @@ def webhook():
         # =================================================
         # POST-PAYMENT SESSION CONTROL (CRITICAL)
         # =================================================
-        paid_booking = (
-            db.query(Booking)
-            .filter(
-                Booking.whatsapp_id == wa_id,
-                Booking.status == "PAID"
+        paid_booking = None
+        
+        if user.flow_state in (WAITING_PAYMENT, PAYMENT_CONFIRMED):
+            paid_booking = (
+                db.query(Booking)
+                .filter(
+                    Booking.whatsapp_id == wa_id,
+                    Booking.status == BookingStatus.PAID
+                )
+                .order_by(Booking.id.desc())
+                .first()
             )
-            .order_by(Booking.id.desc())
-            .first()
-        )
         
         if paid_booking:
             logger.debug(
@@ -972,13 +969,33 @@ def webhook():
                     return jsonify({"status": "ok"}), 200
 
                
-                reply = ai_reply_router(message, user, context="post_payment")
+                # -------------------------------------------------
+                # AI RATE LIMITING (POST-PAYMENT PROTECTION)
+                # -------------------------------------------------
+                if is_ai_rate_limited(wa_id):
+                    send_text(
+                        wa_id,
+                        "⏳ Please wait a moment before asking another question."
+                    )
+                    return jsonify({"status": "ok"}), 200
+                
+                send_typing_on(wa_id)
+                
+                try:
+                    reply = ai_reply_router(
+                        message,
+                        user,
+                        context="post_payment"
+                    )
+                finally:
+                    send_typing_off(wa_id)
+                
                 send_text(
                     wa_id,
                     "🤖 *Consultation Preparation Assistant*\n\n" + reply
                 )
+                
                 return jsonify({"status": "ok"}), 200
-
             
         # -------------------------------
         # Global rate limiting
@@ -1420,7 +1437,6 @@ def webhook():
             db.commit()
         
             # Analytics
-            from models import CategoryAnalytics
             record = (
                 db.query(CategoryAnalytics)
                 .filter_by(category=parsed_category, subcategory=subcategory)
@@ -1683,7 +1699,7 @@ def webhook():
                 db.query(Booking)
                 .filter(
                     Booking.whatsapp_id == wa_id,
-                    Booking.status == "PAID"
+                    Booking.status == BookingStatus.PAID
                 )
                 .first()
             )
@@ -1753,32 +1769,72 @@ def payment_webhook():
             logger.critical("❌ Invalid RAZORPAY_MODE")
             return "Server misconfiguration", 500
 
+        # -------------------------------------------------
+        # 3. SECURITY GATE (STRICT SIGNATURE VALIDATION)
+        # -------------------------------------------------
+        secret_value = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
         signature = request.headers.get("X-Razorpay-Signature")
-
-        # -------------------------------------------------
-        # 3. SECURITY GATE
-        # -------------------------------------------------
-        if razorpay_mode == "live":
-            if not signature:
-                return "Signature missing", 400
-
-            secret = os.getenv("RAZORPAY_WEBHOOK_SECRET", "").encode()
-            expected_signature = hmac.new(
-                secret, payload, hashlib.sha256
-            ).hexdigest()
-
-            if not hmac.compare_digest(expected_signature, signature):
-                return "Invalid signature", 400
-        else:
-            user_agent = request.headers.get("User-Agent", "")
-            if "Razorpay-Webhook" not in user_agent:
-                return "Forbidden", 403
+        
+        if not secret_value:
+            logger.critical("❌ RAZORPAY_WEBHOOK_SECRET not configured")
+            return "Server misconfiguration", 500
+        
+        if not signature:
+            logger.warning("⚠️ Missing Razorpay signature header")
+            return "Signature missing", 400
+        
+        secret = secret_value.encode()
+        
+        expected_signature = hmac.new(
+            secret,
+            payload,
+            hashlib.sha256
+        ).hexdigest()
+        
+        if not hmac.compare_digest(expected_signature, signature):
+            logger.warning("❌ Invalid Razorpay signature")
+            return "Invalid signature", 400
 
         # -------------------------------------------------
         # 4. Accept ONLY final payment event
         # -------------------------------------------------
         if data.get("event") != "payment_link.paid":
             return "Ignored", 200
+            
+        # -------------------------------------------------
+        # 4B. REPLAY ATTACK PROTECTION (TIME WINDOW)
+        # -------------------------------------------------
+        event_created_at = data.get("created_at")
+        
+        if event_created_at:
+            try:
+                event_time = datetime.utcfromtimestamp(int(event_created_at))
+                now = datetime.utcnow()
+            except Exception:
+                logger.warning("⚠️ Invalid created_at in webhook")
+                return "Invalid timestamp", 400
+        
+            # -------------------------------------------------
+            # STRICT TIMESTAMP VALIDATION
+            # -------------------------------------------------
+        
+            # Reject future timestamps beyond 5 minutes (clock skew protection)
+            if event_time > now + timedelta(minutes=5):
+                logger.warning(
+                    "⚠️ Invalid future webhook timestamp | event_time=%s | now=%s",
+                    event_time,
+                    now,
+                )
+                return "Invalid future timestamp", 400
+        
+            # Reject old events beyond 10 minutes
+            if (now - event_time).total_seconds() > 600:
+                logger.warning(
+                    "⚠️ Expired webhook event | event_time=%s | now=%s",
+                    event_time,
+                    now,
+                )
+                return "Expired event", 400
 
         # -------------------------------------------------
         # 5. Extract payment details
@@ -1795,20 +1851,17 @@ def payment_webhook():
         paid_currency = payment.get("currency")
 
         # -------------------------------------------------
-        # 6. FINAL CONFIRMATION CHECK
+        # 6. FINAL CONFIRMATION CHECK (STRICT)
         # -------------------------------------------------
-        if razorpay_mode == "live":
-            confirmed = (
-                payment_status == "captured"
-                and payment_link_status == "paid"
+        if not (
+            payment_status == "captured"
+            and payment_link_status == "paid"
+        ):
+            logger.warning(
+                "⚠️ Payment not fully finalized | payment_status=%s | link_status=%s",
+                payment_status,
+                payment_link_status,
             )
-        else:
-            confirmed = (
-                payment_status == "captured"
-                or payment_link_status == "paid"
-            )
-
-        if not confirmed:
             return "Not finalized", 200
 
         # -------------------------------------------------
@@ -1832,11 +1885,27 @@ def payment_webhook():
         if existing:
             logger.info("🔁 Duplicate webhook ignored")
             return "OK", 200
-
+        # -------------------------------------------------
+        # REPLAY FINGERPRINT PROTECTION (SAFE POSITION)
+        # -------------------------------------------------
+        payload_hash = hashlib.sha256(payload).hexdigest()
+        
+        existing_fingerprint = (
+            db.query(ProcessedMessage)
+            .filter_by(message_id=payload_hash)
+            .first()
+        )
+        
+        if existing_fingerprint:
+            logger.warning("⚠️ Duplicate webhook payload detected")
+            return "Duplicate webhook", 200
+    
+        
         # -------------------------------------------------
         # 9. CONFIRM PAYMENT
         # -------------------------------------------------
         booking = mark_booking_as_paid(
+            db=db,
             payment_link_id=payment_link_id,
             payment_id=payment_id,
             payment_mode=razorpay_mode
@@ -1844,6 +1913,9 @@ def payment_webhook():
         
         if not booking:
             return "Ignored", 200
+
+        db.add(ProcessedMessage(message_id=payload_hash))
+        db.commit()
         
         # -------------------------------------------------
         # 10. CLOSE USER PAYMENT STATE
