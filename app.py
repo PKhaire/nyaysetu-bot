@@ -1806,13 +1806,16 @@ def payment_webhook():
         # -------------------------------------------------
         event_created_at = data.get("created_at")
         
-        if event_created_at:
-            try:
-                event_time = datetime.utcfromtimestamp(int(event_created_at))
-                now = datetime.utcnow()
-            except Exception:
-                logger.warning("⚠️ Invalid created_at in webhook")
-                return "Invalid timestamp", 400
+        if not event_created_at:
+            logger.warning("⚠️ Missing created_at in webhook")
+            return "Missing timestamp", 400
+        
+        try:
+            event_time = datetime.utcfromtimestamp(int(event_created_at))
+            now = datetime.utcnow()
+        except Exception:
+            logger.warning("⚠️ Invalid created_at in webhook")
+            return "Invalid timestamp", 400
         
             # -------------------------------------------------
             # STRICT TIMESTAMP VALIDATION
