@@ -9,6 +9,7 @@ import unicodedata
 
 from threading import Thread
 from collections import defaultdict, deque
+from services.openai_service import AI_DISABLED_UNTIL
 from datetime import datetime, time as dt_time, timedelta
 from flask import Flask, request, jsonify, send_file
 from config import (
@@ -1184,9 +1185,36 @@ def webhook():
         # FREE AI CHAT
         # ===============================
         if user.flow_state == NORMAL and user.ai_enabled:
+        
             if not text_body:
                 return jsonify({"status": "ignored"}), 200
-
+        
+            # -------------------------------------------------
+            # AI CIRCUIT BREAKER (DO NOT CALL AI IF DISABLED)
+            # -------------------------------------------------
+            if AI_DISABLED_UNTIL and datetime.utcnow() < AI_DISABLED_UNTIL:
+        
+                text_lower = text_body.strip().lower()
+        
+                # Allow user to move to booking
+                if text_lower in ["book", "book consultation"]:
+                    user.ai_enabled = False
+                    save_state(db, user, ASK_NAME)
+                    db.commit()
+                    send_text(wa_id, t(user, "ask_name"))
+                    return jsonify({"status": "ok"}), 200
+        
+                # Short clean fallback (no spam)
+                send_text(
+                    wa_id,
+                    "⚠️ AI service is temporarily unavailable.\n\n"
+                    "Type *Book* to continue with a paid consultation."
+                )
+                return jsonify({"status": "ok"}), 200
+        
+            # -------------------------------------------------
+            # FREE LIMIT CHECK
+            # -------------------------------------------------
             if user.free_ai_count >= FREE_AI_LIMIT:
                 send_buttons(
                     wa_id,
@@ -1194,23 +1222,27 @@ def webhook():
                     [{"id": "book_now", "title": t(user, "book_consult")}],
                 )
                 return jsonify({"status": "ok"}), 200
-
-            # AI rate limiting
+        
+            # -------------------------------------------------
+            # AI RATE LIMITING
+            # -------------------------------------------------
             if is_ai_rate_limited(wa_id):
                 send_text(wa_id, t(user, "ai_cooldown"))
                 return jsonify({"status": "ok"}), 200
-            
+        
             send_typing_on(wa_id)
-
-            reply = ai_reply_router(text_body, user)
-            send_typing_off(wa_id)
-
+        
+            try:
+                reply = ai_reply_router(text_body, user)
+            finally:
+                send_typing_off(wa_id)
+        
             user.free_ai_count += 1
             db.commit()
-
+        
             if user.free_ai_count == FREE_AI_SOFT_PROMPT_AT:
-                reply += "\n\n⚖️ Need personalised advice?\nType *Book Consultation*."
-
+                reply += "\n\n⚖️ Need personalised advice?\nType *Book*."
+        
             send_text(wa_id, reply)
             return jsonify({"status": "ok"}), 200
 
