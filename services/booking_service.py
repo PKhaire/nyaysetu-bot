@@ -299,7 +299,7 @@ def mark_booking_as_paid(payment_link_id, payment_id, payment_mode):
 # AUTO EXPIRE OLD PENDING BOOKINGS
 # =========================================================
 
-def expire_old_pending_bookings():
+def expire_old_pending_bookings(db):
     """
     Marks bookings as EXPIRED if:
     - status = PENDING
