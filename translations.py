@@ -46,7 +46,7 @@ TRANSLATIONS = {
             "📄 Type RECEIPT for your receipt.\n"
             "💬 You may ask questions to prepare."
         ),
-        
+        "consultation_assistant_header": "Consultation Preparation Assistant",  
         "soft_booking_prompt": (
             "⚖️ Need personalised advice from a lawyer?"
         ),
@@ -101,7 +101,7 @@ TRANSLATIONS = {
             "📄 Receipt ke liye RECEIPT type karein.\n"
             "💬 Aap prashn pooch sakte hain."
         ),
-        
+        "consultation_assistant_header": "Consultation Taiyari Assistant",        
         "soft_booking_prompt": (
             "⚖️ Personalised salah chahte hain?"
         ),
@@ -455,6 +455,7 @@ TRANSLATIONS = {
             "📄 पावतीसाठी RECEIPT टाइप करा.\n"
             "💬 आपण प्रश्न विचारू शकता."
         ),
+        "consultation_assistant_header": "सल्लामसलत तयारी सहाय्यक",
         
         "soft_booking_prompt": (
             "⚖️ वैयक्तिक कायदेशीर सल्ला हवा आहे का?"
