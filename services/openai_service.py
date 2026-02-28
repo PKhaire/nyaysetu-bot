@@ -1,15 +1,23 @@
 # services/openai_service.py
+
 import logging
 import httpx
 import time
 from typing import Dict, Tuple
+from datetime import datetime, timedelta
 from config import OPENAI_API_KEY
 
 
 logger = logging.getLogger("services.openai_service")
 
 # =================================================
-# ADMIN CONTROLS (SAFE TO EDIT WITHOUT LOGIC CHANGE)
+# GLOBAL AI CIRCUIT BREAKER
+# =================================================
+
+AI_DISABLED_UNTIL = None
+
+# =================================================
+# ADMIN CONTROLS
 # =================================================
 
 ADMIN_DISCLAIMERS = {
@@ -25,25 +33,19 @@ BOOKING_CTA = {
 }
 
 # =================================================
-# AI RESPONSE CACHE (PER-USER, SHORT-LIVED)
+# SHORT-LIVED PER-USER CACHE
 # =================================================
 
-# key: (wa_id, normalized_prompt)
-# value: (timestamp, reply)
 AI_RESPONSE_CACHE: Dict[Tuple[str, str], Tuple[float, str]] = {}
+AI_CACHE_TTL = 20  # seconds
 
-AI_CACHE_TTL = 20  # seconds (safe: 10–30)
 
 # =================================================
-# LANGUAGE BEHAVIOR CONTROLS
+# LANGUAGE CONTROLS
 # =================================================
 
 def _tone_instruction(user):
-    """
-    Controls FORMAL / FRIENDLY tone per language
-    """
     lang = getattr(user, "language", "en")
-
     if lang == "hi":
         return "Use a friendly, supportive Hinglish tone."
     if lang == "mr":
@@ -52,11 +54,7 @@ def _tone_instruction(user):
 
 
 def _length_instruction(user):
-    """
-    Controls response length per language
-    """
     lang = getattr(user, "language", "en")
-
     if lang == "hi":
         return "Keep the response medium length and conversational."
     if lang == "mr":
@@ -65,11 +63,7 @@ def _length_instruction(user):
 
 
 def _language_instruction(user):
-    """
-    Controls output language
-    """
     lang = getattr(user, "language", "en")
-
     if lang == "hi":
         return "Reply in simple Hinglish (Hindi + English mix)."
     if lang == "mr":
@@ -85,12 +79,15 @@ def _disclaimer_text(user):
 def _booking_cta(user):
     lang = getattr(user, "language", "en")
     return BOOKING_CTA.get(lang, BOOKING_CTA["en"])
-    
+
+
+# =================================================
+# CACHE HELPERS
+# =================================================
+
 def _normalize_prompt(prompt: str) -> str:
-    """
-    Normalize prompt to avoid cache misses due to spacing/case
-    """
     return " ".join(prompt.lower().strip().split())
+
 
 def _get_cached_reply(wa_id: str, prompt: str):
     key = (wa_id, _normalize_prompt(prompt))
@@ -101,17 +98,17 @@ def _get_cached_reply(wa_id: str, prompt: str):
 
     ts, reply = cached
     if time.time() - ts > AI_CACHE_TTL:
-        # expired
         AI_RESPONSE_CACHE.pop(key, None)
         return None
 
     return reply
 
+
 def _set_cached_reply(wa_id: str, prompt: str, reply: str):
     now = time.time()
     key = (wa_id, _normalize_prompt(prompt))
 
-    # Lazy cleanup (O(n), safe for small cache)
+    # Lazy cleanup
     expired = [
         k for k, (ts, _) in AI_RESPONSE_CACHE.items()
         if now - ts > AI_CACHE_TTL
@@ -121,32 +118,40 @@ def _set_cached_reply(wa_id: str, prompt: str, reply: str):
 
     AI_RESPONSE_CACHE[key] = (now, reply)
 
+
 # =================================================
-# MAIN AI FUNCTION (FLOW UNCHANGED)
+# MAIN AI FUNCTION (PRODUCTION HARDENED)
 # =================================================
 
 def ai_reply(prompt: str, user, context: str = "default"):
-    """
-    AI reply handler.
-    - Respects user language
-    - Safe before & after payment
-    - No re-booking CTA after payment
-    """
+
+    global AI_DISABLED_UNTIL
 
     if not prompt:
         return "Hi — tell me your legal question and I'll try to help."
 
-    # 🔒 Per-user short-term cache (protects OpenAI & UX)
+    # -------------------------------------------------
+    # CIRCUIT BREAKER CHECK
+    # -------------------------------------------------
+    if AI_DISABLED_UNTIL and datetime.utcnow() < AI_DISABLED_UNTIL:
+        return (
+            "⚠️ AI service is temporarily unavailable.\n\n"
+            "For personalised legal advice from a verified lawyer,\n"
+            "type *Book* to continue with a paid consultation."
+        )
+
     wa_id = getattr(user, "whatsapp_id", None)
-    
+
+    # -------------------------------------------------
+    # CACHE CHECK
+    # -------------------------------------------------
     cached = None
     if wa_id and context != "post_payment":
         cached = _get_cached_reply(wa_id, prompt)
         if cached:
             logger.debug("AI_CACHE_HIT | wa_id=%s", wa_id)
             return cached
-    
-    # 📊 OBSERVABILITY LOG (ADD HERE)
+
     logger.info(
         "AI_CALL | wa_id=%s | cached=%s | context=%s",
         wa_id,
@@ -154,12 +159,9 @@ def ai_reply(prompt: str, user, context: str = "default"):
         context,
     )
 
-           
-    # 🔒 Offline fallback (UNCHANGED)
     if not OPENAI_API_KEY:
         return f"I can help with that. (AI is offline) — you said: {prompt[:200]}"
 
-    # 🧠 SYSTEM PROMPT (SAFE & CONTROLLED)
     system_prompt = f"""
 You are NyaySetu, an Indian legal assistant.
 
@@ -191,68 +193,80 @@ Rules:
 
     try:
         with httpx.Client(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
-            r = client.post(url, headers=headers, json=data)
-        
-            # 🔁 Retry ONCE with fallback model if rate-limited
+
+            # First attempt (with network retry)
+            try:
+                r = client.post(url, headers=headers, json=data)
+            except httpx.RequestError:
+                logger.warning("Network error — retrying once")
+                r = client.post(url, headers=headers, json=data)
+
+            # Handle 429
             if r.status_code == 429:
-                # Paid users keep premium model, free users downgrade
+
+                # Hard quota exhaustion
+                if "insufficient_quota" in r.text:
+                    logger.error("🚨 OpenAI quota exhausted — activating breaker")
+                    AI_DISABLED_UNTIL = datetime.utcnow() + timedelta(minutes=30)
+
+                    return (
+                        "⚠️ AI service is temporarily unavailable.\n\n"
+                        "For personalised legal advice from a verified lawyer,\n"
+                        "type *Book* to continue with a paid consultation."
+                    )
+
+                # Temporary rate limit → retry fallback
                 fallback_model = "gpt-3.5-turbo"
                 if context == "post_payment":
                     fallback_model = "gpt-4o-mini"
-            
+
                 logger.warning(
-                    "OpenAI rate-limited (429). Retrying with %s | wa_id=%s | context=%s",
+                    "OpenAI rate-limited — retrying with %s | wa_id=%s",
                     fallback_model,
                     wa_id,
-                    context,
                 )
-            
+
                 fallback_data = data.copy()
                 fallback_data["model"] = fallback_model
-            
+
                 r = client.post(url, headers=headers, json=fallback_data)
 
-        
-            # 🔒 HARD GUARD — still failing
             if r.status_code != 200:
                 logger.error(
                     "OpenAI error | status=%s | response=%s",
                     r.status_code,
                     r.text,
                 )
-                raise RuntimeError("OpenAI API error")
+                return (
+                    "AI is currently unavailable.\n\n"
+                    "Type *Book* to continue with a paid consultation."
+                )
 
-        
             j = r.json()
-        
-            # 🔒 HARD GUARD — malformed response
+
             if "choices" not in j or not j["choices"]:
-                logger.error("OpenAI malformed response: %s", j)
-                raise RuntimeError("Invalid OpenAI response")
-        
+                logger.error("Malformed OpenAI response: %s", j)
+                return (
+                    "AI is currently unavailable.\n\n"
+                    "Type *Book* to continue with a paid consultation."
+                )
+
             reply = j["choices"][0]["message"]["content"].strip()
 
-
-            # -------------------------------------------------
-            # POST-PROCESSING (CRITICAL LOGIC)
-            # -------------------------------------------------
-
-            # ✅ BEFORE payment → allow booking CTA
+            # Post-processing
             if context != "post_payment":
                 reply += "\n\n" + _booking_cta(user)
 
-            # ✅ ALWAYS show legal disclaimer
             reply += _disclaimer_text(user)
 
-            # 💾 Cache reply for short duration (SUCCESS ONLY)
             if wa_id:
                 _set_cached_reply(wa_id, prompt, reply)
-            
+
             return reply
 
-
     except Exception as e:
-        logger.exception("OpenAI call failed: %s", str(e))
-        return "Sorry, I couldn't reach the AI service right now. Please try again later."
-
-
+        logger.exception("OpenAI fatal error: %s", str(e))
+        return (
+            "AI is currently unavailable.\n\n"
+            "Type *Book* to continue with a paid consultation."
+        )
