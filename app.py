@@ -660,17 +660,17 @@ def send_verification_screen(db, user, wa_id):
     send_buttons(
         wa_id,
         (
-            "Please verify your details:\n\n"
-            f"👤 Name: {user.name}\n"
-            f"📍 State: {user.state_name}\n"
-            f"🏙 District: {user.district_name}"
+            f"{t(user, 'verify_details')}\n\n"
+            f"👤 {user.name}\n"
+            f"📍 {user.state_name}\n"
+            f"🏙 {user.district_name}"
         ),
         [
-            {"id": BTN_DETAILS_OK, "title": "✅ Verified"},
-            {"id": BTN_DETAILS_EDIT, "title": "✏️ Edit Details"},
+            {"id": BTN_DETAILS_OK, "title": t(user, "verified_button")},
+            {"id": BTN_DETAILS_EDIT, "title": t(user, "edit_details_button")},
         ],
     )
-
+    
 def get_booking_window(booking):
     """
     Returns (booking_start, booking_end) in UTC
@@ -858,7 +858,7 @@ def webhook():
             db.commit()
             send_text(
                 wa_id,
-                "🤖 You can ask your legal question now."
+                t(user, "post_payment_ai_start")
             )
             return jsonify({"status": "ok"}), 200
 
@@ -945,10 +945,9 @@ def webhook():
                 # Inform user clearly
                 send_buttons(
                     wa_id,
-                    "⏳ Your consultation window has ended.\n\n"
-                    "If you still need legal assistance, you may book a new consultation.",
+                    t(user, "consultation_expired"),
                     [
-                        {"id": "book_now", "title": "📅 Book Consultation"}
+                        {"id": "book_now", "title": t(user, "book_consult")}
                     ],
                 )
             
@@ -974,10 +973,9 @@ def webhook():
             
                 if message == "receipt":
                    #send_payment_receipt_again(db, wa_id) when manual reciept required
-
                     send_text(
                         wa_id,
-                        "📄 Receipt will be available soon. Please contact support if needed."
+                        t(user, "receipt_pending")
                     )
                     return jsonify({"status": "ok"}), 200
 
@@ -988,7 +986,7 @@ def webhook():
                 if is_ai_rate_limited(wa_id):
                     send_text(
                         wa_id,
-                        "⏳ Please wait a moment before asking another question."
+                        t(user, "ai_post_payment_cooldown")
                     )
                     return jsonify({"status": "ok"}), 200
                 
@@ -1005,7 +1003,7 @@ def webhook():
                 
                 send_text(
                     wa_id,
-                    "🤖 *Consultation Preparation Assistant*\n\n" + reply
+                    f"🤖 {t(user, 'consultation_assistant_header')}\n\n{reply}"
                 )
                 
                 return jsonify({"status": "ok"}), 200
@@ -1030,9 +1028,7 @@ def webhook():
             if user.flow_state == PAYMENT_CONFIRMED:
                 send_text(
                     wa_id,
-                    "✅ Your consultation is already confirmed.\n\n"
-                    "📄 Type *RECEIPT* for payment receipt.\n"
-                    "💬 You may ask questions to prepare for your consultation."
+                    t(user, "consultation_already_confirmed")
                 )
                 return jsonify({"status": "ok"}), 200
         
@@ -1064,13 +1060,10 @@ def webhook():
         ):
             send_buttons(
                 wa_id,
-                (
-                    f"👋 Welcome back to NyaySetu, {user.name}!\n\n"
-                    "What would you like to do today?"
-                ),
+                t(user, "welcome_back", name=user.name),
                 [
-                    {"id": BTN_ASK_AI, "title": "🤖 Ask AI"},
-                    {"id": BTN_BOOK_CONSULT, "title": "📅 Book Consultation"},
+                    {"id": BTN_ASK_AI, "title": f"🤖 {t(user, 'ask_ai')}"},
+                    {"id": BTN_BOOK_CONSULT, "title": f"📅 {t(user, 'book_consult')}"},
                 ],
             )
             return jsonify({"status": "ok"}), 200
@@ -1212,10 +1205,9 @@ def webhook():
             
                 send_buttons(
                     wa_id,
-                    "⚠️ AI service is temporarily unavailable.\n\n"
-                    "You can continue with a paid consultation.",
+                    t(user, "ai_temporarily_unavailable"),
                     [
-                        {"id": "book_now", "title": "📅 Book Consultation"}
+                        {"id": "book_now", "title": t(user, "book_consult")}
                     ],
                 )
             
@@ -1254,13 +1246,12 @@ def webhook():
             # -------------------------------------------------
             if user.free_ai_count == FREE_AI_SOFT_PROMPT_AT:
             
-                send_text(wa_id, reply)
-            
+                send_text(wa_id, reply)            
                 send_buttons(
                     wa_id,
-                    "⚖️ Need personalised advice from a verified lawyer?",
+                    t(user, "soft_booking_prompt"),
                     [
-                        {"id": "book_now", "title": "📅 Book Consultation"}
+                        {"id": "book_now", "title": t(user, "book_consult")}
                     ],
                 )
             
@@ -1301,8 +1292,7 @@ def webhook():
             if not clean_name:
                 send_text(
                     wa_id,
-                    "❌ Please enter a valid *personal name*.\n"
-                    "Ex: Prashant Keshav Khaire"
+                    t(user, "name_invalid")
                 )
                 return jsonify({"status": "ok"}), 200
             
