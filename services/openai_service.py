@@ -257,4 +257,4 @@ Rules:
 
     except Exception as e:
         logger.exception("OpenAI fatal error: %s", str(e))
-        return _t(user, "ai_temporarily_unavailable"))
+        return _t(user, "ai_temporarily_unavailable")
