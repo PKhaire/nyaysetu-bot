@@ -29,9 +29,9 @@ TRANSLATIONS = {
         "ai_temporarily_unavailable": (
             "⚠️ AI service is temporarily unavailable.\n\n"
             "For personalised advice from a verified lawyer,\n"
-            "please book a paid consultation."
+            "type Book to continue with a paid consultation."
         ),
-        
+                
         "post_payment_ai_start": (
             "🤖 You can now ask your legal question."
         ),
@@ -230,7 +230,7 @@ TRANSLATIONS = {
         "ai_temporarily_unavailable": (
             "⚠️ AI service filhaal uplabdh nahi hai.\n\n"
             "Verified lawyer se personalised salah ke liye,\n"
-            "kripya paid consultation book karein."
+            "Book type karein aur paid consultation continue karein."
         ),
         
         "post_payment_ai_start": (
@@ -431,7 +431,7 @@ TRANSLATIONS = {
         "ai_temporarily_unavailable": (
             "⚠️ AI सेवा सध्या उपलब्ध नाही.\n\n"
             "प्रमाणित वकिलाकडून वैयक्तिक सल्ल्यासाठी,\n"
-            "कृपया सशुल्क सल्लामसलत बुक करा."
+            "कृपया Book टाइप करा आणि सशुल्क सल्लामसलत सुरू ठेवा."
         ),
         
         "post_payment_ai_start": (
