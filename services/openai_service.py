@@ -6,7 +6,7 @@ import time
 from typing import Dict, Tuple
 from datetime import datetime, timedelta
 from config import OPENAI_API_KEY
-
+from translations import TRANSLATIONS
 
 logger = logging.getLogger("services.openai_service")
 
@@ -80,7 +80,12 @@ def _booking_cta(user):
     lang = getattr(user, "language", "en")
     return BOOKING_CTA.get(lang, BOOKING_CTA["en"])
 
-
+def _t(user, key):
+    lang = getattr(user, "language", "en")
+    return TRANSLATIONS.get(lang, TRANSLATIONS["en"]).get(
+        key,
+        TRANSLATIONS["en"].get(key, "")
+    )
 # =================================================
 # CACHE HELPERS
 # =================================================
@@ -134,11 +139,7 @@ def ai_reply(prompt: str, user, context: str = "default"):
     # CIRCUIT BREAKER CHECK
     # -------------------------------------------------
     if AI_DISABLED_UNTIL and datetime.utcnow() < AI_DISABLED_UNTIL:
-        return (
-            "⚠️ AI service is temporarily unavailable.\n\n"
-            "For personalised legal advice from a verified lawyer,\n"
-            "type *Book* to continue with a paid consultation."
-        )
+        return _t(user, "ai_temporarily_unavailable")
 
     wa_id = getattr(user, "whatsapp_id", None)
 
@@ -209,11 +210,7 @@ Rules:
                     logger.error("🚨 OpenAI quota exhausted — activating breaker")
                     AI_DISABLED_UNTIL = datetime.utcnow() + timedelta(minutes=30)
 
-                    return (
-                        "⚠️ AI service is temporarily unavailable.\n\n"
-                        "For personalised legal advice from a verified lawyer,\n"
-                        "type *Book* to continue with a paid consultation."
-                    )
+                    return _t(user, "ai_temporarily_unavailable")
 
                 # Temporary rate limit → retry fallback
                 fallback_model = "gpt-3.5-turbo"
@@ -237,19 +234,13 @@ Rules:
                     r.status_code,
                     r.text,
                 )
-                return (
-                    "AI is currently unavailable.\n\n"
-                    "Type *Book* to continue with a paid consultation."
-                )
+                return _t(user, "ai_temporarily_unavailable")
 
             j = r.json()
 
             if "choices" not in j or not j["choices"]:
                 logger.error("Malformed OpenAI response: %s", j)
-                return (
-                    "AI is currently unavailable.\n\n"
-                    "Type *Book* to continue with a paid consultation."
-                )
+                return _t(user, "ai_temporarily_unavailable")
 
             reply = j["choices"][0]["message"]["content"].strip()
 
@@ -266,7 +257,4 @@ Rules:
 
     except Exception as e:
         logger.exception("OpenAI fatal error: %s", str(e))
-        return (
-            "AI is currently unavailable.\n\n"
-            "Type *Book* to continue with a paid consultation."
-        )
+        return _t(user, "ai_temporarily_unavailable"))
