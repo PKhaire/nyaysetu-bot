@@ -1,18 +1,21 @@
-from datetime import date
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+from config import APP_TIMEZONE
 from db import SessionLocal
-from models import Booking
+from models import Booking, BookingStatus
 from services.email_service import send_email
 
 
 def run_daily_appointments_email():
     db = SessionLocal()
     try:
-        today = date.today()
+        today = datetime.now(ZoneInfo(APP_TIMEZONE)).date()
 
         bookings = (
             db.query(Booking)
             .filter(
-                Booking.status == "PAID",
+                Booking.status == BookingStatus.PAID,
                 Booking.date == today
             )
             .order_by(Booking.slot_code)
@@ -25,7 +28,7 @@ def run_daily_appointments_email():
             lines = []
             for b in bookings:
                 lines.append(
-                    f"{b.slot_code} | {b.name} | {b.category} | {b.district}"
+                    f"{b.slot_readable} | {b.name} | {b.category} | {b.district_name}"
                 )
 
             body = "Appointments for today:\n\n" + "\n".join(lines)

@@ -1,6 +1,5 @@
-from datetime import datetime
 from db import SessionLocal
-from models import User, Conversation
+from models import User, Conversation, utc_now
 
 def register_user_if_missing(whatsapp_id, name=None, language="English"):
     db = SessionLocal()
@@ -28,7 +27,7 @@ def store_message(whatsapp_id, direction, text):
             user_whatsapp_id=whatsapp_id,
             direction=direction,
             text=text,
-            timestamp=datetime.utcnow()
+            created_at=utc_now(),
         )
         db.add(conv)
         db.commit()

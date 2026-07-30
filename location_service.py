@@ -42,7 +42,6 @@ ALIASES = {
     "slp": "Solapur",
     "solapur": "Solapur",
 
-    "ahm": "Ahmednagar",
     "ahmednagar": "Ahmednagar",
 
     # --------------------
@@ -322,4 +321,3 @@ def detect_district_and_state(text: str):
     
     _, district, state = top_matches[0]
     return district, state, "HIGH"
-

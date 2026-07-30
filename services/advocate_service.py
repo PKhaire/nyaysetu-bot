@@ -1,3 +1,5 @@
+from sqlalchemy import func
+
 from models import Advocate
 import logging
 
@@ -15,8 +17,8 @@ def find_advocate(db, booking):
         db.query(Advocate)
         .filter(
             Advocate.category == booking.category,
-            Advocate.district == booking.district.lower(),
-            Advocate.active == True
+            func.lower(Advocate.district) == (booking.district_name or "").lower(),
+            Advocate.active.is_(True),
         )
         .first()
     )
@@ -29,7 +31,7 @@ def find_advocate(db, booking):
         db.query(Advocate)
         .filter(
             Advocate.category == booking.category,
-            Advocate.active == True
+            Advocate.active.is_(True),
         )
         .first()
     )
@@ -39,7 +41,7 @@ def find_advocate(db, booking):
             "No advocate found | booking_id=%s | category=%s | district=%s",
             booking.id,
             booking.category,
-            booking.district
+            booking.district_name
         )
 
     return advocate

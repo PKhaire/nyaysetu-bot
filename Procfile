@@ -1,1 +1,2 @@
-web: gunicorn app:app --workers 3 --bind 0.0.0.0:$PORT
+release: python -m alembic -c alembic.ini upgrade head
+web: gunicorn --config gunicorn.conf.py app:app

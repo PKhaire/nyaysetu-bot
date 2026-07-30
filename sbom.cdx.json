@@ -1,0 +1,461 @@
+{
+  "$schema": "https://cyclonedx.org/schema/bom-1.5.schema.json",
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "pkg:pypi/alembic@1.18.5",
+      "name": "alembic",
+      "purl": "pkg:pypi/alembic@1.18.5",
+      "type": "library",
+      "version": "1.18.5"
+    },
+    {
+      "bom-ref": "pkg:pypi/annotated-types@0.8.0",
+      "name": "annotated-types",
+      "purl": "pkg:pypi/annotated-types@0.8.0",
+      "type": "library",
+      "version": "0.8.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/anthropic@0.117.0",
+      "name": "anthropic",
+      "purl": "pkg:pypi/anthropic@0.117.0",
+      "type": "library",
+      "version": "0.117.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/anyio@4.14.2",
+      "name": "anyio",
+      "purl": "pkg:pypi/anyio@4.14.2",
+      "type": "library",
+      "version": "4.14.2"
+    },
+    {
+      "bom-ref": "pkg:pypi/blinker@1.9.0",
+      "name": "blinker",
+      "purl": "pkg:pypi/blinker@1.9.0",
+      "type": "library",
+      "version": "1.9.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/certifi@2026.7.22",
+      "name": "certifi",
+      "purl": "pkg:pypi/certifi@2026.7.22",
+      "type": "library",
+      "version": "2026.7.22"
+    },
+    {
+      "bom-ref": "pkg:pypi/charset-normalizer@3.4.9",
+      "name": "charset-normalizer",
+      "purl": "pkg:pypi/charset-normalizer@3.4.9",
+      "type": "library",
+      "version": "3.4.9"
+    },
+    {
+      "bom-ref": "pkg:pypi/click@8.4.2",
+      "name": "click",
+      "purl": "pkg:pypi/click@8.4.2",
+      "type": "library",
+      "version": "8.4.2"
+    },
+    {
+      "bom-ref": "pkg:pypi/distro@1.9.0",
+      "name": "distro",
+      "purl": "pkg:pypi/distro@1.9.0",
+      "type": "library",
+      "version": "1.9.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/docstring-parser@0.18.0",
+      "name": "docstring-parser",
+      "purl": "pkg:pypi/docstring-parser@0.18.0",
+      "type": "library",
+      "version": "0.18.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/flask@3.1.3",
+      "name": "flask",
+      "purl": "pkg:pypi/flask@3.1.3",
+      "type": "library",
+      "version": "3.1.3"
+    },
+    {
+      "bom-ref": "pkg:pypi/greenlet@3.5.4",
+      "name": "greenlet",
+      "purl": "pkg:pypi/greenlet@3.5.4",
+      "type": "library",
+      "version": "3.5.4"
+    },
+    {
+      "bom-ref": "pkg:pypi/gunicorn@26.0.0",
+      "name": "gunicorn",
+      "purl": "pkg:pypi/gunicorn@26.0.0",
+      "type": "library",
+      "version": "26.0.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/h11@0.16.0",
+      "name": "h11",
+      "purl": "pkg:pypi/h11@0.16.0",
+      "type": "library",
+      "version": "0.16.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/httpcore@1.0.9",
+      "name": "httpcore",
+      "purl": "pkg:pypi/httpcore@1.0.9",
+      "type": "library",
+      "version": "1.0.9"
+    },
+    {
+      "bom-ref": "pkg:pypi/httpx@0.28.1",
+      "name": "httpx",
+      "purl": "pkg:pypi/httpx@0.28.1",
+      "type": "library",
+      "version": "0.28.1"
+    },
+    {
+      "bom-ref": "pkg:pypi/idna@3.18",
+      "name": "idna",
+      "purl": "pkg:pypi/idna@3.18",
+      "type": "library",
+      "version": "3.18"
+    },
+    {
+      "bom-ref": "pkg:pypi/itsdangerous@2.2.0",
+      "name": "itsdangerous",
+      "purl": "pkg:pypi/itsdangerous@2.2.0",
+      "type": "library",
+      "version": "2.2.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/jinja2@3.1.6",
+      "name": "jinja2",
+      "purl": "pkg:pypi/jinja2@3.1.6",
+      "type": "library",
+      "version": "3.1.6"
+    },
+    {
+      "bom-ref": "pkg:pypi/jiter@0.16.0",
+      "name": "jiter",
+      "purl": "pkg:pypi/jiter@0.16.0",
+      "type": "library",
+      "version": "0.16.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/mako@1.3.12",
+      "name": "mako",
+      "purl": "pkg:pypi/mako@1.3.12",
+      "type": "library",
+      "version": "1.3.12"
+    },
+    {
+      "bom-ref": "pkg:pypi/markupsafe@3.0.3",
+      "name": "markupsafe",
+      "purl": "pkg:pypi/markupsafe@3.0.3",
+      "type": "library",
+      "version": "3.0.3"
+    },
+    {
+      "bom-ref": "pkg:pypi/packaging@26.2",
+      "name": "packaging",
+      "purl": "pkg:pypi/packaging@26.2",
+      "type": "library",
+      "version": "26.2"
+    },
+    {
+      "bom-ref": "pkg:pypi/pillow@12.3.0",
+      "name": "pillow",
+      "purl": "pkg:pypi/pillow@12.3.0",
+      "type": "library",
+      "version": "12.3.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/psycopg@3.3.4",
+      "name": "psycopg",
+      "purl": "pkg:pypi/psycopg@3.3.4",
+      "type": "library",
+      "version": "3.3.4"
+    },
+    {
+      "bom-ref": "pkg:pypi/psycopg-binary@3.3.4",
+      "name": "psycopg-binary",
+      "purl": "pkg:pypi/psycopg-binary@3.3.4",
+      "type": "library",
+      "version": "3.3.4"
+    },
+    {
+      "bom-ref": "pkg:pypi/pydantic@2.13.4",
+      "name": "pydantic",
+      "purl": "pkg:pypi/pydantic@2.13.4",
+      "type": "library",
+      "version": "2.13.4"
+    },
+    {
+      "bom-ref": "pkg:pypi/pydantic-core@2.46.4",
+      "name": "pydantic-core",
+      "purl": "pkg:pypi/pydantic-core@2.46.4",
+      "type": "library",
+      "version": "2.46.4"
+    },
+    {
+      "bom-ref": "pkg:pypi/python-dotenv@1.2.2",
+      "name": "python-dotenv",
+      "purl": "pkg:pypi/python-dotenv@1.2.2",
+      "type": "library",
+      "version": "1.2.2"
+    },
+    {
+      "bom-ref": "pkg:pypi/reportlab@4.5.1",
+      "name": "reportlab",
+      "purl": "pkg:pypi/reportlab@4.5.1",
+      "type": "library",
+      "version": "4.5.1"
+    },
+    {
+      "bom-ref": "pkg:pypi/sniffio@1.3.1",
+      "name": "sniffio",
+      "purl": "pkg:pypi/sniffio@1.3.1",
+      "type": "library",
+      "version": "1.3.1"
+    },
+    {
+      "bom-ref": "pkg:pypi/sqlalchemy@2.0.51",
+      "name": "sqlalchemy",
+      "purl": "pkg:pypi/sqlalchemy@2.0.51",
+      "type": "library",
+      "version": "2.0.51"
+    },
+    {
+      "bom-ref": "pkg:pypi/typing-extensions@4.16.0",
+      "name": "typing-extensions",
+      "purl": "pkg:pypi/typing-extensions@4.16.0",
+      "type": "library",
+      "version": "4.16.0"
+    },
+    {
+      "bom-ref": "pkg:pypi/typing-inspection@0.4.2",
+      "name": "typing-inspection",
+      "purl": "pkg:pypi/typing-inspection@0.4.2",
+      "type": "library",
+      "version": "0.4.2"
+    },
+    {
+      "bom-ref": "pkg:pypi/tzdata@2026.3",
+      "name": "tzdata",
+      "purl": "pkg:pypi/tzdata@2026.3",
+      "type": "library",
+      "version": "2026.3"
+    },
+    {
+      "bom-ref": "pkg:pypi/werkzeug@3.1.8",
+      "name": "werkzeug",
+      "purl": "pkg:pypi/werkzeug@3.1.8",
+      "type": "library",
+      "version": "3.1.8"
+    }
+  ],
+  "dependencies": [
+    {
+      "dependsOn": [
+        "pkg:pypi/alembic@1.18.5",
+        "pkg:pypi/annotated-types@0.8.0",
+        "pkg:pypi/anthropic@0.117.0",
+        "pkg:pypi/anyio@4.14.2",
+        "pkg:pypi/blinker@1.9.0",
+        "pkg:pypi/certifi@2026.7.22",
+        "pkg:pypi/charset-normalizer@3.4.9",
+        "pkg:pypi/click@8.4.2",
+        "pkg:pypi/distro@1.9.0",
+        "pkg:pypi/docstring-parser@0.18.0",
+        "pkg:pypi/flask@3.1.3",
+        "pkg:pypi/greenlet@3.5.4",
+        "pkg:pypi/gunicorn@26.0.0",
+        "pkg:pypi/h11@0.16.0",
+        "pkg:pypi/httpcore@1.0.9",
+        "pkg:pypi/httpx@0.28.1",
+        "pkg:pypi/idna@3.18",
+        "pkg:pypi/itsdangerous@2.2.0",
+        "pkg:pypi/jinja2@3.1.6",
+        "pkg:pypi/jiter@0.16.0",
+        "pkg:pypi/mako@1.3.12",
+        "pkg:pypi/markupsafe@3.0.3",
+        "pkg:pypi/packaging@26.2",
+        "pkg:pypi/pillow@12.3.0",
+        "pkg:pypi/psycopg@3.3.4",
+        "pkg:pypi/psycopg-binary@3.3.4",
+        "pkg:pypi/pydantic@2.13.4",
+        "pkg:pypi/pydantic-core@2.46.4",
+        "pkg:pypi/python-dotenv@1.2.2",
+        "pkg:pypi/reportlab@4.5.1",
+        "pkg:pypi/sniffio@1.3.1",
+        "pkg:pypi/sqlalchemy@2.0.51",
+        "pkg:pypi/typing-extensions@4.16.0",
+        "pkg:pypi/typing-inspection@0.4.2",
+        "pkg:pypi/tzdata@2026.3",
+        "pkg:pypi/werkzeug@3.1.8"
+      ],
+      "ref": "pkg:generic/nyaysetu-bot@2026.07.29-rc1"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/alembic@1.18.5"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/annotated-types@0.8.0"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/anthropic@0.117.0"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/anyio@4.14.2"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/blinker@1.9.0"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/certifi@2026.7.22"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/charset-normalizer@3.4.9"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/click@8.4.2"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/distro@1.9.0"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/docstring-parser@0.18.0"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/flask@3.1.3"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/greenlet@3.5.4"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/gunicorn@26.0.0"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/h11@0.16.0"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/httpcore@1.0.9"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/httpx@0.28.1"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/idna@3.18"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/itsdangerous@2.2.0"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/jinja2@3.1.6"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/jiter@0.16.0"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/mako@1.3.12"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/markupsafe@3.0.3"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/packaging@26.2"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/pillow@12.3.0"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/psycopg@3.3.4"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/psycopg-binary@3.3.4"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/pydantic@2.13.4"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/pydantic-core@2.46.4"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/python-dotenv@1.2.2"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/reportlab@4.5.1"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/sniffio@1.3.1"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/sqlalchemy@2.0.51"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/typing-extensions@4.16.0"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/typing-inspection@0.4.2"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/tzdata@2026.3"
+    },
+    {
+      "dependsOn": [],
+      "ref": "pkg:pypi/werkzeug@3.1.8"
+    }
+  ],
+  "metadata": {
+    "component": {
+      "bom-ref": "pkg:generic/nyaysetu-bot@2026.07.29-rc1",
+      "name": "nyaysetu-bot",
+      "type": "application",
+      "version": "2026.07.29-rc1"
+    },
+    "properties": [
+      {
+        "name": "nyaysetu:dependency-source",
+        "value": "requirements.lock"
+      }
+    ]
+  },
+  "specVersion": "1.5",
+  "version": 1
+}
