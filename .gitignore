@@ -1,0 +1,48 @@
+# Secrets and local overrides
+.env
+.env.*
+!.env.example
+
+# Python environments and caches
+.venv/
+.venv-*/
+.test-deps/
+.release-deps/
+.deploy-test-deps/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Test and coverage output
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Local databases and SQLite sidecars
+*.db
+*.sqlite
+*.sqlite3
+*-wal
+*-shm
+
+# Generated receipts and transient output
+receipts/
+logs/
+*.log
+
+# Packaging
+build/
+dist/
+*.egg-info/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
