@@ -1,0 +1,148 @@
+name: NyaySetu CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test and static checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ENV: test
+      DATABASE_URL: "sqlite:///:memory:"
+      AI_PROVIDER: local
+      ALLOW_INSECURE_WEBHOOKS: "false"
+      RAZORPAY_MODE: test
+      LOG_LEVEL: WARNING
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements.lock
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: >-
+          python -m pip install --disable-pip-version-check
+          -r requirements-dev.txt
+
+      - name: Verify dependency consistency
+        run: python -m pip check
+
+      - name: Verify software bill of materials
+        run: python -m jobs.generate_sbom --check
+
+      - name: Compile Python sources
+        run: >-
+          python -m compileall -q
+          app.py admin.py category_labels.py config.py db.py demo_local_ai.py
+          gunicorn.conf.py
+          location_service.py models.py subcategory_labels.py translations.py
+          utils.py migrations services jobs tests utils
+
+      - name: Run Python static analysis
+        run: ruff check .
+
+      - name: Validate Gunicorn production configuration
+        run: gunicorn --check-config --config gunicorn.conf.py app:app
+
+      - name: Run tests
+        run: pytest -q --cov=app --cov=services --cov-report=term-missing --cov-report=xml
+
+  migration-check:
+    name: PostgreSQL migration validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ENV: test
+      DATABASE_URL: "postgresql+psycopg://postgres:postgres@localhost:5432/nyaysetu_ci"
+      AI_PROVIDER: local
+      ALLOW_INSECURE_WEBHOOKS: "false"
+      RAZORPAY_MODE: test
+      LOG_LEVEL: WARNING
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: nyaysetu_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: requirements.lock
+
+      - name: Install runtime dependencies
+        run: >-
+          python -m pip install --disable-pip-version-check --no-deps
+          -r requirements.lock
+
+      - name: Verify production lock completeness
+        run: python -m pip check
+
+      - name: Validate migration head and model parity
+        run: |
+          python -m alembic -c alembic.ini heads
+          python -m alembic -c alembic.ini upgrade head
+          python -m alembic -c alembic.ini current
+          python -m alembic -c alembic.ini check
+
+      - name: Rehearse compatible rollback and re-upgrade
+        run: |
+          python -m alembic -c alembic.ini downgrade base
+          python -m alembic -c alembic.ini upgrade head
+          python -m alembic -c alembic.ini check
+
+  dependency-audit:
+    name: Dependency vulnerability audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: requirements.lock
+
+      - name: Install audit tool
+        run: python -m pip install --disable-pip-version-check pip-audit==2.10.1
+
+      - name: Audit runtime dependency resolution
+        run: pip-audit --progress-spinner off -r requirements.lock
