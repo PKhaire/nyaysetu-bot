@@ -5,8 +5,6 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 5
-    exclude-paths:
-      - "requirements-dev.txt"
     groups:
       runtime-minor-and-patch:
         update-types:
