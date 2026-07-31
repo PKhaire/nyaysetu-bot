@@ -67,7 +67,11 @@ jobs:
         run: gunicorn --check-config --config gunicorn.conf.py app:app
 
       - name: Run tests
-        run: python -m pytest -q --cov=app --cov=services --cov-report=term-missing --cov-report=xml
+        run: >-
+          pytest -q
+          --cov=app --cov=services
+          --cov-report=term-missing --cov-report=xml
+          --cov-fail-under=60
 
   migration-check:
     name: PostgreSQL migration validation
