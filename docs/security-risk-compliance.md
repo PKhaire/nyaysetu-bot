@@ -62,9 +62,14 @@ environment is correctly configured.
 - Meta app and Razorpay webhook signatures accept an optional previous secret
   for a bounded, zero-downtime rotation overlap.
 - Production readiness rejects weak current WhatsApp tokens/app secrets,
-  Razorpay credentials, admin/AI secrets, a malformed/short SendGrid key, or a
-  nonempty weak previous Meta/Razorpay signing secret.
+  Razorpay credentials, admin/AI secrets, missing/invalid SES region,
+  from-address or AWS access credentials, or a nonempty weak previous
+  Meta/Razorpay signing secret.
 - Booking email recipients default to empty; no recipient is hard coded.
+- Email uses the boto3 SES v2 HTTPS client with bounded timeouts, immediate SDK
+  retries disabled, at most 50 deduplicated BCC destinations, and durable
+  outbox-controlled retries. Logs and alerts exclude recipients, bodies,
+  credentials, and provider response bodies.
 - Admin routes require a bearer or admin token and disable response caching.
 - Admin metrics are aggregate. Sensitive support/fulfilment/reconciliation
   queues require token authentication; mutations additionally require an
@@ -177,7 +182,9 @@ Before production, document and obtain appropriate review for:
 - Advocate credentials, conflicts, supervision, recordkeeping, and professional
   obligations.
 - Meta opt-in, template, quality, and business-messaging requirements.
-- Razorpay and SendGrid account/security requirements.
+- Razorpay and Amazon SES account/security requirements, including region-local
+  identity/domain verification, DKIM/SPF/DMARC, sandbox exit, least-privilege
+  `ses:SendEmail`, and monitored bounce/complaint/delivery events.
 - Incident response, breach notification, evidence preservation, and secret
   rotation.
 - Backup encryption, restore access, database roles, and production change

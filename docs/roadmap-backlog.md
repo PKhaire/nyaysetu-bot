@@ -87,7 +87,9 @@ These items are “implemented,” not automatically “deployed” or “operat
 - Test duplicate, delayed, batched, unmatched, amount-mismatch, provider-down,
   and database-failure scenarios.
 - Activate and monitor outbox, reconciliation, reminder, and maintenance crons.
-- Verify SendGrid sender and explicitly approved recipients.
+- Verify the Amazon SES region, identity/domain, DKIM/SPF/DMARC, production
+  access, least-privilege send role, monitored configuration set, and explicitly
+  approved recipients.
 - Decide whether automatic receipts should remain off or be enabled.
 - Staff alerts and the protected review queue for the five-minute
   reconciliation command.
@@ -218,7 +220,7 @@ quality evaluation, and outcome-focused analytics before broader acquisition.
 - Fresh managed PostgreSQL is revision-verified, restore-tested, reconciled,
   and monitored.
 - All automated, PostgreSQL-concurrency, and external staging tests pass.
-- Meta, Razorpay, SendGrid, web, outbox, reconciliation, reminder, and
+- Meta, Razorpay, Amazon SES, web, outbox, reconciliation, reminder, and
   maintenance configuration is independently reviewed.
 - Payment and notification failures are alertable and recoverable.
 - Human fulfilment and support owners meet documented SLAs.

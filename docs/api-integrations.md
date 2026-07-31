@@ -16,14 +16,16 @@ data migration have been completed in any environment.
 
 Readiness checks the database and expected Alembic revision and, when
 `ENV=production`, rejects SQLite/automatic schema creation and validates
-WhatsApp, live Razorpay, SendGrid/recipient, support/privacy, HTTPS policy,
+WhatsApp, live Razorpay, Amazon SES/recipient, support/privacy, HTTPS policy,
 admin/AI-secret, and legal-review-date configuration. It enforces the current
 credential contract, including 32-character WhatsApp app-secret/token and
 admin/AI minimums, 16-character WhatsApp-verify and Razorpay key/secret
-minimums, an `rzp_live_...` key ID, and an `SG.` SendGrid key. If present, the
-previous Meta app secret must meet the 32-character minimum and the previous
-Razorpay webhook secret the 16-character minimum. It does not call any external
-provider and does not prove policy/legal approval.
+minimums, an `rzp_live_...` key ID, and valid SES region/from-address and AWS
+credential settings (access-key ID 16 or more characters, secret access key 32
+or more, and optional session token 16 or more). If present, the previous Meta
+app secret must meet the 32-character minimum and the previous Razorpay webhook
+secret the 16-character minimum. It does not call any external provider and
+does not prove policy/legal approval.
 
 ### `GET /webhook`
 
@@ -214,7 +216,7 @@ only staging test transactions, and confirm production contains no synthetic
 or legacy rows before traffic. Any future import requires the separately
 approved contingency migration and reconciliation plan.
 
-## SendGrid
+## Amazon SES
 
 `services/email_service.py` sends:
 
@@ -224,15 +226,47 @@ approved contingency migration and reconciliation plan.
 
 Booking recipients come from comma-separated
 `BOOKING_NOTIFICATION_EMAILS`; support recipients come from
-`SUPPORT_NOTIFICATION_EMAILS`, and payment-review alerts use the deduplicated
-union. There is no hard-coded recipient. The sender is
-`SENDGRID_FROM_EMAIL`. Delivery failures return `False` without logging
-recipient addresses or message bodies. Booking, support, and payment-review
-notifications are retried by the durable outbox when configured.
+`SUPPORT_NOTIFICATION_EMAILS`; and payment-review alerts go only to
+`PAYMENT_RECONCILIATION_EMAILS`. This separation prevents ordinary support or
+booking mailboxes from receiving financial-review metadata. There is no
+hard-coded recipient. The sender is `SES_FROM_EMAIL`.
+Recipients are placed in BCC and a send is rejected before the provider call
+when the deduplicated list exceeds Amazon SES's 50-destination limit.
 
-Production prerequisite: verify the sender/domain, explicitly configure
-approved recipients, and establish access and retention rules for legal matter
-details received by email.
+`services/email_service.py` uses the boto3 SES v2 client over HTTPS in
+`SES_REGION`. It uses `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, plus
+optional `AWS_SESSION_TOKEN`. Staging and production require
+`SES_CONFIGURATION_SET` so provider events can be monitored. Connect and read
+timeouts are bounded by
+`SES_CONNECT_TIMEOUT_SECONDS` (default `5`) and
+`SES_READ_TIMEOUT_SECONDS` (default `15`). Immediate SDK retries are disabled:
+an ambiguous timeout may have followed provider acceptance, so retry ownership
+stays with the durable outbox instead of an in-process retry loop. SES
+`SendEmail` has no idempotency token, so an ambiguous accepted request can be
+delivered again after an outbox retry. NyaySetu therefore explicitly uses
+at-least-once email delivery; the stable event type and record ID in the
+subject/tags let operators identify a duplicate without putting user data in
+the message.
+
+Delivery failures return `False`. Logs and alerts may contain only the provider
+exception class, provider error code, and recipient count—never recipient
+addresses, message bodies, credentials, or provider response bodies.
+Booking, support, and payment-review notifications are retried by the durable
+outbox when configured.
+
+Production prerequisites:
+
+- Verify the sending identity/domain in the configured SES region.
+- Publish and validate DKIM, SPF, and DMARC records.
+- Move the SES account/region out of the sandbox before sending to unverified
+  operational recipients.
+- Grant the runtime identity only the required `ses:SendEmail` permission and
+  only for the intended identity where policy scoping permits.
+- Configure `SES_CONFIGURATION_SET` and monitor bounce, complaint, and delivery
+  events through approved destinations and alerts.
+- Explicitly approve recipients and establish access and retention rules for
+  operational alert metadata. Case narratives and direct contact details must
+  remain in the authenticated operations interface, not email.
 
 ## Durable outbox
 
@@ -364,9 +398,11 @@ The authoritative defaults and validation rules are in `config.py` and
 - Razorpay: `RAZORPAY_*`, current/previous webhook secret,
   `PAYMENT_LINK_TTL_MINUTES`, and reconciliation lookback.
 - Booking: price, cutoff, horizon, daily capacity, and per-slot capacity.
-- Delivery: SendGrid settings, notification recipients, outbox retry settings,
-  `AUTO_SEND_RECEIPTS`, and exact per-language 24-hour/2-hour Meta reminder
-  template pairs plus catch-up/batch bounds.
+- Delivery: Amazon SES region/sender/AWS credentials, configuration set
+  (required in staging/production), bounded connect/read timeouts, notification
+  recipients, outbox retry
+  settings, `AUTO_SEND_RECEIPTS`, and exact per-language 24-hour/2-hour Meta
+  reminder template pairs plus catch-up/batch bounds.
 - Product trust: support SLA, privacy/terms/refund/cancellation URLs, consent
   versions, admin token, and AI safety settings.
 
@@ -393,6 +429,8 @@ Before production traffic:
 - With reminder templates empty, the reminder cron is a no-op. With staging
   templates approved, each 24-hour/2-hour reminder is deduplicated and becomes
   unsendable after cancellation/reschedule/review or template removal.
-- SendGrid recipients and Meta templates are explicitly approved.
+- Amazon SES identity/domain, DKIM/SPF/DMARC, production access,
+  least-privilege permission, configuration-set monitoring, recipients, and
+  Meta templates are explicitly approved.
 - Fresh-production backup/restore, staging test-transaction reconciliation,
   retention, privacy, refund, and support procedures are signed off.

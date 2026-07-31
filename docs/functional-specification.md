@@ -319,6 +319,7 @@ production provisioning gates below are complete:
   retention policies are approved and configured.
 - Every enabled AI provider has privacy/legal approval and multilingual safety
   evaluation.
-- SendGrid sender/recipients and any Meta templates are approved.
+- Amazon SES identity/domain, email-authentication records, production access,
+  monitored configuration set, recipients, and any Meta templates are approved.
 
 Passing unit tests alone does not satisfy these external acceptance criteria.

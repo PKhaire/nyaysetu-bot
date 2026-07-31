@@ -153,7 +153,8 @@ Prerequisites before a production cutover:
   alert on queue age/dead jobs/provider errors/operational risk.
 - Staff reconciliation/risk queues and keep reminder templates empty until
   opt-in and Meta approval are evidenced.
-- Validate live Meta/Razorpay/SendGrid configuration in staging.
+- Validate live Meta/Razorpay/Amazon SES configuration in staging, including
+  email authentication and bounce/complaint/delivery monitoring.
 - Staff consultation fulfilment and support with measurable SLAs.
 - Publish approved privacy, terms, refund/cancellation, and AI notices.
 - Rehearse payment mismatch, provider outage, data incident, and rollback

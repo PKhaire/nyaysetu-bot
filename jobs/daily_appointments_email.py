@@ -28,15 +28,24 @@ def run_daily_appointments_email():
             lines = []
             for b in bookings:
                 lines.append(
-                    f"{b.slot_readable} | {b.name} | {b.category} | {b.district_name}"
+                    f"{b.slot_readable} | Booking #{b.id}"
                 )
 
-            body = "Appointments for today:\n\n" + "\n".join(lines)
+            body = (
+                "Appointments for today:\n\n"
+                + "\n".join(lines)
+                + "\n\nOpen the authenticated NyaySetu operations "
+                "interface for contact and case details."
+            )
 
-        send_email(
-            subject=f"📅 NyaySetu – Appointments for {today}",
-            body=body
-        )
+        if (
+            send_email(
+                subject=f"NyaySetu appointments for {today}",
+                body=body,
+            )
+            is not True
+        ):
+            raise RuntimeError("daily_appointments_email_not_sent")
 
     finally:
         db.close()

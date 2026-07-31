@@ -2,8 +2,9 @@
 
 **Document status:** Working master for partner, product, legal, engineering,
 operations and marketing review  
-**Prepared on:** 30 July 2026  
-**Current candidate:** `legal-content-2026-07-r4`  
+**Prepared on:** 31 July 2026  
+**Application candidate:** `2026-07-31 RC3`  
+**Legal-content version:** `legal-content-2026-07-r4`  
 **Release approach:** Fresh first production release; no legacy-user or
 legacy-database migration  
 **Launch budget under discussion:** INR 25,000  
@@ -41,7 +42,7 @@ labels:
 | **Built** | The capability exists in the current source repository. |
 | **Locally validated** | Static or standalone checks passed in the available development environment. |
 | **CI validated** | The exact commit passed the complete GitHub Actions workflow. |
-| **Staging verified** | The capability passed with isolated Meta, Razorpay, SendGrid and PostgreSQL resources. |
+| **Staging verified** | The capability passed with isolated Meta, Razorpay, Amazon SES and PostgreSQL resources. |
 | **Approved** | The responsible business, legal, privacy, language or security owner signed off. |
 | **Live** | The exact approved version is deployed and monitored in production. |
 | **Future** | The capability is proposed but not implemented. |
@@ -82,7 +83,8 @@ The correct launch strategy is a controlled fresh release:
 - isolated staging before any real customer traffic;
 - a capped pilot before marketing at scale.
 
-The current `r4` release candidate is **not yet production-approved or live**.
+The current application candidate, `2026-07-31 RC3`, is **not yet
+production-approved or live**.
 It must be committed/uploaded, pass CI, pass conversation/product review,
 receive legal/language approval, pass staging provider tests and complete a
 fresh-production rehearsal.
@@ -160,18 +162,18 @@ urgency, payment or privacy.
 
 ---
 
-## 5. Current status as of 30 July 2026
+## 5. Current status as of 31 July 2026
 
 ### 5.1 Release status
 
 | Area | Status | Evidence or remaining action |
 |---|---|---|
 | Reliability/payment modernization | **Built** | Present in repository and documented tests. |
-| Earlier GitHub CI run | **CI validated for an earlier commit** | The screenshot showed all three jobs green; it does not cover later `r4` changes. |
-| Legal knowledge `r4` | **Built and locally validated** | Compile, static diff and standalone contract checks passed. |
-| `r4` full automated suite | **Not yet CI validated** | Push/upload the exact candidate and rerun GitHub Actions. |
+| Earlier GitHub CI run | **CI validated for an earlier commit** | The screenshot showed all three jobs green; it does not cover the later `2026-07-31 RC3` changes. |
+| Legal knowledge `legal-content-2026-07-r4` | **Built and locally validated** | Compile, static diff and standalone contract checks passed. |
+| `2026-07-31 RC3` full automated suite | **Locally validated; not yet CI validated** | 274 tests passed with 64.38% coverage; upload the exact candidate and rerun GitHub Actions on Python 3.11.15. |
 | Legal-language content | **Not approved** | Qualified legal and native-language review required. |
-| Provider integration | **Built, not staging verified for `r4`** | Run signed Meta/Razorpay/SendGrid scenarios. |
+| Provider integration | **Built, not staging verified for `2026-07-31 RC3`** | Run signed Meta/Razorpay/Amazon SES scenarios. |
 | Production infrastructure | **Not approved/live** | Create fresh managed resources and configure secrets. |
 | Production deployment | **No-go today** | Product, legal, CI, staging and operating gates remain. |
 
@@ -186,7 +188,7 @@ archive and checksum.
 Generated print editions of this blueprint are retained outside the runtime
 archive. The Markdown source remains part of the reviewed release.
 
-### 5.3 New user-facing content in `r4`
+### 5.3 New user-facing content in `legal-content-2026-07-r4`
 
 - Nine legal areas and 58 issue choices, including `Not Sure`.
 - English, conversational Hindi/Hinglish and Marathi experiences.
@@ -556,7 +558,7 @@ Signed Flask webhook
     |-----------------------> local/reviewed knowledge
     |-----------------------> optional approved AI provider
     |-----------------------> Razorpay payment links/API
-    |-----------------------> SendGrid notifications
+    |-----------------------> Amazon SES v2 notifications
     |
 SQLAlchemy + managed PostgreSQL
     |-- users and booking state
@@ -693,7 +695,7 @@ Before broad growth, implement:
 ### 13.2 Required launch verification
 
 - secret scan of source and release artifact;
-- all `r4` CI jobs green;
+- all `2026-07-31 RC3` CI jobs green;
 - dependency audit with no unaccepted critical/high finding;
 - missing/invalid signature tests;
 - replay, duplicate and provider-failure tests;
@@ -726,7 +728,8 @@ more operators receive access.
 6. Reminder job present but inactive until approved templates.
 7. Meta WhatsApp Cloud API configuration.
 8. Razorpay test and later live configuration.
-9. Verified SendGrid sender and operational recipients.
+9. Verified Amazon SES identity/domain, email authentication, production access,
+   monitored configuration set, and operational recipients.
 10. HTTPS policy/support pages and a controlled domain.
 11. Monitoring and alert destination.
 
@@ -797,7 +800,7 @@ candidate. Local compilation alone is insufficient.
 
 Do not launch if any of these are true:
 
-- `r4` CI is red or incomplete;
+- `2026-07-31 RC3` CI is red or incomplete;
 - legal/language review is missing;
 - policy/support URLs or contacts are placeholders;
 - production readiness endpoint is failing;
@@ -902,7 +905,7 @@ Alert on:
 
 - conversation/product review;
 - legal/native-language approval;
-- `r4` CI;
+- `2026-07-31 RC3` CI;
 - privacy, terms, refund, cancellation and support policy;
 - fresh staging and production PostgreSQL;
 - provider and rollback rehearsal;
@@ -1269,7 +1272,7 @@ Principles:
 
 | Risk | Severity | Current mitigation | Required next action |
 |---|---|---|---|
-| Legal content is incomplete/outdated | High | Disclaimer, versioning, deterministic content | Counsel and native-language approval of `r4` |
+| Legal content is incomplete/outdated | High | Disclaimer, versioning, deterministic content | Counsel and native-language approval of `legal-content-2026-07-r4` |
 | Paid user lacks human fulfilment | Critical | Fulfilment queue exists | Staff, qualify, assign and document SLA/channel |
 | Payment/provider failure | High | Signed webhooks, idempotency, reconciliation, outbox | Staging tests, monitoring and staffed review |
 | Sensitive data retained too long | High | Minimised logs/analytics and bounded cleanup | Approve retention, rights, backup and legal holds |
@@ -1293,7 +1296,7 @@ Principles:
 - partner decisions;
 - conversation/product review;
 - legal/language review;
-- `r4` CI and security checks;
+- `2026-07-31 RC3` CI and security checks;
 - policy pages;
 - fresh staging PostgreSQL and provider tests.
 
@@ -1360,8 +1363,8 @@ Run the structured scenario matrix. Resolve critical/high findings first.
 
 ### Step 3: Legal and language review
 
-Review exact `r4` content and record secure sign-off. Change the content
-version if corrections are made.
+Review exact `legal-content-2026-07-r4` content and record secure sign-off.
+Change the content version if corrections are made.
 
 ### Step 4: Freeze and upload the exact candidate
 
@@ -1432,7 +1435,9 @@ payment, safety or support indicators breach limits.
 
 - [ ] Meta number/app/webhook approved and signed.
 - [ ] Razorpay mode, key and webhook correctly matched.
-- [ ] SendGrid sender and recipients verified.
+- [ ] Amazon SES region/identity/domain and recipients verified; DKIM/SPF/DMARC,
+      production access, least-privilege send permission, and
+      bounce/complaint/delivery monitoring are active.
 - [ ] Policy/support URLs are HTTPS and correct.
 - [ ] Reminder template pairs remain empty unless fully approved.
 

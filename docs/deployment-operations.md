@@ -16,7 +16,7 @@ Internet
   |-- Razorpay ------> Render web service ----+--> managed PostgreSQL
                                               |
 Render cron: python -m jobs.process_outbox --|
-                                              +--> SendGrid
+                                              +--> Amazon SES v2
                                               +--> Meta document delivery (optional)
 Render cron: python -m jobs.reconcile_payments --> Razorpay API + review queue
 Render cron: python -m jobs.consultation_reminders -> durable reminder jobs
@@ -54,7 +54,7 @@ Use distinct resources for each environment:
 | Meta app/number | test app or test number | approved production app/number |
 | Razorpay | test keys and webhook | live keys and webhook |
 | Database | staging PostgreSQL | production PostgreSQL |
-| SendGrid | verified test destination | approved operational recipients |
+| Amazon SES | verified staging identity/destination in the selected region | verified production identity/domain, production access, and approved operational recipients |
 | AI | local first; provider test key if approved | separately approved key/model |
 | Admin token | unique staging token | unique production token |
 
@@ -93,7 +93,8 @@ machine. Signed fixtures are preferred.
 
 `render.yaml` defines:
 
-- `nyaysetu-bot`: public web service with `/health/ready`.
+- `nyaysetu-bot-backend`: existing public web service with
+  `api.nyaysetu.in` and `/health/ready`.
 - `nyaysetu-outbox`: one-minute cron that processes a bounded outbox batch and
   exits.
 - `nyaysetu-payment-reconciliation`: five-minute exact-evidence Razorpay safety
@@ -172,7 +173,7 @@ commit:
    commands shown above and set its health path to `/health/ready`.
 2. Set `ENV=staging`, `AUTO_CREATE_SCHEMA=false`,
    `ALLOW_INSECURE_WEBHOOKS=false`, `RAZORPAY_MODE=test`, an isolated staging
-   PostgreSQL `DATABASE_URL`, and staging-only Meta, Razorpay, SendGrid,
+   PostgreSQL `DATABASE_URL`, and staging-only Meta, Razorpay, Amazon SES,
    policy/contact and random admin/AI-safety values.
 3. Leave both legal-review values empty while the candidate is under review,
    or set both to the same currently approved content version/date. A partial
@@ -209,6 +210,7 @@ RAZORPAY_KEY_SECRET=...
 RAZORPAY_WEBHOOK_SECRET=...
 RAZORPAY_WEBHOOK_SECRET_PREVIOUS=
 RAZORPAY_MODE=live
+BOOKING_PRICE=499
 ```
 
 The database URL is normalised to the Psycopg 3 SQLAlchemy driver by the
@@ -219,10 +221,17 @@ database access.
 ### Additional production-readiness and operational settings
 
 ```text
-SENDGRID_API_KEY=...
-SENDGRID_FROM_EMAIL=...
+SES_REGION=ap-south-1
+SES_FROM_EMAIL=...
+SES_CONFIGURATION_SET=...
+SES_CONNECT_TIMEOUT_SECONDS=5
+SES_READ_TIMEOUT_SECONDS=15
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_SESSION_TOKEN=
 BOOKING_NOTIFICATION_EMAILS=...
 SUPPORT_NOTIFICATION_EMAILS=...
+PAYMENT_RECONCILIATION_EMAILS=...
 SUPPORT_PHONE=...
 SUPPORT_EMAIL=...
 PRIVACY_EMAIL=...
@@ -245,19 +254,58 @@ OUTBOX_COMPLETED_TTL_DAYS=30
 Production `/health/ready` requires both groups. It also validates live
 Razorpay mode and an `rzp_live_...` key ID of at least 16 characters; minimum
 lengths of 32 for the WhatsApp app secret/token and admin/AI secrets and 16 for
-the WhatsApp verify token plus Razorpay API/webhook secrets; an `SG.` SendGrid
-key of at least 16 characters; a numeric WhatsApp phone ID; valid email
-addresses; HTTPS policy URLs; current Alembic revision; disabled automatic
-schema creation; and a legal-content reviewed version exactly matching the
-configured content version with a valid non-future review date. A nonempty
+the WhatsApp verify token plus Razorpay API/webhook secrets; valid SES
+region/from-address, an AWS access-key ID of at least 16 characters, an AWS
+secret access key of at least 32 characters, and an optional session token of at
+least 16 characters; a numeric WhatsApp phone ID; valid email addresses; HTTPS
+policy URLs; current Alembic revision; disabled automatic schema creation; and a
+legal-content reviewed version exactly matching the configured content version
+with a valid non-future review date. A nonempty
 `WHATSAPP_APP_SECRET_PREVIOUS` must be at least 32 characters and a nonempty
 `RAZORPAY_WEBHOOK_SECRET_PREVIOUS` at least 16. This is configuration
 validation, not evidence that counsel approved the content or that any provider
 is reachable.
 
+### Amazon SES production setup
+
+The application calls Amazon SES API v2 over HTTPS through boto3; it does not
+require an SMTP username/password or a locally installed mail server.
+
+1. Select `SES_REGION` first. SES identities, sandbox/production status, and
+   configuration sets are regional, so create and test all of them in that same
+   region.
+2. Verify `SES_FROM_EMAIL` or, preferably, its domain. Publish the SES DKIM
+   records and establish SPF and DMARC for the sending domain.
+3. Request production access for that SES account/region. While it remains in
+   the sandbox, both sender and recipient restrictions prevent a real
+   operational launch.
+4. Create a runtime IAM identity with only `ses:SendEmail`, scoped to the
+   intended identity where the IAM policy supports it. Store
+   `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and any temporary
+   `AWS_SESSION_TOKEN` only in Render's secret environment.
+5. Create `SES_CONFIGURATION_SET` with approved event destinations and alert on
+   bounces, complaints, rejects, delays, and sustained delivery failures.
+   NyaySetu requires this value in staging and production.
+6. Send only to approved operational mailboxes. The service deduplicates
+   recipients, places them in BCC, and rejects more than 50 destinations before
+   calling SES.
+7. Exercise success, provider rejection, timeout, bounce, and complaint cases
+   in staging. The boto3 client performs no immediate SDK retry; a failed or
+   ambiguous attempt returns to the durable outbox so retry timing remains
+   auditable and bounded. SES `SendEmail` does not provide an idempotency token:
+   if a network timeout happens after provider acceptance, a later outbox retry
+   can create a duplicate. The approved delivery contract is therefore
+   at-least-once; operators use the stable event type/record ID in the subject
+   and SES tags to recognise duplicates.
+
+Provider-error logs and alerts must remain privacy-minimised: retain the
+exception class, safe provider error code, recipient count, and aggregate
+event/status only. Do not record recipient addresses, subject/body content,
+credentials, raw provider responses, or outbox payloads.
+
 The web and outbox cron must share the exact same `DATABASE_URL`,
-`WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, WhatsApp API version, SendGrid values,
-notification recipients, and `AI_SAFETY_IDENTIFIER_SECRET`. The Blueprint
+`WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, WhatsApp API version, Amazon SES values,
+AWS credentials, notification recipients, and `AI_SAFETY_IDENTIFIER_SECRET`. The Blueprint
 inherits them from the web service. They let the outbox finish durable
 payment-success messages, email, optional receipt delivery, and stable
 pseudonymous log correlation. Razorpay API and webhook secrets are not required
@@ -552,14 +600,15 @@ webhook signatures:
    window.
 5. Clear the `_PREVIOUS` variable, redeploy, and confirm old signatures fail.
 
-The Blueprint does not predeclare previous-secret variables. Add the applicable
-value to the web service through the controlled secret-management path only
-for the rotation window, then remove it. These signing secrets are not shared
-with any cron.
+The Blueprint predeclares both previous-secret variables as operator-supplied
+web-service secrets. On an existing Blueprint, add them manually in the
+Dashboard because newly added `sync: false` values are not populated by a
+sync. Keep them empty except during the controlled rotation window. These
+signing secrets are not shared with any cron.
 
 Never use the previous-secret slots as indefinite fallback credentials. The
 Meta verification token, WhatsApp access token, Razorpay API key secret,
-database, SendGrid, admin, and AI secrets require their own provider-specific
+database, AWS/SES, admin, and AI secrets require their own provider-specific
 rotation procedures.
 
 ## Durable outbox
@@ -766,7 +815,9 @@ frequency cap, suppression list, and consent record exist.
 - Meta and Razorpay webhook secrets match their dashboards.
 - Previous webhook-secret variables are empty unless a documented rotation is
   actively inside its retry/rollback window.
-- SendGrid sender identity and internal recipients are approved.
+- Amazon SES identity/domain and internal recipients are approved; DKIM/SPF/DMARC
+  passes; the account/region has production access; and a least-privilege
+  `ses:SendEmail` runtime identity and monitored configuration set are active.
 - Fee, capacity, timezone, cutoff, refund/cancellation, and support values are
   approved by the business owner.
 - Privacy notice, terms, and AI consent are published and reviewed.
@@ -874,7 +925,7 @@ Alert on:
 - reminder scheduler failure, due-window backlog, template rejection, or
   ambiguous delivery;
 - active inbound claims older than the configured lease;
-- SendGrid/WhatsApp delivery failures;
+- Amazon SES/WhatsApp delivery failures, bounces, and complaints;
 - AI provider rate limit, latency, or sustained fallback;
 - unexpected booking-capacity rejection rate; and
 - admin authentication failures.
@@ -928,7 +979,7 @@ Never mark a booking paid from a screenshot or user-supplied payment text.
 
 1. Check cron run history and database connectivity.
 2. Identify the oldest pending/dead job and error type without logging payload.
-3. Restore SendGrid/Meta configuration or provider availability.
+3. Restore Amazon SES/Meta configuration or provider availability.
 4. Trigger one manual bounded run.
 5. Verify idempotent completion before increasing drain capacity.
 
@@ -999,7 +1050,7 @@ and provider intake as the incident/cutover procedure requires.
   webhook/inbound, analytics, and completed-outbox categories.
 - Keep user deletion/anonymisation, legal holds, support/fulfilment/payment
   evidence, and backup-retention decisions in separately approved procedures.
-- Rotate Meta, Razorpay, SendGrid, database, admin, and AI secrets on a schedule
+- Rotate Meta, Razorpay, AWS/SES, database, admin, and AI secrets on a schedule
   and after any suspected exposure.
 - For Meta app-secret and Razorpay webhook-secret rotation, follow the
   current/`_PREVIOUS` overlap procedure above; clear the previous value after

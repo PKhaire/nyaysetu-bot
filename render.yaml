@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: nyaysetu-bot
+    name: nyaysetu-bot-backend
     runtime: python
     plan: starter
     region: singapore
@@ -11,6 +11,8 @@ services:
     preDeployCommand: python -m alembic -c alembic.ini upgrade head
     startCommand: gunicorn --config gunicorn.conf.py app:app
     healthCheckPath: /health/ready
+    domains:
+      - api.nyaysetu.in
     maxShutdownDelaySeconds: 60
     envVars:
       - key: ENV
@@ -19,6 +21,17 @@ services:
         value: Asia/Kolkata
       - key: LOG_LEVEL
         value: INFO
+      # Render sets WEB_CONCURRENCY from the instance CPU count on newer
+      # services. NyaySetu intentionally runs one process until coordination
+      # and rate-limit state move to shared infrastructure.
+      - key: WEB_CONCURRENCY
+        value: "1"
+      # Use gunicorn.conf.py as the only process policy; Render's Python
+      # default otherwise injects --preload and a duplicate bind argument.
+      # The explicit CLI value also wins safely if Gunicorn gives environment
+      # arguments precedence over the config file.
+      - key: GUNICORN_CMD_ARGS
+        value: "--workers 1"
       - key: MAINTENANCE_MODE
         value: "false"
       - key: AUTO_CREATE_SCHEMA
@@ -78,19 +91,43 @@ services:
         sync: false
       - key: WHATSAPP_APP_SECRET
         sync: false
+      - key: WHATSAPP_APP_SECRET_PREVIOUS
+        sync: false
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET
         sync: false
       - key: RAZORPAY_WEBHOOK_SECRET
         sync: false
-      - key: SENDGRID_API_KEY
+      - key: RAZORPAY_WEBHOOK_SECRET_PREVIOUS
         sync: false
-      - key: SENDGRID_FROM_EMAIL
+      # Production readiness requires an explicitly supplied, partner-approved
+      # amount rather than silently accepting the development default.
+      - key: BOOKING_PRICE
+        sync: false
+      - key: SES_REGION
+        value: ap-south-1
+      - key: SES_FROM_EMAIL
+        sync: false
+      - key: SES_CONFIGURATION_SET
+        sync: false
+      - key: SES_CONNECT_TIMEOUT_SECONDS
+        value: "5"
+      - key: SES_READ_TIMEOUT_SECONDS
+        value: "15"
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      # Leave empty for a normal IAM access key. Populate only when using
+      # temporary AWS credentials, then rotate all three values together.
+      - key: AWS_SESSION_TOKEN
         sync: false
       - key: BOOKING_NOTIFICATION_EMAILS
         sync: false
       - key: SUPPORT_NOTIFICATION_EMAILS
+        sync: false
+      - key: PAYMENT_RECONCILIATION_EMAILS
         sync: false
       - key: SUPPORT_PHONE
         sync: false
@@ -166,12 +203,12 @@ services:
       - key: AUTO_SEND_RECEIPTS
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: AUTO_SEND_RECEIPTS
       - key: WHATSAPP_API_VERSION
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_API_VERSION
       - key: DB_POOL_SIZE
         value: "2"
@@ -180,107 +217,142 @@ services:
       - key: DATABASE_URL
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: DATABASE_URL
       - key: WHATSAPP_TOKEN
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_TOKEN
       - key: WHATSAPP_PHONE_ID
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_PHONE_ID
-      - key: SENDGRID_API_KEY
+      - key: SES_REGION
         fromService:
           type: web
-          name: nyaysetu-bot
-          envVarKey: SENDGRID_API_KEY
-      - key: SENDGRID_FROM_EMAIL
+          name: nyaysetu-bot-backend
+          envVarKey: SES_REGION
+      - key: SES_FROM_EMAIL
         fromService:
           type: web
-          name: nyaysetu-bot
-          envVarKey: SENDGRID_FROM_EMAIL
+          name: nyaysetu-bot-backend
+          envVarKey: SES_FROM_EMAIL
+      - key: SES_CONFIGURATION_SET
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: SES_CONFIGURATION_SET
+      - key: SES_CONNECT_TIMEOUT_SECONDS
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: SES_CONNECT_TIMEOUT_SECONDS
+      - key: SES_READ_TIMEOUT_SECONDS
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: SES_READ_TIMEOUT_SECONDS
+      - key: AWS_ACCESS_KEY_ID
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: AWS_ACCESS_KEY_ID
+      - key: AWS_SECRET_ACCESS_KEY
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: AWS_SECRET_ACCESS_KEY
+      - key: AWS_SESSION_TOKEN
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: AWS_SESSION_TOKEN
       - key: BOOKING_NOTIFICATION_EMAILS
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: BOOKING_NOTIFICATION_EMAILS
       - key: SUPPORT_NOTIFICATION_EMAILS
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: SUPPORT_NOTIFICATION_EMAILS
+      - key: PAYMENT_RECONCILIATION_EMAILS
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: PAYMENT_RECONCILIATION_EMAILS
       - key: CONSULTATION_REMINDER_CATCHUP_MINUTES
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: CONSULTATION_REMINDER_CATCHUP_MINUTES
       - key: WHATSAPP_REMINDER_24H_TEMPLATE_EN
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_24H_TEMPLATE_EN
       - key: WHATSAPP_REMINDER_24H_LANGUAGE_EN
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_24H_LANGUAGE_EN
       - key: WHATSAPP_REMINDER_24H_TEMPLATE_HI
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_24H_TEMPLATE_HI
       - key: WHATSAPP_REMINDER_24H_LANGUAGE_HI
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_24H_LANGUAGE_HI
       - key: WHATSAPP_REMINDER_24H_TEMPLATE_MR
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_24H_TEMPLATE_MR
       - key: WHATSAPP_REMINDER_24H_LANGUAGE_MR
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_24H_LANGUAGE_MR
       - key: WHATSAPP_REMINDER_2H_TEMPLATE_EN
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_2H_TEMPLATE_EN
       - key: WHATSAPP_REMINDER_2H_LANGUAGE_EN
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_2H_LANGUAGE_EN
       - key: WHATSAPP_REMINDER_2H_TEMPLATE_HI
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_2H_TEMPLATE_HI
       - key: WHATSAPP_REMINDER_2H_LANGUAGE_HI
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_2H_LANGUAGE_HI
       - key: WHATSAPP_REMINDER_2H_TEMPLATE_MR
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_2H_TEMPLATE_MR
       - key: WHATSAPP_REMINDER_2H_LANGUAGE_MR
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_2H_LANGUAGE_MR
       - key: AI_SAFETY_IDENTIFIER_SECRET
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: AI_SAFETY_IDENTIFIER_SECRET
 
   # Payment webhooks remain authoritative. This bounded independent lookup is
@@ -312,48 +384,48 @@ services:
       - key: DATABASE_URL
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: DATABASE_URL
       - key: RAZORPAY_MODE
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: RAZORPAY_MODE
       - key: RAZORPAY_KEY_ID
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: RAZORPAY_KEY_ID
       - key: RAZORPAY_KEY_SECRET
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: RAZORPAY_KEY_SECRET
       - key: RAZORPAY_API_TIMEOUT_SECONDS
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: RAZORPAY_API_TIMEOUT_SECONDS
       - key: PAYMENT_RECONCILIATION_LOOKBACK_DAYS
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: PAYMENT_RECONCILIATION_LOOKBACK_DAYS
       - key: AUTO_SEND_RECEIPTS
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: AUTO_SEND_RECEIPTS
       - key: BOOKING_NOTIFICATION_EMAILS
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: BOOKING_NOTIFICATION_EMAILS
-      - key: SUPPORT_NOTIFICATION_EMAILS
+      - key: PAYMENT_RECONCILIATION_EMAILS
         fromService:
           type: web
-          name: nyaysetu-bot
-          envVarKey: SUPPORT_NOTIFICATION_EMAILS
+          name: nyaysetu-bot-backend
+          envVarKey: PAYMENT_RECONCILIATION_EMAILS
 
   # Scheduling is harmless while template pairs are empty. The outbox worker
   # rechecks the same live configuration immediately before every send.
@@ -384,77 +456,77 @@ services:
       - key: DATABASE_URL
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: DATABASE_URL
       - key: CONSULTATION_REMINDER_CATCHUP_MINUTES
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: CONSULTATION_REMINDER_CATCHUP_MINUTES
       - key: CONSULTATION_REMINDER_BATCH_SIZE
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: CONSULTATION_REMINDER_BATCH_SIZE
       - key: WHATSAPP_REMINDER_24H_TEMPLATE_EN
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_24H_TEMPLATE_EN
       - key: WHATSAPP_REMINDER_24H_LANGUAGE_EN
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_24H_LANGUAGE_EN
       - key: WHATSAPP_REMINDER_24H_TEMPLATE_HI
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_24H_TEMPLATE_HI
       - key: WHATSAPP_REMINDER_24H_LANGUAGE_HI
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_24H_LANGUAGE_HI
       - key: WHATSAPP_REMINDER_24H_TEMPLATE_MR
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_24H_TEMPLATE_MR
       - key: WHATSAPP_REMINDER_24H_LANGUAGE_MR
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_24H_LANGUAGE_MR
       - key: WHATSAPP_REMINDER_2H_TEMPLATE_EN
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_2H_TEMPLATE_EN
       - key: WHATSAPP_REMINDER_2H_LANGUAGE_EN
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_2H_LANGUAGE_EN
       - key: WHATSAPP_REMINDER_2H_TEMPLATE_HI
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_2H_TEMPLATE_HI
       - key: WHATSAPP_REMINDER_2H_LANGUAGE_HI
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_2H_LANGUAGE_HI
       - key: WHATSAPP_REMINDER_2H_TEMPLATE_MR
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_2H_TEMPLATE_MR
       - key: WHATSAPP_REMINDER_2H_LANGUAGE_MR
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_REMINDER_2H_LANGUAGE_MR
 
   # This module exists and only performs conservative, bounded housekeeping.
@@ -487,40 +559,40 @@ services:
       - key: DATABASE_URL
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: DATABASE_URL
       - key: WEBHOOK_EVENT_TTL_DAYS
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: WEBHOOK_EVENT_TTL_DAYS
       - key: PROCESSED_MESSAGE_TTL_DAYS
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: PROCESSED_MESSAGE_TTL_DAYS
       - key: ANALYTICS_EVENT_TTL_DAYS
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: ANALYTICS_EVENT_TTL_DAYS
       - key: OUTBOX_COMPLETED_TTL_DAYS
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: OUTBOX_COMPLETED_TTL_DAYS
       - key: PAYMENT_LINK_TTL_MINUTES
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: PAYMENT_LINK_TTL_MINUTES
       - key: PAYMENT_RECONCILIATION_LOOKBACK_DAYS
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: PAYMENT_RECONCILIATION_LOOKBACK_DAYS
       - key: SUPPORT_SLA_HOURS
         fromService:
           type: web
-          name: nyaysetu-bot
+          name: nyaysetu-bot-backend
           envVarKey: SUPPORT_SLA_HOURS

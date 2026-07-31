@@ -18,7 +18,7 @@ Operator --------> Flask /admin/* --------------+      idempotency / analytics
                                                 +--> Razorpay payment links
                                                 +--> AI router
 
-python -m jobs.process_outbox ----------------------> WhatsApp / SendGrid
+python -m jobs.process_outbox ----------------------> WhatsApp / Amazon SES v2
 python -m jobs.reconcile_payments -----------------> Razorpay lookup/recovery
 python -m jobs.consultation_reminders -------------> durable reminder jobs
 python -m jobs.maintenance -------------------------> bounded retention/risk report
@@ -65,7 +65,7 @@ infrastructure and concurrency/load/provider-limit tests pass.
 | `jobs/migrate_sqlite_to_postgres.py` | Fail-closed, one-shot frozen SQLite import for an inactive contingency |
 | `services/whatsapp_service.py` | Validated WhatsApp payloads, bounded transport retries, structured delivery results |
 | `services/outbox_service.py` | Durable jobs, step-level idempotency, retry/backoff, lease recovery |
-| `services/email_service.py` | SendGrid booking/support notification delivery |
+| `services/email_service.py` | Privacy-minimised Amazon SES v2 booking, support, payment-review, and scheduled-report delivery |
 | `services/receipt_service.py` | Private temporary PDF receipt generation |
 | `services/engagement_service.py` | Persistent home, status, preparation, guides, support, and privacy content |
 | `services/ai_router.py` | Claude/OpenAI/local selection and fallback |
@@ -310,7 +310,7 @@ including SQLite backup/restore proof and an isolated rehearsal.
 - `analytics_events` stores bounded, redacted product events separately from
   the active user transaction.
 
-Readiness does not call Meta, Razorpay, SendGrid, or AI, and it does not verify
+Readiness does not call Meta, Razorpay, Amazon SES, or AI, and it does not verify
 provider reachability, outbox freshness, backup status, or webhook dashboard
 health. Those require external monitoring.
 
@@ -340,7 +340,9 @@ Required before production launch:
   legacy booking or payment reconciliation is required for this release.
 - One-worker web plus outbox, reconciliation, reminder, and maintenance
   deployments with isolated production secrets and alerts.
-- Signed Meta/Razorpay staging tests and approved SendGrid recipients.
+- Signed Meta/Razorpay staging tests plus verified Amazon SES identity/domain,
+  production access, email authentication, monitored configuration set, and
+  approved recipients.
 - Privacy/legal review, support/fulfilment and refund policies, approved
   retention scope, alerting, and runbooks.
 

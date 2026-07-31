@@ -807,9 +807,15 @@ def test_production_readiness_validates_secret_policy_and_contact_contract(
         "RAZORPAY_WEBHOOK_SECRET": "razorpay-webhook-secret",
         "RAZORPAY_WEBHOOK_SECRET_PREVIOUS": "",
         "AI_SAFETY_IDENTIFIER_SECRET": "c" * 32,
-        "SENDGRID_API_KEY": "SG.release-test-token",
-        "SENDGRID_FROM_EMAIL": "notifications@example.test",
+        "BOOKING_PRICE_CONFIGURED": True,
+        "SES_REGION": "ap-south-1",
+        "SES_FROM_EMAIL": "notifications@example.test",
+        "SES_CONFIGURATION_SET": "nyaysetu-transactional",
+        "AWS_ACCESS_KEY_ID": "test-access-key-id-123456",
+        "AWS_SECRET_ACCESS_KEY": "s" * 40,
+        "AWS_SESSION_TOKEN": "",
         "BOOKING_NOTIFICATION_EMAILS": ["bookings@example.test"],
+        "PAYMENT_RECONCILIATION_EMAILS": ["payments@example.test"],
         "SUPPORT_NOTIFICATION_EMAILS": ["support-ops@example.test"],
         "SUPPORT_EMAIL": "support@example.test",
         "PRIVACY_EMAIL": "privacy@example.test",
@@ -870,7 +876,9 @@ def test_production_readiness_validates_secret_policy_and_contact_contract(
         "WHATSAPP_TOKEN": "short",
         "RAZORPAY_KEY_SECRET": "short",
         "RAZORPAY_WEBHOOK_SECRET_PREVIOUS": "short",
-        "SENDGRID_API_KEY": "SG.short",
+        "AWS_ACCESS_KEY_ID": "short",
+        "AWS_SECRET_ACCESS_KEY": "short",
+        "AWS_SESSION_TOKEN": "short",
     }
     for name, weak_value in weak_secrets.items():
         monkeypatch.setattr(app_module, name, weak_value)
@@ -878,6 +886,25 @@ def test_production_readiness_validates_secret_policy_and_contact_contract(
         assert weak.status_code == 503, name
         assert weak.get_json()["configuration"] == "incomplete"
         monkeypatch.setattr(app_module, name, production_values[name])
+
+    invalid_deployment_settings = {
+        "BOOKING_PRICE_CONFIGURED": False,
+        "SES_REGION": "mumbai",
+        "SES_FROM_EMAIL": "not-an-email",
+        "SES_CONFIGURATION_SET": "contains spaces",
+        "LOG_LEVEL": "DEBUG",
+        "BOOKING_NOTIFICATION_EMAILS": ["not-an-email"],
+        "SUPPORT_NOTIFICATION_EMAILS": [
+            f"operations-{index}@example.test" for index in range(51)
+        ],
+    }
+    for name, invalid_value in invalid_deployment_settings.items():
+        original_value = getattr(app_module, name)
+        monkeypatch.setattr(app_module, name, invalid_value)
+        invalid = client.get("/health/ready")
+        assert invalid.status_code == 503, name
+        assert invalid.get_json()["configuration"] == "incomplete"
+        monkeypatch.setattr(app_module, name, original_value)
 
     monkeypatch.setattr(
         app_module,
@@ -915,9 +942,15 @@ def test_staging_readiness_requires_postgresql_test_keys_and_strict_config(
         "RAZORPAY_WEBHOOK_SECRET": "razorpay-webhook-secret",
         "RAZORPAY_WEBHOOK_SECRET_PREVIOUS": "",
         "AI_SAFETY_IDENTIFIER_SECRET": "c" * 32,
-        "SENDGRID_API_KEY": "SG.release-test-token",
-        "SENDGRID_FROM_EMAIL": "notifications@example.test",
+        "BOOKING_PRICE_CONFIGURED": True,
+        "SES_REGION": "ap-south-1",
+        "SES_FROM_EMAIL": "notifications@example.test",
+        "SES_CONFIGURATION_SET": "nyaysetu-transactional",
+        "AWS_ACCESS_KEY_ID": "test-access-key-id-123456",
+        "AWS_SECRET_ACCESS_KEY": "s" * 40,
+        "AWS_SESSION_TOKEN": "",
         "BOOKING_NOTIFICATION_EMAILS": ["bookings@example.test"],
+        "PAYMENT_RECONCILIATION_EMAILS": ["payments@example.test"],
         "SUPPORT_NOTIFICATION_EMAILS": ["support-ops@example.test"],
         "SUPPORT_EMAIL": "support@example.test",
         "PRIVACY_EMAIL": "privacy@example.test",
@@ -954,6 +987,18 @@ def test_staging_readiness_requires_postgresql_test_keys_and_strict_config(
     assert live_payments.get_json()["configuration"] == "incomplete"
 
     monkeypatch.setattr(app_module, "RAZORPAY_MODE", "test")
+    weak_aws_credentials = {
+        "AWS_ACCESS_KEY_ID": "short",
+        "AWS_SECRET_ACCESS_KEY": "short",
+        "AWS_SESSION_TOKEN": "short",
+    }
+    for name, weak_value in weak_aws_credentials.items():
+        monkeypatch.setattr(app_module, name, weak_value)
+        weak = client.get("/health/ready")
+        assert weak.status_code == 503, name
+        assert weak.get_json()["configuration"] == "incomplete"
+        monkeypatch.setattr(app_module, name, staging_values[name])
+
     monkeypatch.setattr(
         app_module,
         "get_db_health",

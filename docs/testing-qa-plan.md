@@ -10,7 +10,7 @@ delivery, transport, and AI-safety modules:
 | `tests/test_booking_service.py` | IST slot mapping, booking horizon, daily/slot capacity, provider rollback, stored amount/link expiry, payment idempotency, pending expiry |
 | `tests/test_app_flows.py` | Meta signature rejection, persistent home, booking-scope review, durable inbound leases/batch draining, bounded/pruned early-rate-limit state, capped outbox fast-path saturation, safe post-mutation reply deferral, replay suppression, ambiguous-delivery no-send, and terminal payload scrubbing |
 | `tests/test_app_webhooks.py` | Razorpay signature-before-parse, live dual-resource entitlement validation, terminal manual-disposition authority, stored-price/reconciliation evidence, replay, retryable failures, health/schema/strong-configuration readiness |
-| `tests/test_delivery_services.py` | Structured WhatsApp failures, step-level outbox retry, receipt cleanup/private temp files, PII-safe SendGrid failure logging |
+| `tests/test_delivery_services.py` | Structured WhatsApp failures, step-level outbox retry, receipt cleanup/private temp files, PII-safe Amazon SES failure logging |
 | `tests/test_ai_safety.py` | PII scrubbing, pseudonymous identifiers, urgent/harmful guardrails, provider short-circuiting, OpenAI privacy/request contract |
 | `tests/test_ai_provider_compatibility.py` | Thread-safe bounded/TTL response cache, provider/model contracts, one-attempt fallback, and compatibility errors |
 | `tests/test_whatsapp_service.py` | Payload limits, structured configuration failures, safe logs/provider errors, bounded retry behavior, stored-price payment confirmation |
@@ -127,9 +127,10 @@ For admin and health:
 
 - Liveness does not require providers.
 - Readiness fails for database/schema/configuration problems, weak current
-  WhatsApp/Razorpay/admin/AI credentials, an invalid SendGrid key, non-HTTPS
-  policy URLs, invalid contacts, a nonempty weak previous rotation secret, or a
-  future/malformed legal-review date.
+  WhatsApp/Razorpay/admin/AI credentials, missing/invalid SES region,
+  from-address or AWS access credentials, non-HTTPS policy URLs, invalid
+  contacts, a nonempty weak previous rotation secret, or a future/malformed
+  legal-review date.
 - Missing admin configuration hides routes.
 - Invalid/valid bearer and header tokens.
 - Support pagination limits and no-cache headers.
@@ -173,7 +174,7 @@ preconditions for a future topology change, not permission to override
 
 ### Staging end-to-end tests
 
-Use isolated Meta, Razorpay test-mode, SendGrid, and PostgreSQL resources:
+Use isolated Meta, Razorpay test-mode, Amazon SES, and PostgreSQL resources:
 
 Before user-flow acceptance, provision a new empty staging PostgreSQL database,
 apply the current Alembic revision, run `current` and `check`, and verify
@@ -187,7 +188,8 @@ or production rollout.
    Link and Payment resources pass the full ownership/capture/refund contract.
 4. Verify one WhatsApp success and configured email.
 5. Redeliver the provider event and verify no duplicate side effect.
-6. Fail WhatsApp/SendGrid, run the outbox cron, and verify recovery.
+6. Fail WhatsApp/Amazon SES, run the outbox cron, and verify recovery without
+   an immediate SDK retry.
 7. Expire a pending link and verify capacity becomes available.
 8. Exercise support and feedback and inspect only through authorized access.
 9. Verify receipt delivery and file cleanup when explicitly enabled.
@@ -286,8 +288,11 @@ Code gates:
 External gates:
 
 - Signed Meta and Razorpay staging evidence is retained.
-- SendGrid sender/recipients are approved. Every enabled reminder pair has
-  matching Meta template/language approval, opt-in, localization, and
+- The Amazon SES identity/domain and recipients are approved; DKIM/SPF/DMARC,
+  production access, least-privilege `ses:SendEmail`, configuration-set
+  bounce/complaint/delivery monitoring, the 50-destination BCC bound, bounded
+  timeouts, and PII-safe failure telemetry are verified. Every enabled reminder
+  pair has matching Meta template/language approval, opt-in, localization, and
   suppression evidence.
 - Fresh staging and production backup/restore evidence passes, and staging
   test-transaction reconciliation passes in Razorpay test mode.

@@ -12,10 +12,27 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
+def _render_service_block(blueprint: str, service_name: str) -> str:
+    marker = f"    name: {service_name}\n"
+    marker_index = blueprint.index(marker)
+    start = blueprint.rfind("\n  - type:", 0, marker_index)
+    start = 0 if start == -1 else start + 1
+    end = blueprint.find("\n  - type:", marker_index)
+    return blueprint[start:] if end == -1 else blueprint[start:end]
+
+
 def test_config_rejects_unknown_environment(monkeypatch):
     monkeypatch.setenv("ENV", "prod")
 
     with pytest.raises(ValueError, match="ENV must be one of"):
+        runpy.run_path(str(PROJECT_ROOT / "config.py"))
+
+
+def test_config_rejects_unknown_log_level(monkeypatch):
+    monkeypatch.setenv("ENV", "test")
+    monkeypatch.setenv("LOG_LEVEL", "VERBOSE")
+
+    with pytest.raises(ValueError, match="LOG_LEVEL must be one of"):
         runpy.run_path(str(PROJECT_ROOT / "config.py"))
 
 
@@ -85,6 +102,12 @@ def test_deployment_commands_and_render_release_controls_exist():
     assert blueprint.count(
         "- key: MAINTENANCE_MODE\n        value: \"false\""
     ) == 1
+    assert blueprint.count(
+        "- key: WEB_CONCURRENCY\n        value: \"1\""
+    ) == 1
+    assert blueprint.count(
+        "- key: GUNICORN_CMD_ARGS\n        value: \"--workers 1\""
+    ) == 1
     assert (
         "- key: LEGAL_CONTENT_REVIEWED_VERSION\n        sync: false"
         in blueprint
@@ -132,8 +155,52 @@ def test_render_pins_operational_policy_for_maintenance():
         "PAYMENT_LINK_TTL_MINUTES": 1,
         "PAYMENT_RECONCILIATION_LOOKBACK_DAYS": 2,
         "SUPPORT_SLA_HOURS": 1,
-        "SUPPORT_NOTIFICATION_EMAILS": 2,
+        "SUPPORT_NOTIFICATION_EMAILS": 1,
+        "PAYMENT_RECONCILIATION_EMAILS": 2,
         "CONSULTATION_REMINDER_CATCHUP_MINUTES": 2,
     }
     for key, count in expected_reference_counts.items():
         assert blueprint.count(f"envVarKey: {key}") == count
+
+
+def test_render_propagates_ses_configuration_to_the_email_outbox():
+    blueprint = (PROJECT_ROOT / "render.yaml").read_text(encoding="utf-8")
+    web = _render_service_block(blueprint, "nyaysetu-bot-backend")
+    outbox = _render_service_block(blueprint, "nyaysetu-outbox")
+
+    assert "SENDGRID" not in blueprint
+    assert "    name: nyaysetu-bot-backend\n" in web
+    assert "    domains:\n      - api.nyaysetu.in\n" in web
+    assert "- key: SES_REGION\n        value: ap-south-1" in web
+    assert '- key: SES_CONNECT_TIMEOUT_SECONDS\n        value: "5"' in web
+    assert '- key: SES_READ_TIMEOUT_SECONDS\n        value: "15"' in web
+
+    operator_supplied = {
+        "SES_FROM_EMAIL",
+        "SES_CONFIGURATION_SET",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "BOOKING_PRICE",
+        "WHATSAPP_APP_SECRET_PREVIOUS",
+        "RAZORPAY_WEBHOOK_SECRET_PREVIOUS",
+    }
+    for key in operator_supplied:
+        assert f"- key: {key}\n        sync: false" in web
+
+    inherited = {
+        "SES_REGION",
+        "SES_FROM_EMAIL",
+        "SES_CONFIGURATION_SET",
+        "SES_CONNECT_TIMEOUT_SECONDS",
+        "SES_READ_TIMEOUT_SECONDS",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "BOOKING_NOTIFICATION_EMAILS",
+        "PAYMENT_RECONCILIATION_EMAILS",
+        "SUPPORT_NOTIFICATION_EMAILS",
+    }
+    for key in inherited:
+        assert f"- key: {key}\n        fromService:" in outbox
+        assert f"envVarKey: {key}" in outbox

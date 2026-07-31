@@ -32,7 +32,11 @@ from config import (
     WHATSAPP_VERIFY_TOKEN,
     BOOKING_TERMS_VERSION,
     BOOKING_PRICE,
+    BOOKING_PRICE_CONFIGURED,
     CANCELLATION_POLICY_URL,
+    AWS_ACCESS_KEY_ID,
+    AWS_SECRET_ACCESS_KEY,
+    AWS_SESSION_TOKEN,
     RAZORPAY_MODE,
     RAZORPAY_KEY_ID,
     RAZORPAY_KEY_SECRET,
@@ -43,6 +47,7 @@ from config import (
     MAINTENANCE_ADMIN_BYPASS,
     AUTO_SEND_RECEIPTS,
     BOOKING_NOTIFICATION_EMAILS,
+    PAYMENT_RECONCILIATION_EMAILS,
     SUPPORT_NOTIFICATION_EMAILS,
     SUPPORT_SLA_HOURS,
     SUPPORT_EMAIL,
@@ -61,8 +66,9 @@ from config import (
     TERMS_OF_SERVICE_URL,
     USER_MESSAGE_LIMIT,
     USER_MESSAGE_WINDOW_SECONDS,
-    SENDGRID_API_KEY,
-    SENDGRID_FROM_EMAIL,
+    SES_CONFIGURATION_SET,
+    SES_FROM_EMAIL,
+    SES_REGION,
     WEBHOOK_EVENT_TTL_DAYS,
     WEBHOOK_MAX_PAYLOAD_BYTES,
     WEBHOOK_REPLAY_WINDOW_SECONDS,
@@ -1587,11 +1593,43 @@ def safe_header(text: str) -> str:
     )
 
 
-_EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_EMAIL_PATTERN = re.compile(
+    r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@"
+    r"(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+"
+    r"[A-Za-z]{2,63}$"
+)
 
 
 def _valid_email(value: str) -> bool:
-    return bool(_EMAIL_PATTERN.fullmatch(str(value or "").strip()))
+    normalized = str(value or "").strip()
+    local_part = normalized.partition("@")[0]
+    return bool(
+        normalized
+        and normalized.isascii()
+        and len(normalized) <= 254
+        and _EMAIL_PATTERN.fullmatch(normalized)
+        and not local_part.startswith(".")
+        and not local_part.endswith(".")
+        and ".." not in local_part
+    )
+
+
+def _valid_ses_region(value: str) -> bool:
+    """Accept standard AWS-style region identifiers without hard-coding one."""
+
+    return bool(
+        re.fullmatch(
+            r"[a-z]{2}(?:-[a-z0-9]+)+-\d+",
+            str(value or "").strip(),
+        )
+    )
+
+
+def _valid_ses_configuration_set(value: str) -> bool:
+    normalized = str(value or "").strip()
+    return not normalized or bool(
+        re.fullmatch(r"[A-Za-z0-9_-]{1,64}", normalized)
+    )
 
 
 def _valid_https_url(value: str) -> bool:
@@ -1634,9 +1672,13 @@ def _deployment_configuration_is_valid(
         RAZORPAY_KEY_SECRET,
         RAZORPAY_WEBHOOK_SECRET,
         AI_SAFETY_IDENTIFIER_SECRET,
-        SENDGRID_API_KEY,
-        SENDGRID_FROM_EMAIL,
+        AWS_ACCESS_KEY_ID,
+        AWS_SECRET_ACCESS_KEY,
+        SES_CONFIGURATION_SET,
+        SES_FROM_EMAIL,
+        SES_REGION,
         BOOKING_NOTIFICATION_EMAILS,
+        PAYMENT_RECONCILIATION_EMAILS,
         SUPPORT_NOTIFICATION_EMAILS,
         SUPPORT_EMAIL,
         PRIVACY_EMAIL,
@@ -1649,10 +1691,11 @@ def _deployment_configuration_is_valid(
         LEGAL_CONTENT_VERSION,
     )
     email_values = (
-        SENDGRID_FROM_EMAIL,
+        SES_FROM_EMAIL,
         SUPPORT_EMAIL,
         PRIVACY_EMAIL,
         *BOOKING_NOTIFICATION_EMAILS,
+        *PAYMENT_RECONCILIATION_EMAILS,
         *SUPPORT_NOTIFICATION_EMAILS,
     )
     policy_urls = (
@@ -1681,6 +1724,8 @@ def _deployment_configuration_is_valid(
         and RAZORPAY_MODE == payment_mode
         and RAZORPAY_KEY_ID.startswith(payment_key_prefix)
         and len(RAZORPAY_KEY_ID) >= 16
+        and BOOKING_PRICE_CONFIGURED
+        and LOG_LEVEL != "DEBUG"
         and not AUTO_CREATE_SCHEMA
         and not ALLOW_INSECURE_WEBHOOKS
         and len(ADMIN_TOKEN) >= 32
@@ -1698,10 +1743,24 @@ def _deployment_configuration_is_valid(
             not RAZORPAY_WEBHOOK_SECRET_PREVIOUS
             or len(RAZORPAY_WEBHOOK_SECRET_PREVIOUS) >= 16
         )
-        and SENDGRID_API_KEY.startswith("SG.")
-        and len(SENDGRID_API_KEY) >= 16
+        and len(AWS_ACCESS_KEY_ID) >= 16
+        and len(AWS_SECRET_ACCESS_KEY) >= 32
+        and (
+            not AWS_SESSION_TOKEN
+            or len(AWS_SESSION_TOKEN) >= 16
+        )
+        and _valid_ses_region(SES_REGION)
+        and _valid_ses_configuration_set(SES_CONFIGURATION_SET)
         and WHATSAPP_PHONE_ID.isdigit()
         and all(_valid_email(value) for value in email_values)
+        and all(
+            len(set(recipients)) <= 50
+            for recipients in (
+                BOOKING_NOTIFICATION_EMAILS,
+                PAYMENT_RECONCILIATION_EMAILS,
+                SUPPORT_NOTIFICATION_EMAILS,
+            )
+        )
         and all(_valid_https_url(value) for value in policy_urls)
         and legal_review_ok
     )
@@ -3506,8 +3565,9 @@ def _persist_payment_review(
         received_amount=received_amount,
         currency=currency,
     )
-    if reconciliation.status == "OPEN" and (
-        BOOKING_NOTIFICATION_EMAILS or SUPPORT_NOTIFICATION_EMAILS
+    if (
+        reconciliation.status == "OPEN"
+        and PAYMENT_RECONCILIATION_EMAILS
     ):
         enqueue_job(
             db,

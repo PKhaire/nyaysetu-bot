@@ -118,7 +118,7 @@ def reconciliation_db(monkeypatch):
         expire_on_commit=False,
     )
     monkeypatch.setattr(reconciliation, "BOOKING_NOTIFICATION_EMAILS", [])
-    monkeypatch.setattr(reconciliation, "SUPPORT_NOTIFICATION_EMAILS", [])
+    monkeypatch.setattr(reconciliation, "PAYMENT_RECONCILIATION_EMAILS", [])
     monkeypatch.setattr(reconciliation, "AUTO_SEND_RECEIPTS", False)
     try:
         yield testing_session
@@ -365,7 +365,7 @@ def test_review_enqueues_one_deduplicated_operations_alert(
     booking_id, _, _ = _pending_booking(reconciliation_db)
     monkeypatch.setattr(
         reconciliation,
-        "SUPPORT_NOTIFICATION_EMAILS",
+        "PAYMENT_RECONCILIATION_EMAILS",
         ["operations@example.test"],
     )
     entity = _provider_entity(amount=10_000)

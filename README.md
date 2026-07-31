@@ -44,7 +44,7 @@ Meta Cloud API --> Flask webhook --> SQLAlchemy --> PostgreSQL
                          |
                          +--> local/OpenAI/Claude information provider
                          +--> Razorpay payment links and signed webhook
-                         +--> SendGrid notifications
+                         +--> Amazon SES v2 notifications
 ```
 
 SQLite is a development fallback. A managed PostgreSQL database is a production
@@ -109,7 +109,7 @@ critical:
 | Database | `DATABASE_URL` pointing to managed PostgreSQL |
 | Meta | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`; optional `WHATSAPP_APP_SECRET_PREVIOUS` during rotation |
 | Razorpay | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `RAZORPAY_MODE=live`; optional `RAZORPAY_WEBHOOK_SECRET_PREVIOUS` during rotation |
-| Email | `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, `BOOKING_NOTIFICATION_EMAILS`, `SUPPORT_NOTIFICATION_EMAILS` |
+| Email | `SES_REGION`, `SES_FROM_EMAIL`, `SES_CONFIGURATION_SET`, AWS credentials, `BOOKING_NOTIFICATION_EMAILS`, `SUPPORT_NOTIFICATION_EMAILS`, `PAYMENT_RECONCILIATION_EMAILS` |
 | User trust | reviewed `SUPPORT_*`, `PRIVACY_*`, policy URLs, and consent/terms versions |
 | Operations | a long random `ADMIN_TOKEN` and `AI_SAFETY_IDENTIFIER_SECRET` |
 
@@ -145,12 +145,14 @@ live keys plus an exact content-review version/date pair. Current production
 credentials must also meet the enforced format/strength contract: 32 or more
 characters for the WhatsApp app secret/token and admin/AI secrets, 16 or more
 for the WhatsApp verify token and Razorpay key/webhook secrets, an
-`rzp_live_...` key ID, and an `SG.` SendGrid key. A configured previous Meta app
-secret must also be at least 32 characters and a configured previous Razorpay
-webhook secret at least 16; leave them empty outside a bounded rotation. It does
-not prove that policy/counsel approval exists or that SendGrid, Meta, Razorpay,
-or an AI provider is currently reachable; external evidence, smoke tests, and
-alerts remain necessary.
+`rzp_live_...` key ID, a valid SES region/from-address pair, an AWS access-key ID
+of at least 16 characters, an AWS secret access key of at least 32, and an
+optional session token of at least 16. A configured previous Meta app secret
+must also be at least 32 characters and a configured previous Razorpay webhook
+secret at least 16; leave them empty outside a bounded rotation. It does not
+prove that policy/counsel approval exists or that SES, Meta, Razorpay, or an AI
+provider is currently reachable; external evidence, smoke tests, and alerts
+remain necessary.
 
 ## HTTP endpoints
 
@@ -214,8 +216,8 @@ four crons inherit that exact production connection.
 The outbox command processes a bounded batch and exits, which is why it is a
 cron job instead of a long-running worker. Every cron inherits the same
 `DATABASE_URL` and only the additional settings it needs. The outbox receives
-WhatsApp/SendGrid delivery settings plus the reminder policy it must recheck at
-send time; reconciliation receives Razorpay API credentials and notification
+WhatsApp/Amazon SES delivery settings plus the reminder policy it must recheck
+at send time; reconciliation receives Razorpay API credentials and notification
 recipients; reminders receive template/catch-up policy; and maintenance receives
 retention/risk policy. After rotating a shared value, sync the Blueprint,
 redeploy every affected service, and verify resolved values. Keep
@@ -263,7 +265,7 @@ This release intentionally imports no old-bot data:
    production. Never run staging tests against the production database.
 2. Set `AUTO_CREATE_SCHEMA=false` and run Alembic `upgrade head`, `current`,
    and `check` against staging.
-3. Complete signed Meta, Razorpay test-mode, SendGrid, failure/retry,
+3. Complete signed Meta, Razorpay test-mode, Amazon SES, failure/retry,
    maintenance and operator-queue acceptance in staging.
 4. Create or re-create an empty production database, apply the same Alembic
    revision, and verify that no synthetic staging rows exist.
@@ -293,7 +295,7 @@ payment references, and potentially sensitive legal facts. Before public use:
   reviews, support, feedback, conversations, failed evidence, and legacy
   message claims; legal hold, data-subject deletion, and backup retention
   remain external governance work.
-- Restrict database, Render, Meta, Razorpay, SendGrid, and admin access by role;
+- Restrict database, Render, Meta, Razorpay, AWS/SES, and admin access by role;
   enable MFA, audit access, rotate secrets, and test restore procedures.
 - Treat PII scrubbing and model guardrails as defence-in-depth, not a guarantee.
   Do not send identity documents, evidence, privileged communications, or
@@ -341,7 +343,8 @@ A production release still requires:
   duplicate-delivery retry, invalid/refunded-state review, and terminal manual
   disposition preservation;
 - WhatsApp interactive-message rendering in all three languages;
-- SendGrid sender/recipient verification and outbox retry testing;
+- Amazon SES identity/domain verification, DKIM/SPF/DMARC, sandbox-exit,
+  configuration-set monitoring, approved-recipient, and outbox-retry testing;
 - database backup/restore evidence;
 - migration-head, dry-run maintenance, and payment-reconciliation evidence;
 - alerting for webhook 5xx responses, dead outbox jobs, payment mismatch,

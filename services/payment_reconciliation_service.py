@@ -20,12 +20,12 @@ from sqlalchemy import or_
 from config import (
     AUTO_SEND_RECEIPTS,
     BOOKING_NOTIFICATION_EMAILS,
+    PAYMENT_RECONCILIATION_EMAILS,
     PAYMENT_RECONCILIATION_LOOKBACK_DAYS,
     RAZORPAY_API_TIMEOUT_SECONDS,
     RAZORPAY_KEY_ID,
     RAZORPAY_KEY_SECRET,
     RAZORPAY_MODE,
-    SUPPORT_NOTIFICATION_EMAILS,
 )
 from models import (
     AdminAuditEvent,
@@ -393,9 +393,7 @@ def _upsert_review(
         item.resolved_by = None
         item.resolution_note = None
     db.flush()
-    if status == "OPEN" and (
-        BOOKING_NOTIFICATION_EMAILS or SUPPORT_NOTIFICATION_EMAILS
-    ):
+    if status == "OPEN" and PAYMENT_RECONCILIATION_EMAILS:
         enqueue_job(
             db,
             "payment_reconciliation_alert",

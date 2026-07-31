@@ -61,7 +61,7 @@ non-empty target, and rolls back an incomplete import. Validate counts,
 constraints, sequences, backfills, and every payment state before any service
 uses the target. Retain the untouched SQLite backup through the rollback window.
 The authoritative sequence is in the
-[PostgreSQL cutover runbook](deployment-operations.md#postgresql-cutover).
+[one-shot cutover utility contract](deployment-operations.md#one-shot-cutover-utility-contract).
 
 ## Render release controls
 

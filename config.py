@@ -150,6 +150,14 @@ if ENV not in _ALLOWED_ENVIRONMENTS:
     )
 APP_TIMEZONE = env_str("APP_TIMEZONE", "Asia/Kolkata", allow_empty=False)
 LOG_LEVEL = env_str("LOG_LEVEL", "INFO", allow_empty=False).upper()
+_ALLOWED_LOG_LEVELS = frozenset(
+    {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+)
+if LOG_LEVEL not in _ALLOWED_LOG_LEVELS:
+    raise ValueError(
+        "LOG_LEVEL must be one of: "
+        f"{', '.join(sorted(_ALLOWED_LOG_LEVELS))}"
+    )
 
 # Maintenance mode.
 MAINTENANCE_MODE = env_bool("MAINTENANCE_MODE", False)
@@ -195,6 +203,10 @@ SUPPORT_NOTIFICATION_EMAILS = env_csv(
     "SUPPORT_NOTIFICATION_EMAILS",
     (),
 )
+PAYMENT_RECONCILIATION_EMAILS = env_csv(
+    "PAYMENT_RECONCILIATION_EMAILS",
+    (),
+)
 SUPPORT_SLA_HOURS = env_int(
     "SUPPORT_SLA_HOURS",
     24,
@@ -202,21 +214,26 @@ SUPPORT_SLA_HOURS = env_int(
     maximum=168,
 )
 
-# Transactional/internal email transport.
-SENDGRID_API_KEY = env_str("SENDGRID_API_KEY")
-SENDGRID_FROM_EMAIL = env_str("SENDGRID_FROM_EMAIL")
-SENDGRID_CONNECT_TIMEOUT_SECONDS = env_float(
-    "SENDGRID_CONNECT_TIMEOUT_SECONDS",
+# Transactional/internal email transport. Amazon SES is called through its
+# HTTPS API; credentials stay in the deployment secret store.
+SES_REGION = env_str("SES_REGION", "ap-south-1", allow_empty=False)
+SES_FROM_EMAIL = env_str("SES_FROM_EMAIL")
+SES_CONFIGURATION_SET = env_str("SES_CONFIGURATION_SET")
+SES_CONNECT_TIMEOUT_SECONDS = env_float(
+    "SES_CONNECT_TIMEOUT_SECONDS",
     5.0,
     minimum=1.0,
     maximum=30.0,
 )
-SENDGRID_READ_TIMEOUT_SECONDS = env_float(
-    "SENDGRID_READ_TIMEOUT_SECONDS",
+SES_READ_TIMEOUT_SECONDS = env_float(
+    "SES_READ_TIMEOUT_SECONDS",
     15.0,
     minimum=1.0,
     maximum=60.0,
 )
+AWS_ACCESS_KEY_ID = env_str("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = env_str("AWS_SECRET_ACCESS_KEY")
+AWS_SESSION_TOKEN = env_str("AWS_SESSION_TOKEN")
 
 # WhatsApp / Meta.
 WHATSAPP_TOKEN = env_str("WHATSAPP_TOKEN")
@@ -428,6 +445,7 @@ OUTBOX_COMPLETED_TTL_DAYS = env_int(
 )
 
 # Booking rules and capacity.
+BOOKING_PRICE_CONFIGURED = bool(os.getenv("BOOKING_PRICE", "").strip())
 BOOKING_PRICE = env_int("BOOKING_PRICE", 499, minimum=1)
 BOOKING_CUTOFF_HOURS = env_float(
     "BOOKING_CUTOFF_HOURS",

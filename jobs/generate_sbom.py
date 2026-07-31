@@ -17,7 +17,7 @@ from urllib.parse import quote
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_LOCK = PROJECT_ROOT / "requirements.lock"
 DEFAULT_OUTPUT = PROJECT_ROOT / "sbom.cdx.json"
-RELEASE_VERSION = "2026.07.29-rc1"
+RELEASE_VERSION = "2026.07.31-rc3"
 _EXACT_REQUIREMENT = re.compile(
     r"^(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)==(?P<version>[^\s;]+)$"
 )

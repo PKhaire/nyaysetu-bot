@@ -6,31 +6,33 @@ from external rollout work and future product ideas.
 
 ## Read in this order
 
-1. [Master product, technology, launch and growth blueprint](NYAYSETU_MASTER_BLUEPRINT.md)
+1. [RC3 release notes](RELEASE_NOTES_2026-07-31_RC3.md) — exact candidate
+   changes, verification evidence, and mandatory external gates.
+2. [Master product, technology, launch and growth blueprint](NYAYSETU_MASTER_BLUEPRINT.md)
    — consolidated status, decisions, user experience, architecture, privacy,
    launch, operations, budget, roadmap and marketing strategy.
-2. [Functional specification](functional-specification.md) — implemented
+3. [Functional specification](functional-specification.md) — implemented
    user and operations behavior.
-3. [Technical architecture](technical-architecture.md) — runtime, data flow,
+4. [Technical architecture](technical-architecture.md) — runtime, data flow,
    idempotency, database, outbox, and AI design.
-4. [API and integrations](api-integrations.md) — routes and provider contracts.
-5. [Data model and governance](data-model.md) — current entities, sensitivity,
+5. [API and integrations](api-integrations.md) — routes and provider contracts.
+6. [Data model and governance](data-model.md) — current entities, sensitivity,
    lifecycle, and migration gates.
-6. [Security, risk, and compliance](security-risk-compliance.md) — controls,
+7. [Security, risk, and compliance](security-risk-compliance.md) — controls,
    limitations, and launch risks.
-7. [Legal content review checklist](legal-content-review-checklist.md) —
+8. [Legal content review checklist](legal-content-review-checklist.md) —
    version-specific reviewer scope and sign-off gate.
-8. [Testing and QA plan](testing-qa-plan.md) — automated coverage and required
+9. [Testing and QA plan](testing-qa-plan.md) — automated coverage and required
    staging/migration evidence.
-9. [Deployment and operations](deployment-operations.md) — environment,
+10. [Deployment and operations](deployment-operations.md) — environment,
    cutover, monitoring, runbooks, and rollback.
-10. [Client and user perspective](client-user-perspective.md) — user promise,
+11. [Client and user perspective](client-user-perspective.md) — user promise,
    journey, trust, and acceptance.
-11. [Business perspective](business-perspective.md) — value, operating model,
+12. [Business perspective](business-perspective.md) — value, operating model,
    metrics, and responsible growth.
-12. [Roadmap and backlog](roadmap-backlog.md) — completed foundation, launch
+13. [Roadmap and backlog](roadmap-backlog.md) — completed foundation, launch
     gates, and future milestones.
-13. [Local AI demo](local-ai-demo.md) — optional demonstration of the built-in
+14. [Local AI demo](local-ai-demo.md) — optional demonstration of the built-in
     local knowledge path; it is not the production architecture specification.
 
 ## Current product
@@ -132,7 +134,7 @@ Still required before production cutover:
   changes.
 - Deploy the one-worker web service plus outbox, reconciliation, reminder, and
   maintenance crons with correctly scoped shared settings.
-- Pass signed Meta/Razorpay/SendGrid staging, duplicate/failure, and PostgreSQL
+- Pass signed Meta/Razorpay/Amazon SES staging, duplicate/failure, and PostgreSQL
   concurrency tests.
 - Staff consultation fulfilment/support and approve price, capacity, refund,
   cancellation, privacy, AI, retention, and incident policies.
