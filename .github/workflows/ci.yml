@@ -68,7 +68,7 @@ jobs:
 
       - name: Run tests
         run: >-
-          pytest -q
+          python -m pytest -q
           --cov=app --cov=services
           --cov-report=term-missing --cov-report=xml
           --cov-fail-under=60
