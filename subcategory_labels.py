@@ -241,6 +241,28 @@ SUBCATEGORY_LABELS = {
         "mr": "विमा दावा",
     },
 
+    # -------- OTHER / DOCUMENT HELP --------
+    "General Legal Query": {
+        "en": "General Legal Query",
+        "hi": "General Legal Sawaal",
+        "mr": "कायदेशीर प्रश्न",
+    },
+    "Legal Notice": {
+        "en": "Legal Notice",
+        "hi": "Legal Notice",
+        "mr": "कायदेशीर नोटीस",
+    },
+    "Draft Agreement": {
+        "en": "Draft Agreement",
+        "hi": "Agreement Draft",
+        "mr": "कराराचा मसुदा",
+    },
+    "Document Review": {
+        "en": "Document Review",
+        "hi": "Document Review",
+        "mr": "कागदपत्र तपासणी",
+    },
+
     # -------- COMMON --------
     "Not Sure": {
         "en": "Not Sure",

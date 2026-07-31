@@ -18,8 +18,8 @@ delivery, transport, and AI-safety modules:
 | `tests/test_payment_reconciliation.py` | Dual-resource exact/non-refunded capture recovery, ambiguity/concurrency preservation, idempotency, and provider failures |
 | `tests/test_consultation_reminders.py` | Empty-config no-op, language/template gating, due windows, deduplication, suppression, delivery ambiguity, and CLI safety |
 | `tests/test_maintenance.py` | Protected evidence, bounded cleanup/dry-run, risk report, and exit semantics |
-| `tests/test_migrations.py` | Fresh baseline and representative legacy schema/backfill upgrade |
-| `tests/test_sqlite_postgres_cutover.py` | Full-table cutover plan, preflight non-mutation, bounded copy, rollback, schema/source/empty-target checks, credential isolation, and CLI fail-closed behavior |
+| `tests/test_migrations.py` | Fresh baseline plus regression coverage for the inactive legacy schema/backfill contingency |
+| `tests/test_sqlite_postgres_cutover.py` | Regression coverage for the inactive SQLite-import contingency: full-table plan, preflight non-mutation, bounded copy, rollback, schema/source/empty-target checks, credential isolation, and CLI fail-closed behavior |
 | `tests/test_deployment_config.py` | One-worker/query-safe Gunicorn and Render process contract |
 | `tests/test_dependency_lock.py` | Exact direct/runtime lock alignment, five-service lock installation, and deterministic CycloneDX SBOM parity |
 
@@ -148,13 +148,7 @@ SQLite tests do not prove production locking. Against disposable PostgreSQL:
 
 - Run the real schema/migration baseline.
 - Run `python -m alembic -c alembic.ini upgrade head`, `current`, and `check`
-  against a fresh and representative legacy database.
-- From a frozen, current-head SQLite backup, run the one-shot cutover preflight
-  and exact-confirmation import into an empty current-head PostgreSQL target.
-  Verify all table counts, preserved IDs/timestamps/foreign keys, reset integer
-  sequences, target locks, and atomic rollback after an injected mid-copy
-  failure. Also prove that stale/incomplete schemas, source sidecars or changes,
-  non-empty targets, and target URLs on the process command line are rejected.
+  against a fresh database.
 - Submit concurrent requests for the final available slot.
 - Deliver the same payment event through competing database sessions.
 - Claim the same outbox job from competing runners.
@@ -162,6 +156,16 @@ SQLite tests do not prove production locking. Against disposable PostgreSQL:
 - Verify enum, unique constraint, transaction isolation, pool, and timestamp
   behavior.
 - Load test signed WhatsApp batches and payment webhooks.
+
+Representative legacy-schema upgrades and the SQLite importer remain regression
+coverage for an inactive contingency; they are not staging or production launch
+gates. In disposable CI infrastructure, keep testing the legacy upgrade plus
+the one-shot preflight and exact-confirmation import from a frozen, current-head
+SQLite backup into an empty current-head PostgreSQL target. Verify all table
+counts, preserved IDs/timestamps/foreign keys, reset integer sequences, target
+locks, and atomic rollback after an injected mid-copy failure. Also prove that
+stale/incomplete schemas, source sidecars or changes, non-empty targets, and
+target URLs on the process command line are rejected.
 
 Production still enforces one Gunicorn web worker. Multi-worker tests are
 preconditions for a future topology change, not permission to override
@@ -171,10 +175,11 @@ preconditions for a future topology change, not permission to override
 
 Use isolated Meta, Razorpay test-mode, SendGrid, and PostgreSQL resources:
 
-Before user-flow acceptance, rehearse SQLite backup/restore and
-`python -m jobs.migrate_sqlite_to_postgres` exactly as documented, retain the
-privacy-safe preflight/import JSON, and prove rollback from the untouched
-source backup.
+Before user-flow acceptance, provision a new empty staging PostgreSQL database,
+apply the current Alembic revision, run `current` and `check`, and verify
+readiness. Populate it only with synthetic/test data. Do not restore a legacy
+SQLite database or run `jobs.migrate_sqlite_to_postgres` in the current staging
+or production rollout.
 
 1. Complete each primary user journey in all languages.
 2. Create one test link only after review.
@@ -236,20 +241,36 @@ Never run destructive, refund, or load scenarios against real user data.
 - Audit dependencies and container/runtime image.
 - Conduct external penetration testing before launch.
 
-## Migration and disaster-recovery QA
+## Fresh-release database and disaster-recovery QA
+
+- Provision an isolated empty staging PostgreSQL database; apply
+  `python -m alembic -c alembic.ini upgrade head`, then verify `current`,
+  `check`, and readiness.
+- Confirm staging contains only synthetic/test data.
+- Back up staging, restore it into a different isolated database, and measure
+  recovery objectives.
+- Prove the web service and all four crons use the one intended staging
+  database and staging-only provider credentials.
+- Reconcile only staging test transactions against Razorpay test mode.
+- Provision production on a different empty PostgreSQL database, apply and
+  verify the same Alembic revision, and prove backup/restore before traffic.
+- Prove the web service and all four crons use the one intended production
+  database with production-only provider credentials.
+- Confirm production contains no staging, test, or legacy rows and that no
+  legacy import or reconciliation is scheduled.
+
+### Contingency legacy-import QA (not part of the current release)
+
+Run these checks only if a separately reviewed plan activates a future import:
 
 - Restore a live-like backup into an isolated database.
 - Apply `python -m alembic -c alembic.ini upgrade head`, then verify
   `current` and `check`.
 - Compare row counts, IDs, unique values, statuses, timestamps, and samples.
 - Reconcile pending, paid, and completed bookings against Razorpay.
-- Prove web and outbox use the same database.
-- Prove maintenance shares the database/policy and the reconciler uses only the
-  intended Razorpay/database credentials.
-- Prove the reminder scheduler/outbox share only the intended database,
-  catch-up, and approved-template values.
-- Simulate failed cutover and execute rollback.
-- Restore from the final backup and measure recovery objectives.
+- Prove every service uses only the intended database/provider credentials.
+- Simulate a failed import/cutover, execute rollback, restore from the final
+  backup, and measure recovery objectives.
 
 ## Release gates
 
@@ -268,7 +289,8 @@ External gates:
 - SendGrid sender/recipients are approved. Every enabled reminder pair has
   matching Meta template/language approval, opt-in, localization, and
   suppression evidence.
-- Backup/restore and payment reconciliation pass.
+- Fresh staging and production backup/restore evidence passes, and staging
+  test-transaction reconciliation passes in Razorpay test mode.
 - Outbox monitoring and incident alerts are active.
 - Price, capacity, language, legal content, privacy, AI, fulfilment, support,
   refund, and retention policies are approved.

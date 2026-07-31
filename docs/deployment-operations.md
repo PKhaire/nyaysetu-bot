@@ -3,6 +3,11 @@
 This runbook is the release gate for NyaySetu. It assumes the repository root
 contains `app.py`, `render.yaml`, and `.python-version`.
 
+The approved launch path is a fresh first release: create a new empty managed
+PostgreSQL database and do not import old-bot users, bookings, or payment
+records. The SQLite cutover section remains documented only as a contingency
+if that business decision changes.
+
 ## Target topology
 
 ```text
@@ -154,6 +159,38 @@ operation. Before adding any web worker or instance, move per-user ordering
 locks, those state stores, caches, and circuit breakers to shared
 infrastructure and load-test signed webhook traffic.
 
+### Separate Render staging setup
+
+The committed `render.yaml` is production-only: it deliberately sets
+`ENV=production` on all five services. Do not sync that Blueprint into a
+staging environment and then merely replace the payment key.
+
+Create a separate Render staging environment from the same immutable release
+commit:
+
+1. Create a staging web service with the same build, pre-deploy and start
+   commands shown above and set its health path to `/health/ready`.
+2. Set `ENV=staging`, `AUTO_CREATE_SCHEMA=false`,
+   `ALLOW_INSECURE_WEBHOOKS=false`, `RAZORPAY_MODE=test`, an isolated staging
+   PostgreSQL `DATABASE_URL`, and staging-only Meta, Razorpay, SendGrid,
+   policy/contact and random admin/AI-safety values.
+3. Leave both legal-review values empty while the candidate is under review,
+   or set both to the same currently approved content version/date. A partial
+   or stale pair is rejected.
+4. Create separate staging cron services from the same commit using the exact
+   outbox, reconciliation, reminder and maintenance commands/schedules above.
+   Give them only their documented staging values, and point every cron at the
+   staging database.
+5. Require staging `/health/ready` to return `200`, report
+   `environment=staging`, `backend=postgresql`, the expected Alembic revision,
+   and `configuration=ok`. It rejects SQLite, automatic schema creation, live
+   Razorpay mode/keys and unsigned-webhook mode.
+6. Connect only staging provider webhooks and synthetic test users. Never use
+   the production domain, number, keys, recipients or database.
+
+After staging acceptance, deploy the committed production Blueprint separately
+with live-only values and the approved legal-content review pair.
+
 ## Production configuration
 
 ### Core provider/database settings
@@ -196,6 +233,7 @@ CANCELLATION_POLICY_URL=...
 AI_CONSENT_VERSION=...
 BOOKING_TERMS_VERSION=...
 LEGAL_CONTENT_VERSION=...
+LEGAL_CONTENT_REVIEWED_VERSION=...
 LEGAL_CONTENT_REVIEWED_ON=YYYY-MM-DD
 ADMIN_TOKEN=...
 AI_SAFETY_IDENTIFIER_SECRET=...
@@ -210,7 +248,8 @@ lengths of 32 for the WhatsApp app secret/token and admin/AI secrets and 16 for
 the WhatsApp verify token plus Razorpay API/webhook secrets; an `SG.` SendGrid
 key of at least 16 characters; a numeric WhatsApp phone ID; valid email
 addresses; HTTPS policy URLs; current Alembic revision; disabled automatic
-schema creation; and a valid non-future legal-content review date. A nonempty
+schema creation; and a legal-content reviewed version exactly matching the
+configured content version with a valid non-future review date. A nonempty
 `WHATSAPP_APP_SECRET_PREVIOUS` must be at least 32 characters and a nonempty
 `RAZORPAY_WEBHOOK_SECRET_PREVIOUS` at least 16. This is configuration
 validation, not evidence that counsel approved the content or that any provider
@@ -274,13 +313,36 @@ Third-party AI may be enabled only after:
 PII scrubbing is best effort. Users must be told not to submit identity
 documents, evidence, privileged communications, or unnecessary case facts.
 
-## PostgreSQL cutover
+## Fresh PostgreSQL launch path
+
+The current release is a clean first release and does not import the old bot's
+SQLite data:
+
+1. Provision separate empty managed PostgreSQL databases for staging and
+   production in the approved region.
+2. Set `AUTO_CREATE_SCHEMA=false`; run Alembic `upgrade head`, `current`, and
+   `check` against staging.
+3. Complete the full staging acceptance suite with synthetic records and
+   Razorpay test mode.
+4. Apply the same Alembic revision to the still-empty production database.
+   Never copy staging rows into production and never point staging services at
+   the production connection.
+5. Point the production web service and all four production cron jobs to that
+   one production connection. Require `/health/ready` to report PostgreSQL,
+   the expected revision, complete live configuration, and the exact approved
+   legal-content review version/date.
+6. Enable the managed backup policy for new production data and prove a
+   restore in an isolated environment after launch. This is operational
+   protection for new users, not an import of the old bot.
+
+## Legacy SQLite import contingency (not authorised for this launch)
 
 Production uses Alembic revision `20260729_01`; automatic `create_all()` is
 disabled and `/health/ready` requires the expected revision. The baseline is
 additive and contains compatibility/backfill logic for pre-Alembic databases.
-It is a schema runner, not evidence that a live SQLite-to-PostgreSQL data
-cutover is safe.
+The following utility is retained only for a separately approved future
+legacy-data project. It is not part of the clean first-release procedure above
+and must not be run against production under the current launch approval.
 
 ### One-shot cutover utility contract
 
@@ -368,7 +430,7 @@ failure rolls back the target transaction and returns privacy-safe JSON with
 exit `2`; preflight/import success returns `0`. A successful target is no
 longer empty, so the command refuses an accidental second import.
 
-### Rehearsal
+### Legacy import rehearsal
 
 1. Create an isolated staging PostgreSQL database.
 2. Enter a simulated maintenance window and create/restore-test an untouched
@@ -392,7 +454,7 @@ longer empty, so the command refuses an accidental second import.
 10. Start staging against PostgreSQL and run the full acceptance suite.
 11. Restore the untouched backup into a separate environment to prove recovery.
 
-### Production cutover
+### Legacy import cutover
 
 1. Announce and enable a short maintenance window.
 2. Stop web and all cron writers, then confirm no process holds the SQLite
@@ -694,7 +756,8 @@ frequency cap, suppression list, and consent record exist.
   configuration validation pass.
 - Release commit is immutable and reviewed.
 - Staging uses the exact dependency resolution and Python line.
-- Database backup and restore evidence is current.
+- Managed backup policy is enabled and an isolated restore rehearsal is
+  complete for the new platform; no old-bot database import is required.
 - For a SQLite-to-PostgreSQL release, the untouched restore artifact,
   explicitly selected working-copy upgrade, frozen-source preflight/import JSON,
   empty-target evidence, reconciliation, and rollback rehearsal are approved.
@@ -777,7 +840,8 @@ Deployment:
 
 1. Deploy staging from the release commit.
 2. Complete acceptance and record evidence.
-3. Back up production.
+3. Provision the separate empty production database, enable its managed backup
+   policy, and verify Alembic head; do not copy staging or old-bot records.
 4. Deploy the web service from the approved commit; require successful Alembic
    pre-deploy and current schema readiness.
 5. Deploy outbox, reconciliation, reminders, and maintenance from the same

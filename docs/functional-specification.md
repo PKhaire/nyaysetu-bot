@@ -16,7 +16,13 @@ of outcome.
 - English, Hinglish, and Marathi onboarding and navigation.
 - Persistent home menu without destroying an in-progress booking.
 - Versioned-consent-gated free legal-information AI, limited to five questions.
-- Built-in local legal guides and local fallback when external AI is absent.
+- A two-level local legal-guide tree covering nine areas and their
+  category-specific issues.
+- English, conversational Hindi/Hinglish, and Marathi guided questions,
+  immediate actions, document checklists, urgency cues, disclaimers, and
+  content-review metadata.
+- Helpful/not-helpful guide feedback with guide, support, and consultation
+  handoffs.
 - Name, district/state, category, and subcategory intake.
 - District ambiguity resolution through a WhatsApp list.
 - IST-aware, capacity-filtered consultation dates and five daily time slots.
@@ -44,7 +50,10 @@ consultation. The persistent home menu, available through `home`, `menu`, or
 - More options.
 
 More options contains appointment status, consultation preparation, legal
-guides, support, privacy/data information, and language change.
+guides, support, privacy/data information, and language change. Legal Guides
+first asks for a legal area and then the closest category-specific issue. A
+guide never predicts an outcome or supplies an unreviewed deadline. It ends
+with a helpful/not-helpful control and a direct consultation option.
 
 Sending a home/menu/help greeting after onboarding redisplays navigation
 without clearing the current flow. A pending payment remains protected: the
@@ -59,7 +68,7 @@ booking.
 4. Accepting enables the appropriate free or paid context.
 5. Deterministic urgent-risk and harmful-request checks run before any model.
 6. The router uses the configured Claude/OpenAI/local order and falls back to
-   local content.
+   the same versioned multilingual content used by Legal Guides.
 7. Free access stops after five questions and offers booking.
 8. Paid access is available only through the booked consultation slot end.
 
@@ -277,12 +286,19 @@ reminder scheduling, and daily maintenance/risk reporting.
 
 ## Rollout acceptance criteria
 
-The code is ready for production cutover only after all of the following are
-verified in an isolated staging environment:
+The code is ready for production launch only after staging acceptance and the
+production provisioning gates below are complete:
 
-- Existing data is backed up/restored through SQLite's backup mechanism,
-  migrated from a separately upgraded frozen source into an empty managed
-  PostgreSQL target with the fail-closed one-shot utility, and reconciled.
+- An isolated, empty managed PostgreSQL staging database is upgraded to the
+  current Alembic revision, passes `current`, `check`, and readiness, and
+  contains only synthetic/test data.
+- Production uses a different, empty managed PostgreSQL database. The current
+  Alembic revision and backup/restore procedure are verified before traffic,
+  and no staging, test, or legacy rows are present.
+- No legacy SQLite users, bookings, or payments are imported or reconciled for
+  this release. The SQLite-to-PostgreSQL utility is a non-current contingency
+  that requires a separately approved migration plan if the launch decision
+  changes.
 - Meta and Razorpay signatures, duplicates, delayed events, batch delivery, and
   injected failure retries behave as specified.
 - A payment confirms only its intended booking when the current Payment Link

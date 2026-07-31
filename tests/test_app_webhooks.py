@@ -817,6 +817,8 @@ def test_production_readiness_validates_secret_policy_and_contact_contract(
         "TERMS_OF_SERVICE_URL": "https://example.test/terms",
         "REFUND_POLICY_URL": "https://example.test/refunds",
         "CANCELLATION_POLICY_URL": "https://example.test/cancellations",
+        "LEGAL_CONTENT_VERSION": "legal-content-test-r1",
+        "LEGAL_CONTENT_REVIEWED_VERSION": "legal-content-test-r1",
         "LEGAL_CONTENT_REVIEWED_ON": datetime.now(
             app_module.IST
         ).date().isoformat(),
@@ -837,6 +839,20 @@ def test_production_readiness_validates_secret_policy_and_contact_contract(
     ready = client.get("/health/ready")
     assert ready.status_code == 200
     assert ready.get_json()["configuration"] == "ok"
+
+    monkeypatch.setattr(
+        app_module,
+        "LEGAL_CONTENT_REVIEWED_VERSION",
+        "legal-content-test-stale",
+    )
+    stale_review = client.get("/health/ready")
+    assert stale_review.status_code == 503
+    assert stale_review.get_json()["configuration"] == "incomplete"
+    monkeypatch.setattr(
+        app_module,
+        "LEGAL_CONTENT_REVIEWED_VERSION",
+        production_values["LEGAL_CONTENT_REVIEWED_VERSION"],
+    )
 
     monkeypatch.setattr(app_module, "PRIVACY_POLICY_URL", "http://example.test")
     invalid_policy = client.get("/health/ready")
@@ -876,3 +892,73 @@ def test_production_readiness_validates_secret_policy_and_contact_contract(
     rotating = client.get("/health/ready")
     assert rotating.status_code == 200
     assert rotating.get_json()["configuration"] == "ok"
+
+
+def test_staging_readiness_requires_postgresql_test_keys_and_strict_config(
+    monkeypatch,
+    app_module,
+    client,
+):
+    staging_values = {
+        "ENV": "staging",
+        "ADMIN_TOKEN": "a" * 32,
+        "AUTO_CREATE_SCHEMA": False,
+        "ALLOW_INSECURE_WEBHOOKS": False,
+        "WHATSAPP_APP_SECRET": "b" * 32,
+        "WHATSAPP_APP_SECRET_PREVIOUS": "",
+        "WHATSAPP_PHONE_ID": "1234567890",
+        "WHATSAPP_TOKEN": "whatsapp-staging-token-with-entropy",
+        "WHATSAPP_VERIFY_TOKEN": "verify-token-with-entropy",
+        "RAZORPAY_MODE": "test",
+        "RAZORPAY_KEY_ID": "rzp_test_releasekey",
+        "RAZORPAY_KEY_SECRET": "razorpay-key-secret",
+        "RAZORPAY_WEBHOOK_SECRET": "razorpay-webhook-secret",
+        "RAZORPAY_WEBHOOK_SECRET_PREVIOUS": "",
+        "AI_SAFETY_IDENTIFIER_SECRET": "c" * 32,
+        "SENDGRID_API_KEY": "SG.release-test-token",
+        "SENDGRID_FROM_EMAIL": "notifications@example.test",
+        "BOOKING_NOTIFICATION_EMAILS": ["bookings@example.test"],
+        "SUPPORT_NOTIFICATION_EMAILS": ["support-ops@example.test"],
+        "SUPPORT_EMAIL": "support@example.test",
+        "PRIVACY_EMAIL": "privacy@example.test",
+        "PRIVACY_POLICY_URL": "https://example.test/privacy",
+        "TERMS_OF_SERVICE_URL": "https://example.test/terms",
+        "REFUND_POLICY_URL": "https://example.test/refunds",
+        "CANCELLATION_POLICY_URL": "https://example.test/cancellations",
+        "AI_CONSENT_VERSION": "ai-test-r1",
+        "BOOKING_TERMS_VERSION": "booking-test-r1",
+        "LEGAL_CONTENT_VERSION": "legal-content-test-r1",
+        "LEGAL_CONTENT_REVIEWED_VERSION": "",
+        "LEGAL_CONTENT_REVIEWED_ON": "",
+    }
+    for name, value in staging_values.items():
+        monkeypatch.setattr(app_module, name, value)
+    monkeypatch.setattr(
+        app_module,
+        "get_db_health",
+        lambda: {"ok": True, "backend": "postgresql", "latency_ms": 1.0},
+    )
+    monkeypatch.setattr(
+        app_module,
+        "get_schema_revision",
+        lambda: app_module.EXPECTED_SCHEMA_REVISION,
+    )
+
+    ready = client.get("/health/ready")
+    assert ready.status_code == 200
+    assert ready.get_json()["environment"] == "staging"
+
+    monkeypatch.setattr(app_module, "RAZORPAY_MODE", "live")
+    live_payments = client.get("/health/ready")
+    assert live_payments.status_code == 503
+    assert live_payments.get_json()["configuration"] == "incomplete"
+
+    monkeypatch.setattr(app_module, "RAZORPAY_MODE", "test")
+    monkeypatch.setattr(
+        app_module,
+        "get_db_health",
+        lambda: {"ok": True, "backend": "sqlite", "latency_ms": 1.0},
+    )
+    sqlite = client.get("/health/ready")
+    assert sqlite.status_code == 503
+    assert sqlite.get_json()["database"]["deployment_compatible"] is False

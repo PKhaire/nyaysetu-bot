@@ -12,6 +12,22 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_config_rejects_unknown_environment(monkeypatch):
+    monkeypatch.setenv("ENV", "prod")
+
+    with pytest.raises(ValueError, match="ENV must be one of"):
+        runpy.run_path(str(PROJECT_ROOT / "config.py"))
+
+
+def test_staging_disables_automatic_schema_creation_by_default(monkeypatch):
+    monkeypatch.setenv("ENV", "staging")
+    monkeypatch.delenv("AUTO_CREATE_SCHEMA", raising=False)
+
+    config = runpy.run_path(str(PROJECT_ROOT / "config.py"))
+
+    assert config["AUTO_CREATE_SCHEMA"] is False
+
+
 def _gunicorn_config(monkeypatch):
     monkeypatch.setenv("PORT", "12345")
     return runpy.run_path(str(PROJECT_ROOT / "gunicorn.conf.py"))
@@ -69,6 +85,10 @@ def test_deployment_commands_and_render_release_controls_exist():
     assert blueprint.count(
         "- key: MAINTENANCE_MODE\n        value: \"false\""
     ) == 1
+    assert (
+        "- key: LEGAL_CONTENT_REVIEWED_VERSION\n        sync: false"
+        in blueprint
+    )
 
 
 def test_render_only_schedules_existing_operational_modules():

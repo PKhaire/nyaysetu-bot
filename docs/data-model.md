@@ -12,16 +12,18 @@ Alembic revision `20260729_01`, and production disables automatic
 `Base.metadata.create_all()` by default. Render applies
 `python -m alembic -c alembic.ini upgrade head` before a web release;
 `/health/ready` rejects a production database whose revision is not current.
-The baseline creates the additive reliability/operations schema, upgrades
-selected legacy columns/indexes, imports legacy message claims into the new
-inbound inbox, and backfills paid-booking fulfilment records.
+On an empty database, the baseline creates the application and additive
+reliability/operations schema. It also retains compatibility transformations
+for selected legacy columns/indexes, legacy message claims, and paid-booking
+fulfilment backfills, but those paths are not used by the current fresh release.
 
-That migration runner does not eliminate the cutover gate: existing production
-data must still be backed up, profiled, restored into staging, migrated,
-validated, and reconciled before traffic moves. The included
-`jobs.migrate_sqlite_to_postgres` command copies a frozen current-head SQLite
-artifact into an empty current-head PostgreSQL target; it is not a live backup
-or synchronization mechanism.
+The current launch provisions an isolated empty staging PostgreSQL database and
+a different empty production PostgreSQL database. No existing users, bookings,
+payments, or other legacy rows are imported or reconciled. The included
+`jobs.migrate_sqlite_to_postgres` command is retained only as a non-current
+contingency; it copies a frozen current-head SQLite artifact into an empty
+current-head PostgreSQL target and is not a live backup or synchronization
+mechanism.
 
 ## Logical relationships
 
@@ -312,7 +314,32 @@ privacy-minimised logs and analytics, no raw Razorpay body persistence, and
 private temporary receipt files. Platform encryption, backup access, database
 roles, audit logs, and deletion enforcement remain deployment/governance tasks.
 
-## Production migration gates
+## Fresh-release database gates
+
+1. Provision an isolated, empty managed PostgreSQL staging database.
+2. Set the staging `DATABASE_URL` and `AUTO_CREATE_SCHEMA=false`; run Alembic
+   `upgrade head`, `current`, and `check`, then verify `/health/ready`.
+3. Populate staging only with synthetic/test data and complete the signed
+   webhook, payment, fulfilment, reconciliation, reminder, maintenance, and
+   operator acceptance tests.
+4. Prove the staging backup/restore procedure against a separate isolated
+   restore target.
+5. Provision production on a different, empty managed PostgreSQL database with
+   separate credentials, roles, backup policy, and provider configuration.
+6. Apply and verify the same Alembic head in production before traffic, then
+   prove its backup/restore procedure against an isolated restore target.
+7. Point the web service and all four crons to that one production database and
+   verify that no staging, test, or legacy rows are present.
+8. Keep `NYAYSETU_CUTOVER_TARGET_URL` unset. Do not run the SQLite importer or
+   perform legacy user, booking, or payment reconciliation for this release.
+
+Production must use Alembic, not `create_all()`, as the upgrade mechanism.
+
+### Contingency: future legacy import (not part of the current release)
+
+The following workflow applies only if a recorded business decision changes
+the fresh-release scope and a separately reviewed migration, reconciliation,
+rollback, and data-governance plan authorizes an existing SQLite data import:
 
 1. Inventory the live schema, enum values, duplicates, nulls, and orphaned
    payment records.
@@ -348,8 +375,6 @@ roles, audit logs, and deletion enforcement remain deployment/governance tasks.
 9. Point the web service and all four crons to the same intended PostgreSQL URL.
 10. Test signed webhooks, operator queues, reminders, reconciliation,
     maintenance dry-run, and rollback before live cutover.
-
-Production must use Alembic, not `create_all()`, as the upgrade mechanism.
 
 ## Future schema work
 

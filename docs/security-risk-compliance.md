@@ -88,19 +88,15 @@ environment is correctly configured.
 
 ## Important limitations
 
-### Production data cutover
+### Production data start
 
-The repository has an Alembic baseline, pre-deploy upgrade, and expected-schema
-readiness check plus a fail-closed one-shot cutover utility. The utility reads a
-frozen SQLite artifact immutably, requires matching current schemas and an empty
-managed PostgreSQL target, accepts the target only through a dedicated
-environment variable, verifies counts, and rolls back incomplete imports.
-Repository presence still does not prove that live data was safely backed up,
-restored, migrated, or reconciled. Never upgrade the untouched backup: upgrade
-an explicitly selected disposable working copy, close it, and use SQLite's
-backup mechanism again to produce the frozen input. A cutover without restore,
-backfill/constraint validation, payment reconciliation, approval, and rollback
-evidence remains a critical launch risk.
+The approved release is a fresh first release. It will use a new empty managed
+PostgreSQL database and will not import old-bot users, bookings, or payment
+records. The repository's legacy SQLite cutover utility therefore remains a
+contingency rather than an active launch step. Repository presence still does
+not prove that the new database is correctly revisioned, access-controlled,
+backed up, restorable, shared by every runtime process, or monitored. Those
+fresh-database checks remain launch gates.
 
 ### Rate limiting
 
@@ -154,7 +150,7 @@ capabilities until the operating process and policy exist.
 
 | Severity | Risk | Current mitigation | Required action |
 |---|---|---|---|
-| Critical launch gate | Live data/payment state is not yet proven on managed PostgreSQL | Alembic baseline, expected-revision readiness, fail-closed one-shot cutover utility, idempotent payment model | Rehearse SQLite backup/restore, working-copy upgrade, frozen import, backfill/constraint validation, reconciliation, approval, and rollback |
+| Critical launch gate | Fresh production PostgreSQL is not yet proven, backed up, or restore-tested | Alembic baseline, expected-revision readiness and idempotent payment model | Provision an empty managed database, verify revision/access, enable backups, restore-test, reconcile staging payments and rehearse rollback |
 | Critical launch gate | Paid appointment may lack staffed human fulfilment/refund path | Fulfilment/SLA queue, assignment/status audit, support | Define staffing, eligibility/conflicts, channel, cancellation/refund and payment-incident procedures |
 | High | Provider or worker failure delays confirmation | Retryable webhook, durable inbox/outbox, five-minute exact-evidence reconciler | Monitor cron/provider errors and staff every open/recovered review plus 5xx/queue/dead/risk states |
 | High | Sensitive legal/payment/support data is retained too long | Minimized storage and bounded terminal-artifact cleanup | Approve remaining deletion/anonymisation, backup, and legal-hold policy |

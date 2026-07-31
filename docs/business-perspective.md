@@ -146,8 +146,9 @@ Implemented foundation:
 
 Prerequisites before a production cutover:
 
-- Migrate, back up, restore-test, and reconcile live bookings/payments in
-  managed PostgreSQL.
+- For the approved fresh first release, initialise a new managed PostgreSQL
+  database at the expected Alembic revision, enable backups, and complete a
+  restore test. Do not import old-bot users, bookings, or payments.
 - Run and monitor outbox, reconciliation, reminder, and maintenance schedules;
   alert on queue age/dead jobs/provider errors/operational risk.
 - Staff reconciliation/risk queues and keep reminder templates empty until

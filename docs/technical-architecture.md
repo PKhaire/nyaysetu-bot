@@ -27,8 +27,9 @@ python -m jobs.maintenance -------------------------> bounded retention/risk rep
 The repository defaults to a relative SQLite database for local development
 and tests. `DATABASE_URL` selects the real engine; provider-style PostgreSQL
 URLs are normalized to the psycopg driver. Production is designed for managed
-PostgreSQL, but migration and reconciliation of existing live data remain a
-rollout prerequisite.
+PostgreSQL. The current launch uses an empty managed PostgreSQL database for
+staging and a different empty managed PostgreSQL database for production; it
+does not import or reconcile existing live data.
 
 ## Process topology
 
@@ -61,7 +62,7 @@ infrastructure and concurrency/load/provider-limit tests pass.
 | `services/payment_reconciliation_service.py` | Exact-evidence Razorpay recovery and ambiguity queue |
 | `services/consultation_reminder_*.py` | Template-gated, bounded, deduplicated 24-hour/2-hour reminder scheduling and send policy |
 | `services/maintenance_service.py` | Bounded retention enforcement and operational-risk reporting |
-| `jobs/migrate_sqlite_to_postgres.py` | Fail-closed, one-shot frozen SQLite to empty PostgreSQL cutover |
+| `jobs/migrate_sqlite_to_postgres.py` | Fail-closed, one-shot frozen SQLite import for an inactive contingency |
 | `services/whatsapp_service.py` | Validated WhatsApp payloads, bounded transport retries, structured delivery results |
 | `services/outbox_service.py` | Durable jobs, step-level idempotency, retry/backoff, lease recovery |
 | `services/email_service.py` | SendGrid booking/support notification delivery |
@@ -268,26 +269,31 @@ Core tables are `users`, `bookings`, `category_analytics`, `conversations`, and
 `booking_fulfillments`, `payment_reconciliations`, availability
 blackouts/overrides, and `admin_audit_events`.
 
-Alembic revision `20260729_01` is the production baseline. It creates additive
-schema, upgrades selected legacy columns/constraints, and backfills durable
-inbound claims and paid-booking fulfilments. Render runs
+Alembic revision `20260729_01` is the production baseline. On an empty database
+it creates the application and reliability/operations schema. It also retains
+compatibility steps for selected legacy columns/constraints and backfills, but
+those paths are not exercised by the current fresh release. Render runs
 `python -m alembic -c alembic.ini upgrade head` before the web release;
 production readiness checks the applied revision and requires automatic schema
 creation to be disabled. `init_db()`/`create_all()` remains a non-production
 local compatibility path only.
 
-The baseline does not prove a live cutover. The one-shot
-`jobs.migrate_sqlite_to_postgres` utility requires a frozen, current-head
-SQLite backup, a schema-current empty PostgreSQL target, and a target URL in
-the dedicated `NYAYSETU_CUTOVER_TARGET_URL` environment variable. Its default
-mode validates SQLite integrity/foreign keys, full table/column shape, source
-stability, target emptiness, and per-table counts without writing. The exact
-confirmation mode locks the target tables, copies deterministic bounded
-batches, verifies counts, resets integer-key sequences, and commits atomically.
-It never reads application `DATABASE_URL` and is not a backup or live-sync
-design. Operators must still create and restore-test the backup through
-SQLite's backup mechanism, rehearse in staging, validate constraints/backfills,
-reconcile payments, and preserve a rollback snapshot.
+The one-shot `jobs.migrate_sqlite_to_postgres` utility is an explicitly
+non-current contingency. The current release does not run it: staging and
+production start with separate empty PostgreSQL databases, and no legacy rows
+are copied between them.
+
+If a later recorded business decision activates the contingency, the utility
+requires a frozen, current-head SQLite backup, a schema-current empty
+PostgreSQL target, and a target URL in the dedicated
+`NYAYSETU_CUTOVER_TARGET_URL` environment variable. Its default mode validates
+SQLite integrity/foreign keys, full table/column shape, source stability,
+target emptiness, and per-table counts without writing. The exact confirmation
+mode locks the target tables, copies deterministic bounded batches, verifies
+counts, resets integer-key sequences, and commits atomically. It never reads
+application `DATABASE_URL` and is not a backup or live-sync design. Activation
+also requires a separately reviewed migration/reconciliation and rollback plan,
+including SQLite backup/restore proof and an isolated rehearsal.
 
 ## Health, admin, and observability
 
@@ -314,7 +320,8 @@ Implemented in code:
 
 - Environment-selected PostgreSQL/SQLite persistence.
 - Alembic release baseline and production schema-readiness gate.
-- Fail-closed one-shot SQLite-to-PostgreSQL cutover command.
+- Fail-closed one-shot SQLite-to-PostgreSQL command for an inactive
+  contingency.
 - Correct IST slot mapping and capacity-aware booking.
 - Lease-aware durable WhatsApp claims and signed/idempotent Razorpay processing.
 - Stored-price payment validation and transactional outbox creation.
@@ -323,10 +330,14 @@ Implemented in code:
 - Paid-consultation fulfilment/SLA records and availability controls.
 - Token-protected, audited operator APIs and bounded retention/risk maintenance.
 
-Required before production cutover:
+Required before production launch:
 
-- Rehearsed execution of the included cutover command, backup/restore evidence,
-  managed PostgreSQL validation, and payment reconciliation.
+- Acceptance on an isolated empty staging PostgreSQL database at the current
+  Alembic revision, using only synthetic/test data.
+- A different empty production PostgreSQL database at the same revision, with
+  backup/restore evidence and no staging, test, or legacy rows.
+- Confirmation that the SQLite import contingency is not activated and no
+  legacy booking or payment reconciliation is required for this release.
 - One-worker web plus outbox, reconciliation, reminder, and maintenance
   deployments with isolated production secrets and alerts.
 - Signed Meta/Razorpay staging tests and approved SendGrid recipients.

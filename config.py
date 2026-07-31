@@ -140,6 +140,14 @@ def normalize_database_url(value: str) -> str:
 
 # Application identity and locale.
 ENV = env_str("ENV", "production", allow_empty=False).lower()
+_ALLOWED_ENVIRONMENTS = frozenset(
+    {"development", "test", "staging", "production"}
+)
+if ENV not in _ALLOWED_ENVIRONMENTS:
+    raise ValueError(
+        "ENV must be one of: "
+        f"{', '.join(sorted(_ALLOWED_ENVIRONMENTS))}"
+    )
 APP_TIMEZONE = env_str("APP_TIMEZONE", "Asia/Kolkata", allow_empty=False)
 LOG_LEVEL = env_str("LOG_LEVEL", "INFO", allow_empty=False).upper()
 
@@ -171,8 +179,11 @@ BOOKING_TERMS_VERSION = env_str(
 )
 LEGAL_CONTENT_VERSION = env_str(
     "LEGAL_CONTENT_VERSION",
-    "legal-content-2026-07",
+    "legal-content-2026-07-r4",
     allow_empty=False,
+)
+LEGAL_CONTENT_REVIEWED_VERSION = env_str(
+    "LEGAL_CONTENT_REVIEWED_VERSION"
 )
 LEGAL_CONTENT_REVIEWED_ON = env_str("LEGAL_CONTENT_REVIEWED_ON")
 
@@ -457,7 +468,10 @@ DATABASE_URL = normalize_database_url(
         allow_empty=False,
     )
 )
-AUTO_CREATE_SCHEMA = env_bool("AUTO_CREATE_SCHEMA", ENV != "production")
+AUTO_CREATE_SCHEMA = env_bool(
+    "AUTO_CREATE_SCHEMA",
+    ENV in {"development", "test"},
+)
 DB_POOL_PRE_PING = env_bool("DB_POOL_PRE_PING", True)
 DB_POOL_SIZE = env_int("DB_POOL_SIZE", 5, minimum=1)
 DB_MAX_OVERFLOW = env_int("DB_MAX_OVERFLOW", 10, minimum=0)

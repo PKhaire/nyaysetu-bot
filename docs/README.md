@@ -6,26 +6,31 @@ from external rollout work and future product ideas.
 
 ## Read in this order
 
-1. [Functional specification](functional-specification.md) — implemented
+1. [Master product, technology, launch and growth blueprint](NYAYSETU_MASTER_BLUEPRINT.md)
+   — consolidated status, decisions, user experience, architecture, privacy,
+   launch, operations, budget, roadmap and marketing strategy.
+2. [Functional specification](functional-specification.md) — implemented
    user and operations behavior.
-2. [Technical architecture](technical-architecture.md) — runtime, data flow,
+3. [Technical architecture](technical-architecture.md) — runtime, data flow,
    idempotency, database, outbox, and AI design.
-3. [API and integrations](api-integrations.md) — routes and provider contracts.
-4. [Data model and governance](data-model.md) — current entities, sensitivity,
+4. [API and integrations](api-integrations.md) — routes and provider contracts.
+5. [Data model and governance](data-model.md) — current entities, sensitivity,
    lifecycle, and migration gates.
-5. [Security, risk, and compliance](security-risk-compliance.md) — controls,
+6. [Security, risk, and compliance](security-risk-compliance.md) — controls,
    limitations, and launch risks.
-6. [Testing and QA plan](testing-qa-plan.md) — automated coverage and required
+7. [Legal content review checklist](legal-content-review-checklist.md) —
+   version-specific reviewer scope and sign-off gate.
+8. [Testing and QA plan](testing-qa-plan.md) — automated coverage and required
    staging/migration evidence.
-7. [Deployment and operations](deployment-operations.md) — environment,
+9. [Deployment and operations](deployment-operations.md) — environment,
    cutover, monitoring, runbooks, and rollback.
-8. [Client and user perspective](client-user-perspective.md) — user promise,
+10. [Client and user perspective](client-user-perspective.md) — user promise,
    journey, trust, and acceptance.
-9. [Business perspective](business-perspective.md) — value, operating model,
+11. [Business perspective](business-perspective.md) — value, operating model,
    metrics, and responsible growth.
-10. [Roadmap and backlog](roadmap-backlog.md) — completed foundation, launch
+12. [Roadmap and backlog](roadmap-backlog.md) — completed foundation, launch
     gates, and future milestones.
-11. [Local AI demo](local-ai-demo.md) — optional demonstration of the built-in
+13. [Local AI demo](local-ai-demo.md) — optional demonstration of the built-in
     local knowledge path; it is not the production architecture specification.
 
 ## Current product
@@ -120,9 +125,11 @@ Implemented in the repository:
 
 Still required before production cutover:
 
-- Back up through SQLite's backup mechanism, restore-test, rehearse and execute
-  the included one-shot cutover procedure, and reconcile existing live data in
-  managed PostgreSQL.
+- For the approved fresh first release, create an empty managed PostgreSQL
+  database, apply and verify the Alembic revision, enable backups, and
+  restore-test it. No legacy users or database records will be imported. The
+  SQLite cutover utility and runbook remain available only if that decision
+  changes.
 - Deploy the one-worker web service plus outbox, reconciliation, reminder, and
   maintenance crons with correctly scoped shared settings.
 - Pass signed Meta/Razorpay/SendGrid staging, duplicate/failure, and PostgreSQL

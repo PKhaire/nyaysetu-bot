@@ -23,7 +23,11 @@ referrers, preventing webhook verification tokens from entering access logs.
 
 ## One-time SQLite data cutover
 
-This is a separate, controlled release gate, not a recurring deploy command.
+This is not an active gate for the approved fresh first release, which starts
+with a new empty managed PostgreSQL database and imports no old-bot data. Keep
+this section only as a contingency if that business decision changes. In that
+case, it becomes a separate controlled release gate, not a recurring deploy
+command.
 Stop the web service and all four cron writers; create and restore-test an
 untouched source through SQLite's Online Backup API or CLI `.backup`; upgrade a
 separate disposable working copy selected through an explicit working-copy

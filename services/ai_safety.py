@@ -127,22 +127,54 @@ _URGENT_PATTERNS = (
     ),
     re.compile(
         r"\b(i (?:will|want to|am going to|might) (?:kill myself|end my life)|"
-        r"about to commit suicide|suicide right now)\b",
+        r"about to commit suicide|suicide right now|i (?:feel|am) suicidal|"
+        r"i want to die|i do not want to live|i don't want to live)\b",
         re.IGNORECASE,
     ),
-    re.compile(r"\bjaan (?:ko|ka) khatra\b|\babhi hamla\b|\bmujhe maar raha\b", re.IGNORECASE),
-    re.compile(r"जीवाला धोका|आत्ता हल्ला|मला मारत|आत्महत्या", re.IGNORECASE),
+    re.compile(
+        r"\b(?:i am|i'm)\s+(?:being\s+)?"
+        r"(?:assaulted|attacked|beaten|choked|abused)(?:\s+right now)?\b|"
+        r"\bmy child is (?:being )?(?:abused|assaulted|beaten|hurt)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bjaan (?:ko|ka) khatra\b|\babhi hamla\b|"
+        r"\bmujhe maar rah(?:a|e|i)\b|"
+        r"\bmera pati mujhe maar raha\b|"
+        r"\bmeri jaan ko khatra\b|"
+        r"\b(?:main|mujhe) (?:suicidal|khud ko maar|marna chaht|"
+        r"jeena nahi chaht|suicide karn)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"मेरी जान को खतरा|"
+        r"मुझे(?:\s+\S+){0,2}\s+मार(?:ा|ी|े)?(?:\s+जा)?\s+रह|"
+        r"मेरा पति मुझे मार रह|"
+        r"मेरे बच्चे को(?:\s+\S+){0,2}\s+"
+        r"मार(?:ा|ी|े)?(?:\s+जा)?\s+रह|"
+        r"मेरा बच्चा.*(?:खतरे|दुर्व्यवहार|अत्याचार)|"
+        r"मैं.*(?:आत्महत्या|मरना चाह|जीना नहीं चाह)|"
+        r"मुझे.*(?:आत्महत्या|मरना है)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"जीवाला धोका|माझ्या जीवाला धोका|आत्ता हल्ला|मला मारत|"
+        r"माझा नवरा मला मारत|मुला(?:ला|वर).*(?:मारत|अत्याचार)|"
+        r"आत्महत्या|मला मरायचे|मला जगायचे नाही",
+        re.IGNORECASE,
+    ),
 )
 
 _HARMFUL_PATTERNS = (
     re.compile(
-        r"\b(?:how (?:do|can|should) i|how to|ways? to|teach me|help me|best way to)\s+"
-        r"(?:kill|hurt|attack|kidnap|poison|blackmail|stalk)\b",
+        r"\b(?:how (?:do|can|should) (?:i|we)|how to|ways? to|"
+        r"teach me|help me|best way to)\s+"
+        r"(?:kill|hurt|attack|shoot|kidnap|poison|blackmail|stalk)\b",
         re.IGNORECASE,
     ),
     re.compile(
         r"\b(?:i want to|i plan to|i am going to|i'm going to|we should)\s+"
-        r"(?:kill|hurt|attack|kidnap|poison|blackmail|stalk)\b",
+        r"(?:kill|hurt|attack|shoot|kidnap|poison|blackmail|stalk)\b",
         re.IGNORECASE,
     ),
     re.compile(
@@ -163,6 +195,26 @@ _HARMFUL_PATTERNS = (
     ),
     re.compile(r"\b(?:saboot mita|jhootha saboot|police ko rishwat)\b", re.IGNORECASE),
     re.compile(r"पुरावा नष्ट|खोटा पुरावा|पोलिसांना लाच", re.IGNORECASE),
+    re.compile(
+        r"\bmain (?:kisi ko|use|usko) "
+        r"(?:maarna|hurt karna|nuksan pahunchana|kidnap karna|"
+        r"zehar dena|blackmail karna) chaht",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"मैं (?:किसी को|उसे|उसको).*(?:मारना|नुकसान पहुंचाना|"
+        r"अपहरण|ज़हर देना|जहर देना|ब्लैकमेल) चाह(?:ता|ती)|"
+        r"मुझे (?:उसे|उसको|किसी को).*(?:मारना|नुकसान पहुंचाना|"
+        r"अपहरण|ज़हर देना|जहर देना|ब्लैकमेल) है",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"मला (?:त्याला|तिला|कोणाला).*(?:मारायचे|इजा करायची|"
+        r"अपहरण करायचे|विष द्यायचे|ब्लॅकमेल करायचे)|"
+        r"मी (?:त्याला|तिला|कोणाला).*(?:मारणार|इजा करणार|"
+        r"अपहरण करणार|विष देणार|ब्लॅकमेल करणार)",
+        re.IGNORECASE,
+    ),
 )
 
 

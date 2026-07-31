@@ -169,7 +169,8 @@ Never demonstrate production payment credentials or real user legal messages.
 - Native speakers approve all three language flows.
 - Privacy, terms, AI consent, retention, and deletion policies are published.
 - Meta/Razorpay/SendGrid test evidence is available.
-- Managed PostgreSQL restore and payment reconciliation are rehearsed.
+- Fresh managed PostgreSQL setup/restore and payment reconciliation are
+  rehearsed; no old-bot user or booking records are imported.
 - Support staff can access tickets securely and know how to resolve them.
 - Metrics measure successful outcomes rather than conversation length alone.
 

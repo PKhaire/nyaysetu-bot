@@ -66,24 +66,20 @@ These items are “implemented,” not automatically “deployed” or “operat
 
 ## P0 launch gates
 
-### Managed PostgreSQL migration
+### Fresh managed PostgreSQL launch
 
-- Inventory the live SQLite/schema state.
-- During a maintenance window, create and restore-test an untouched artifact
-  through SQLite's Online Backup API or CLI `.backup`; never raw-copy an active
-  WAL database.
-- Validate the included Alembic baseline/backfill against the real legacy
-  schema; keep production `AUTO_CREATE_SCHEMA=false`.
-- Rehearse the included `python -m jobs.migrate_sqlite_to_postgres` utility
-  from a frozen, current-head source into an empty, current-head PostgreSQL
-  target. Supply the target only through `NYAYSETU_CUTOVER_TARGET_URL`, require
-  a successful preflight before the exact confirmation phrase, and clear the
-  variable immediately afterward.
-- Validate row counts, IDs, timestamps, sequences, indexes, constraints, and
-  enum/status values after the atomic import.
-- Reconcile every pending/paid/completed booking against Razorpay.
+- Provision a new empty managed PostgreSQL database for the approved fresh
+  first release; do not import old-bot users, bookings, or payment records.
+- Apply and verify the current Alembic revision with
+  `AUTO_CREATE_SCHEMA=false`.
 - Prove web and all four crons share the intended database with least-privilege
-  settings, then execute rollback rehearsal.
+  settings.
+- Enable managed backups, restore into an isolated target, and rehearse
+  release rollback.
+- Reconcile all staging test payments, then start production with a clean
+  production dataset.
+- Retain the SQLite cutover utility and detailed legacy runbook only as a
+  contingency if the no-import business decision changes.
 
 ### Payment and delivery staging
 
@@ -198,8 +194,8 @@ These items are “implemented,” not automatically “deployed” or “operat
 
 ### Milestone 1: Controlled staging
 
-Complete PostgreSQL rehearsal, automated tests, signed provider scenarios,
-outbox monitoring, and policy review.
+Complete fresh PostgreSQL setup/restore rehearsal, automated tests, signed
+provider scenarios, outbox monitoring, and policy review.
 
 ### Milestone 2: Limited production pilot
 
@@ -219,7 +215,8 @@ quality evaluation, and outcome-focused analytics before broader acquisition.
 
 ## Definition of done for production launch
 
-- Managed PostgreSQL is restored, migrated, reconciled, and monitored.
+- Fresh managed PostgreSQL is revision-verified, restore-tested, reconciled,
+  and monitored.
 - All automated, PostgreSQL-concurrency, and external staging tests pass.
 - Meta, Razorpay, SendGrid, web, outbox, reconciliation, reminder, and
   maintenance configuration is independently reviewed.

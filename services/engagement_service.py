@@ -12,7 +12,11 @@ from typing import Iterable, Optional
 from config import PRIVACY_POLICY_URL, SUPPORT_EMAIL, SUPPORT_PHONE
 from models import Booking, BookingStatus
 from services.booking_service import SLOT_MAP
-from services.local_ai_service import LEGAL_TOPICS
+from services.legal_knowledge import (
+    guide_category_rows,
+    guide_message,
+    guide_subcategory_rows,
+)
 from utils.date_utils import format_date_readable
 from utils.i18n import t
 
@@ -263,31 +267,30 @@ def preparation_message(user, booking: Optional[Booking]) -> str:
 
 
 def legal_guide_rows(user) -> list[dict[str, str]]:
-    # Seven built-in guides fit within WhatsApp's list-row limit.
-    return [
-        {
-            "id": f"guide::{topic['id']}",
-            "title": topic["title"],
-            "description": t(user, "guide_row_description"),
-        }
-        for topic in LEGAL_TOPICS
-    ]
+    """Return the first level of the legal-guide decision tree."""
+
+    return guide_category_rows(user)
 
 
-def legal_guide_message(user, topic_id: str) -> Optional[str]:
-    topic = next((item for item in LEGAL_TOPICS if item["id"] == topic_id), None)
-    if not topic:
-        return None
+def legal_guide_subcategory_rows(
+    user,
+    category: str,
+) -> list[dict[str, str]]:
+    """Return the issue choices for one legal-guide category."""
 
-    language_note = ""
-    if language_code(user) != "en":
-        language_note = f"\n\n{t(user, 'guide_language_note')}"
+    return guide_subcategory_rows(user, category)
 
-    return (
-        f"*{topic['title']}*\n\n"
-        f"{topic['answer']}"
-        f"{language_note}\n\n"
-        f"{t(user, 'guide_disclaimer')}"
+
+def legal_guide_message(
+    user,
+    category: str,
+    subcategory: str,
+) -> str:
+    return guide_message(
+        user,
+        category,
+        subcategory,
+        include_feedback_prompt=False,
     )
 
 

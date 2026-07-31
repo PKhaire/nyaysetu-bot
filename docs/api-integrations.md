@@ -206,9 +206,13 @@ Required configuration is `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`,
 `RAZORPAY_WEBHOOK_SECRET_PREVIOUS` supports a bounded webhook-secret rotation;
 it is not a second API key.
 
-Production prerequisite: run signed test-mode scenarios, then configure
-separate live credentials and a live webhook. Reconcile every migrated pending
-or paid booking before cutover.
+Production prerequisite: run signed scenarios against the isolated, empty
+staging database with Razorpay test-mode credentials. Then configure separate
+live credentials and a live webhook for the different, empty production
+database. The current release imports no legacy bookings or payments: reconcile
+only staging test transactions, and confirm production contains no synthetic
+or legacy rows before traffic. Any future import requires the separately
+approved contingency migration and reconciliation plan.
 
 ## SendGrid
 
@@ -390,5 +394,5 @@ Before production traffic:
   templates approved, each 24-hour/2-hour reminder is deduplicated and becomes
   unsendable after cancellation/reschedule/review or template removal.
 - SendGrid recipients and Meta templates are explicitly approved.
-- Live backup/restore, payment reconciliation, retention, privacy, refund, and
-  support procedures are signed off.
+- Fresh-production backup/restore, staging test-transaction reconciliation,
+  retention, privacy, refund, and support procedures are signed off.

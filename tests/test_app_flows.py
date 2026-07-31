@@ -359,6 +359,76 @@ def test_booking_home_action_shows_scope_before_collecting_details(
     assert str(app_module.BOOKING_PRICE) in prompt
 
 
+def test_legal_guides_form_a_multilingual_tree_with_feedback_and_booking(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+):
+    _secure_whatsapp_route(monkeypatch, app_module)
+    _create_user(
+        isolated_app_db,
+        flow_state=app_module.NORMAL,
+        language="hi",
+    )
+    events = MagicMock()
+    monkeypatch.setattr(app_module, "record_event", events)
+
+    responses = [
+        _signed_whatsapp_post(
+            client,
+            _whatsapp_payload(
+                message_id="wamid.guides-root",
+                interactive_id=app_module.MORE_MENU_IDS["guides"],
+            ),
+        ),
+        _signed_whatsapp_post(
+            client,
+            _whatsapp_payload(
+                message_id="wamid.guides-job",
+                interactive_id="guidecat::job",
+            ),
+        ),
+        _signed_whatsapp_post(
+            client,
+            _whatsapp_payload(
+                message_id="wamid.guides-salary",
+                interactive_id="guide::job::unpaid_salary",
+            ),
+        ),
+        _signed_whatsapp_post(
+            client,
+            _whatsapp_payload(
+                message_id="wamid.guides-feedback",
+                interactive_id="guidefb::yes::job::unpaid_salary",
+            ),
+        ),
+    ]
+
+    assert all(response.status_code == 200 for response in responses)
+    assert transport_spies["list"].call_count == 2
+    category_rows = transport_spies["list"].call_args_list[0].kwargs["rows"]
+    issue_rows = transport_spies["list"].call_args_list[1].kwargs["rows"]
+    assert len(category_rows) == len(app_module.CATEGORY_SUBCATEGORIES)
+    assert any(row["id"] == "guidecat::job" for row in category_rows)
+    assert any(row["id"] == "guide::job::unpaid_salary" for row in issue_rows)
+
+    guide_message = transport_spies["text"].call_args_list[0].args[1]
+    guide_call = transport_spies["buttons"].call_args_list[0]
+    assert "Abhi kya karein" in guide_message
+    assert "Baki Tankhwa" in guide_message
+    assert any(button["id"] == "book_now" for button in guide_call.args[2])
+
+    feedback_events = [
+        call
+        for call in events.call_args_list
+        if call.args and call.args[0] == "legal_guide_feedback"
+    ]
+    assert len(feedback_events) == 1
+    assert feedback_events[0].args[1]["helpful"] is True
+
+
 def test_slot_selection_requires_review_before_payment_link_creation(
     monkeypatch,
     app_module,

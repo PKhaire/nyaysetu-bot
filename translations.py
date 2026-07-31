@@ -227,7 +227,7 @@ TRANSLATIONS = {
         "privacy_and_data": "Privacy & My Data",
         "privacy_and_data_desc": "How your information is used",
         "change_language": "Change Language",
-        "change_language_desc": "English, Hinglish, or Marathi",
+        "change_language_desc": "English, Hindi/Hinglish, or Marathi",
 
         # ---------- BOOKING STATUS & PREPARATION ----------
         "no_appointment_found": (
@@ -587,7 +587,7 @@ TRANSLATIONS = {
         "privacy_and_data": "Privacy & My Data",
         "privacy_and_data_desc": "Aapki information ka use",
         "change_language": "Language Badlein",
-        "change_language_desc": "English, Hinglish ya Marathi",
+        "change_language_desc": "English, Hindi/Hinglish ya Marathi",
 
         # ---------- BOOKING STATUS & PREPARATION ----------
         "no_appointment_found": (
@@ -947,7 +947,7 @@ TRANSLATIONS = {
         "privacy_and_data": "गोपनीयता व माझा डेटा",
         "privacy_and_data_desc": "माहिती कशी वापरली जाते",
         "change_language": "भाषा बदला",
-        "change_language_desc": "English, Hinglish किंवा मराठी",
+        "change_language_desc": "English, Hindi/Hinglish किंवा मराठी",
 
         # ---------- BOOKING STATUS & PREPARATION ----------
         "no_appointment_found": (

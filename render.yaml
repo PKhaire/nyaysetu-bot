@@ -60,13 +60,14 @@ services:
       - key: BOOKING_TERMS_VERSION
         value: booking-terms-2026-07
       - key: LEGAL_CONTENT_VERSION
-        value: legal-content-2026-07
+        value: legal-content-2026-07-r4
       - key: DB_POOL_SIZE
         value: "5"
       - key: DB_MAX_OVERFLOW
         value: "5"
-      # Intentionally supplied rather than linked to a newly declared database:
-      # production data must be migrated and reconciled before cutover.
+      # Intentionally operator-supplied rather than linked to an automatically
+      # created database. For the fresh release, provision and revision-check
+      # the intended empty managed PostgreSQL database before deployment.
       - key: DATABASE_URL
         sync: false
       - key: WHATSAPP_TOKEN
@@ -104,6 +105,8 @@ services:
       - key: REFUND_POLICY_URL
         sync: false
       - key: CANCELLATION_POLICY_URL
+        sync: false
+      - key: LEGAL_CONTENT_REVIEWED_VERSION
         sync: false
       - key: LEGAL_CONTENT_REVIEWED_ON
         sync: false

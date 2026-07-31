@@ -52,7 +52,9 @@ from config import (
     GLOBAL_REQUEST_WINDOW_SECONDS,
     INBOUND_MESSAGE_LEASE_SECONDS,
     INBOUND_USER_LOCK_TIMEOUT_SECONDS,
+    LEGAL_CONTENT_REVIEWED_VERSION,
     LEGAL_CONTENT_REVIEWED_ON,
+    LEGAL_CONTENT_VERSION,
     PRIVACY_EMAIL,
     PRIVACY_POLICY_URL,
     PROCESSED_MESSAGE_TTL_DAYS,
@@ -125,10 +127,18 @@ from services.engagement_service import (
     latest_booking_with_statuses,
     legal_guide_message,
     legal_guide_rows,
+    legal_guide_subcategory_rows,
     more_menu_rows,
     preparation_message,
     privacy_message,
     support_contact_message,
+)
+from services.legal_knowledge import (
+    CATEGORY_SUBCATEGORIES,
+    guide_feedback_buttons,
+    parse_guide_feedback_id,
+    parse_guide_id,
+    ui as legal_ui,
 )
 from services.analytics_service import record_event
 from services.fulfillment_service import ensure_booking_fulfillment
@@ -259,93 +269,6 @@ BOOKING_KEYWORDS = {
     "consult",
     "consultation",
     "lawyer",
-}
-
-CATEGORY_SUBCATEGORIES = {
-    "Family": [
-        "Divorce",
-        "Separation",
-        "Maintenance",
-        "Alimony",
-        "Domestic Violence",
-        "Child Custody",
-        "Dowry Case",
-        "Other Family Issue",
-        "Not Sure",
-    ],
-
-    "Criminal": [
-        "Police Case",
-        "Bail Matter",
-        "Cyber Crime",
-        "Theft or Assault",
-        "False FIR",
-        "Police Harassment",
-        "Not Sure",
-    ],
-
-    "Accident": [
-        "Road Accident",
-        "MACT Claim",
-        "Personal Injury",
-        "Accidental Death",
-        "Hit and Run",
-        "Not Sure",
-    ],
-
-    "Property": [
-        "Property Dispute",
-        "Illegal Possession",
-        "Builder Issue",
-        "Sale Deed Issue",
-        "Partition Dispute",
-        "Injunction Matter",
-        "Not Sure",
-    ],
-
-    "Business": [
-        "Cheque Bounce",
-        "Money Recovery",
-        "Contract Dispute",
-        "Partner Dispute",
-        "Business Fraud",
-        "Not Sure",
-    ],
-
-    "Job": [
-        "Wrongful Termination",
-        "Unpaid Salary",
-        "Workplace Harassment",
-        "Service Dispute",
-        "PF or Gratuity Issue",
-        "Not Sure",
-    ],
-
-    "Consumer": [
-        "Consumer Complaint",
-        "Refund Issue",
-        "Online Fraud",
-        "Service Deficiency",
-        "Product Defect",
-        "Not Sure",
-    ],
-
-    "Banking": [
-        "Loan Harassment",
-        "Unauthorized Transaction",
-        "Loan or Card Dispute",
-        "Account Freeze",
-        "Insurance Claim",
-        "Not Sure",
-    ],
-
-    "Other": [
-        "General Legal Query",
-        "Legal Notice",
-        "Draft Agreement",
-        "Document Review",
-        "Not Sure",
-    ],
 }
 
 app.register_blueprint(admin_bp)
@@ -1139,7 +1062,7 @@ def send_language_picker(wa_id, user) -> None:
         t(user, "welcome", case_id=user.case_id),
         [
             {"id": "lang_en", "title": "English"},
-            {"id": "lang_hi", "title": "Hinglish"},
+            {"id": "lang_hi", "title": "Hindi / Hinglish"},
             {"id": "lang_mr", "title": "मराठी"},
         ],
     )
@@ -1695,7 +1618,12 @@ def _valid_legal_review_date(value: str) -> bool:
     return reviewed_on <= datetime.now(IST).date()
 
 
-def _production_configuration_is_valid() -> bool:
+def _deployment_configuration_is_valid(
+    *,
+    payment_mode: str,
+    payment_key_prefix: str,
+    require_legal_review: bool,
+) -> bool:
     required_configuration = (
         ADMIN_TOKEN,
         WHATSAPP_APP_SECRET,
@@ -1716,7 +1644,9 @@ def _production_configuration_is_valid() -> bool:
         TERMS_OF_SERVICE_URL,
         REFUND_POLICY_URL,
         CANCELLATION_POLICY_URL,
-        LEGAL_CONTENT_REVIEWED_ON,
+        AI_CONSENT_VERSION,
+        BOOKING_TERMS_VERSION,
+        LEGAL_CONTENT_VERSION,
     )
     email_values = (
         SENDGRID_FROM_EMAIL,
@@ -1731,12 +1661,28 @@ def _production_configuration_is_valid() -> bool:
         REFUND_POLICY_URL,
         CANCELLATION_POLICY_URL,
     )
+    reviewed_version_is_current = bool(
+        LEGAL_CONTENT_REVIEWED_VERSION
+        and LEGAL_CONTENT_REVIEWED_VERSION == LEGAL_CONTENT_VERSION
+        and _valid_legal_review_date(LEGAL_CONTENT_REVIEWED_ON)
+    )
+    if require_legal_review:
+        legal_review_ok = reviewed_version_is_current
+    else:
+        legal_review_ok = (
+            (
+                not LEGAL_CONTENT_REVIEWED_VERSION
+                and not LEGAL_CONTENT_REVIEWED_ON
+            )
+            or reviewed_version_is_current
+        )
     return bool(
         all(required_configuration)
-        and RAZORPAY_MODE == "live"
-        and RAZORPAY_KEY_ID.startswith("rzp_live_")
+        and RAZORPAY_MODE == payment_mode
+        and RAZORPAY_KEY_ID.startswith(payment_key_prefix)
         and len(RAZORPAY_KEY_ID) >= 16
         and not AUTO_CREATE_SCHEMA
+        and not ALLOW_INSECURE_WEBHOOKS
         and len(ADMIN_TOKEN) >= 32
         and len(AI_SAFETY_IDENTIFIER_SECRET) >= 32
         and len(WHATSAPP_APP_SECRET) >= 32
@@ -1757,7 +1703,23 @@ def _production_configuration_is_valid() -> bool:
         and WHATSAPP_PHONE_ID.isdigit()
         and all(_valid_email(value) for value in email_values)
         and all(_valid_https_url(value) for value in policy_urls)
-        and _valid_legal_review_date(LEGAL_CONTENT_REVIEWED_ON)
+        and legal_review_ok
+    )
+
+
+def _production_configuration_is_valid() -> bool:
+    return _deployment_configuration_is_valid(
+        payment_mode="live",
+        payment_key_prefix="rzp_live_",
+        require_legal_review=True,
+    )
+
+
+def _staging_configuration_is_valid() -> bool:
+    return _deployment_configuration_is_valid(
+        payment_mode="test",
+        payment_key_prefix="rzp_test_",
+        require_legal_review=False,
     )
 
 
@@ -1783,26 +1745,31 @@ def health_live():
 @app.get("/health/ready")
 def health_ready():
     database = get_db_health()
-    production_database_ok = not (
-        ENV == "production" and database.get("backend") == "sqlite"
+    strict_deployment = ENV in {"staging", "production"}
+    database_compatible = bool(
+        not strict_deployment or database.get("backend") == "postgresql"
     )
-    database["production_compatible"] = production_database_ok
+    database["deployment_compatible"] = database_compatible
+    database["production_compatible"] = bool(
+        ENV != "production" or database.get("backend") == "postgresql"
+    )
     applied_schema_revision = (
-        get_schema_revision() if ENV == "production" else None
+        get_schema_revision() if strict_deployment else None
     )
     schema_ok = (
         applied_schema_revision == EXPECTED_SCHEMA_REVISION
-        if ENV == "production"
+        if strict_deployment
         else True
     )
-    configuration_ok = (
-        _production_configuration_is_valid()
-        if ENV == "production"
-        else True
-    )
+    if ENV == "production":
+        configuration_ok = _production_configuration_is_valid()
+    elif ENV == "staging":
+        configuration_ok = _staging_configuration_is_valid()
+    else:
+        configuration_ok = True
     ready = bool(
         database["ok"]
-        and production_database_ok
+        and database_compatible
         and schema_ok
         and configuration_ok
     )
@@ -1810,6 +1777,7 @@ def health_ready():
         jsonify(
             {
                 "ok": ready,
+                "environment": ENV,
                 "database": database,
                 "schema": {
                     "ok": schema_ok,
@@ -1840,7 +1808,7 @@ def webhook():
     # SECURITY: verify signatures by default. Local development must opt out.
     # -------------------------------------------------
     signature_required = not (
-        ALLOW_INSECURE_WEBHOOKS and ENV != "production"
+        ALLOW_INSECURE_WEBHOOKS and ENV in {"development", "test"}
     )
     if signature_required and not verify_whatsapp_signature():
         logger.warning("Invalid WhatsApp signature | request_id=%s", g.request_id)
@@ -2035,26 +2003,117 @@ def webhook():
         if interactive_id == MORE_MENU_IDS["guides"]:
             send_list_picker(
                 wa_id,
-                header=t(user, "legal_guides"),
-                body=t(user, "legal_guides_desc"),
-                section_title=t(user, "legal_guides"),
+                header=legal_ui(user, "guide_categories"),
+                body=legal_ui(user, "guide_categories_body"),
+                section_title=legal_ui(user, "guide_categories"),
                 rows=legal_guide_rows(user),
             )
             record_event("legal_guides_opened", user_id=user.id)
             return jsonify({"status": "ok"}), 200
 
+        if interactive_id and interactive_id.startswith("guidecat::"):
+            category_key = interactive_id.split("::", 1)[1]
+            rows = legal_guide_subcategory_rows(user, category_key)
+            if not rows:
+                send_text(wa_id, t(user, "invalid_selection"))
+                return jsonify({"status": "ok"}), 200
+            send_list_picker(
+                wa_id,
+                header=legal_ui(user, "guide_issues"),
+                body=legal_ui(user, "guide_issues_body"),
+                section_title=legal_ui(user, "guide_issues"),
+                rows=rows,
+            )
+            record_event(
+                "legal_guide_category_viewed",
+                {"category": category_key},
+                user_id=user.id,
+            )
+            return jsonify({"status": "ok"}), 200
+
         if interactive_id and interactive_id.startswith("guide::"):
-            guide_id = interactive_id.split("::", 1)[1]
-            guide = legal_guide_message(user, guide_id)
-            if guide:
-                send_text(wa_id, guide)
+            guide_category, guide_subcategory = parse_guide_id(interactive_id)
+            if guide_category and guide_subcategory:
+                send_text(
+                    wa_id,
+                    legal_guide_message(
+                        user,
+                        guide_category,
+                        guide_subcategory,
+                    ),
+                )
+                send_buttons(
+                    wa_id,
+                    legal_ui(user, "helpful"),
+                    guide_feedback_buttons(
+                        user,
+                        guide_category,
+                        guide_subcategory,
+                    ),
+                )
                 record_event(
                     "legal_guide_viewed",
-                    {"guide_id": guide_id},
+                    {
+                        "category": guide_category,
+                        "subcategory": guide_subcategory,
+                    },
                     user_id=user.id,
                 )
             else:
                 send_text(wa_id, t(user, "invalid_selection"))
+            return jsonify({"status": "ok"}), 200
+
+        if interactive_id and interactive_id.startswith("guidefb::"):
+            helpful, guide_category, guide_subcategory = (
+                parse_guide_feedback_id(interactive_id)
+            )
+            if not helpful:
+                send_text(wa_id, t(user, "invalid_selection"))
+                return jsonify({"status": "ok"}), 200
+
+            record_event(
+                "legal_guide_feedback",
+                {
+                    "helpful": helpful == "yes",
+                    "category": guide_category,
+                    "subcategory": guide_subcategory,
+                },
+                user_id=user.id,
+            )
+            if helpful == "yes":
+                send_buttons(
+                    wa_id,
+                    legal_ui(user, "thanks"),
+                    [
+                        {
+                            "id": MORE_MENU_IDS["guides"],
+                            "title": legal_ui(user, "guide_categories")[:20],
+                        },
+                        {
+                            "id": "book_now",
+                            "title": legal_ui(user, "book")[:20],
+                        },
+                    ],
+                )
+            else:
+                send_buttons(
+                    wa_id,
+                    legal_ui(user, "more_help"),
+                    [
+                        {
+                            "id": MORE_MENU_IDS["guides"],
+                            "title": legal_ui(user, "guide_categories")[:20],
+                        },
+                        {
+                            "id": MORE_MENU_IDS["support"],
+                            "title": legal_ui(user, "support")[:20],
+                        },
+                        {
+                            "id": "book_now",
+                            "title": legal_ui(user, "book")[:20],
+                        },
+                    ],
+                )
             return jsonify({"status": "ok"}), 200
 
         if interactive_id == MORE_MENU_IDS["privacy"]:

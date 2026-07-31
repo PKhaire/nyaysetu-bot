@@ -7,8 +7,11 @@ The demo has two modes:
 1. Zero-setup mode:
    - No API keys.
    - No external AI service.
-   - Uses a small local legal knowledge base inside
-     `services/local_ai_service.py`.
+   - Routes free text into the versioned multilingual knowledge base inside
+     `services/legal_knowledge.py`.
+   - Returns guided questions, immediate actions, document preparation,
+     urgency cues, location-routing context, a disclaimer, and review
+     metadata.
 
 2. Optional Ollama mode:
    - Runs a local open-source model on your machine or server.
@@ -59,14 +62,14 @@ WhatsApp user
 -> WhatsApp reply
 ```
 
-Future local AI path:
+Local knowledge path:
 
 ```text
 WhatsApp user
 -> /webhook
 -> ai_reply_router()
 -> local_ai_reply()
--> local knowledge base or local Ollama model
+-> versioned knowledge base or optional local Ollama model
 -> WhatsApp reply
 ```
 
@@ -96,10 +99,14 @@ Business Platform.
 For the client, do not rely only on a raw model. Use:
 
 ```text
-Local legal knowledge base
-+ local LLM
+Versioned lawyer-reviewed legal knowledge base
++ optional local LLM
 + strict legal disclaimer
 + lawyer consultation CTA
 ```
 
-That gives better control, lower cost, and safer legal answers.
+The LLM is not required for production. The deterministic knowledge base is the
+default because it is predictable, reviewable, multilingual, and has no
+per-question AI cost. If Ollama is enabled, its output remains constrained by
+the local guidance and falls back to that guidance whenever Ollama is
+unavailable.

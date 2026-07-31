@@ -89,6 +89,7 @@ Useful commands:
 python -m compileall -q app.py admin.py category_labels.py config.py db.py demo_local_ai.py gunicorn.conf.py location_service.py models.py subcategory_labels.py translations.py utils.py migrations services jobs tests utils
 python -m ruff check .
 python -m pytest -q
+python -m pytest -q --cov=app --cov=services --cov-fail-under=60
 python -m alembic -c alembic.ini upgrade head
 python -m jobs.process_outbox
 python -m jobs.maintenance --dry-run --batch-size 500 --fail-on-risk
@@ -118,10 +119,29 @@ the corresponding key and reviewed model setting, and complete the privacy and
 legal launch gates below. Never place credentials in Git, logs, support
 tickets, or webhook fixtures.
 
+The local provider is a deterministic, versioned knowledge engine rather than
+a generative model. Its Legal Guides flow first asks for one of nine legal
+areas and then a category-specific issue. English, conversational
+Hindi/Hinglish, and Marathi guidance includes:
+
+- questions that help the user organise the matter;
+- immediate, non-personalised next steps;
+- a document-preparation checklist;
+- urgent-risk escalation language;
+- state/district-based consultation-routing context;
+- a legal-information disclaimer and content-review metadata;
+- private helpful/not-helpful feedback and a consultation handoff.
+
+Every content revision must change `LEGAL_CONTENT_VERSION`. Production
+readiness remains false until `LEGAL_CONTENT_REVIEWED_VERSION` exactly matches
+it and `LEGAL_CONTENT_REVIEWED_ON=YYYY-MM-DD` identifies the date on which a
+qualified reviewer approved that revision.
+
 `GET /health/ready` checks database connectivity and the applied Alembic
-revision, rejects SQLite and automatic schema creation in production, and
-validates live WhatsApp/Razorpay, SendGrid/recipient, support/privacy, HTTPS
-policy, admin/AI-secret, and legal-review-date configuration. Current production
+revision, rejects SQLite and automatic schema creation in staging/production,
+and validates strict provider, recipient, support/privacy, HTTPS-policy and
+secret configuration. Staging requires Razorpay test keys; production requires
+live keys plus an exact content-review version/date pair. Current production
 credentials must also meet the enforced format/strength contract: 32 or more
 characters for the WhatsApp app secret/token and admin/AI secrets, 16 or more
 for the WhatsApp verify token and Razorpay key/webhook secrets, an
@@ -186,9 +206,10 @@ controls use shared infrastructure and PostgreSQL concurrency/load tests pass.
 The Blueprint intentionally leaves `DATABASE_URL` as an operator-supplied
 secret instead of declaring and immediately attaching a new database. This
 prevents a Blueprint sync from silently switching a live bot to an empty
-database. Provision PostgreSQL in the same region, migrate and reconcile data
-in staging, then supply its internal connection string to the web service and
-sync the Blueprint so all four crons inherit it.
+database. Validate a separate fresh PostgreSQL database in staging, then
+provision a different empty production database in the same region and supply
+its internal connection string to the web service. Sync the Blueprint so all
+four crons inherit that exact production connection.
 
 The outbox command processes a bounded batch and exits, which is why it is a
 cron job instead of a long-running worker. Every cron inherits the same
@@ -228,59 +249,33 @@ Read [the deployment and operations runbook](docs/deployment-operations.md)
 before changing the production Blueprint. Do not deploy directly from an
 untested working tree.
 
-## Database migration gate
+## Fresh database release gate
 
 The repository includes Alembic revision `20260729_01`. Render runs
 `python -m alembic -c alembic.ini upgrade head` before the web release, and
-production readiness requires that exact revision. Automatic `create_all()` is
-disabled by default in production and remains only a local-development
-compatibility path.
+staging and production readiness require that exact revision. Automatic
+`create_all()` is disabled by default in both environments and remains only a
+local-development/test compatibility path.
 
-Before moving the current production data to PostgreSQL:
+This release intentionally imports no old-bot data:
 
-1. Put the deployment in a controlled maintenance window and stop the web
-   service plus all four cron writers.
-2. Use SQLite's Online Backup API or CLI `.backup` command to create and
-   restore-test an untouched backup. Never raw-copy an active WAL database.
-3. Explicitly set `DATABASE_URL` to a separate disposable working backup and
-   `AUTO_CREATE_SCHEMA=false`, run Alembic `upgrade head`, `current`, and
-   `check`, then clear both variables. Never run Alembic on the untouched
-   restore artifact. After all processes close, use SQLite's backup mechanism
-   again to create the frozen import artifact with no `-wal`, `-shm`, or
-   `-journal` sidecars. Apply the same Alembic head to an empty managed
-   PostgreSQL target.
-4. Supply the target only through the dedicated environment variable and run
-   the read-only preflight:
-
-   ```powershell
-   $env:NYAYSETU_CUTOVER_TARGET_URL = '<short-lived-managed-postgresql-url>'
-   python -m jobs.migrate_sqlite_to_postgres --source-sqlite <frozen-backup.db>
-   ```
-
-5. Only after the JSON result reports `status=ready` and the cutover owner
-   approves, run the atomic import, then clear the credential:
-
-   ```powershell
-   python -m jobs.migrate_sqlite_to_postgres --source-sqlite <frozen-backup.db> --confirm-import IMPORT_SQLITE_COPY_INTO_EMPTY_POSTGRESQL
-   Remove-Item Env:NYAYSETU_CUTOVER_TARGET_URL
-   ```
-
-   On any preflight/import failure, clear that variable before investigating.
-
-6. Compare row counts, constraints, and sequences; reconcile every
-   pending/paid/completed booking and Razorpay ID.
-7. Run signed webhook, capacity, payment retry, email, outbox, reminder,
-   maintenance dry-run, and operator-queue tests.
-8. Switch all five services to the same intended `DATABASE_URL`, verify
-   `/health/ready` reports PostgreSQL and the expected revision, and retain the
-   untouched rollback backup until the reconciliation window closes.
+1. Create isolated empty managed PostgreSQL databases for staging and
+   production. Never run staging tests against the production database.
+2. Set `AUTO_CREATE_SCHEMA=false` and run Alembic `upgrade head`, `current`,
+   and `check` against staging.
+3. Complete signed Meta, Razorpay test-mode, SendGrid, failure/retry,
+   maintenance and operator-queue acceptance in staging.
+4. Create or re-create an empty production database, apply the same Alembic
+   revision, and verify that no synthetic staging rows exist.
+5. Point the web service and all four cron jobs to that one production
+   connection and require `/health/ready` to report PostgreSQL, the expected
+   revision, complete configuration and the approved legal-content version.
 
 Every future schema change must add and rehearse a reviewed Alembic revision.
-The one-shot utility never reads `DATABASE_URL`, refuses a non-empty target, and
-is not a backup or recurring synchronization tool. See the
-[cutover runbook](docs/deployment-operations.md#postgresql-cutover) for the full
-go/no-go and rollback procedure. Do not treat application startup as the
-migration plan.
+The included SQLite-to-PostgreSQL utility is retained only as a fail-closed
+contingency for a separately approved future legacy import; it is not part of
+this fresh-release launch and must not be run against the production database
+without a new migration plan and approval.
 
 ## Privacy, legal, and AI launch gates
 
