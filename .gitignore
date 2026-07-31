@@ -41,6 +41,10 @@ build/
 dist/
 *.egg-info/
 
+# Generated print editions (the Markdown source remains version controlled)
+docs/*_PRINT.html
+docs/*_PRINT.pdf
+
 # Editors and operating systems
 .idea/
 .vscode/
