@@ -121,12 +121,14 @@ tickets, or webhook fixtures.
 
 The local provider is a deterministic, versioned knowledge engine rather than
 a generative model. Its Legal Guides flow first asks for one of nine legal
-areas and then a category-specific issue. English, conversational
+areas and then one of 61 category-specific issue choices. English, conversational
 Hindi/Hinglish, and Marathi guidance includes:
 
 - questions that help the user organise the matter;
 - immediate, non-personalised next steps;
 - a document-preparation checklist;
+- a warning not to send OTPs, PINs, CVVs, passwords, complete identity
+  numbers, or full bank details in chat;
 - urgent-risk escalation language;
 - state/district-based consultation-routing context;
 - a legal-information disclaimer and content-review metadata;

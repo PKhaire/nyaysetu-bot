@@ -53,7 +53,9 @@ More options contains appointment status, consultation preparation, legal
 guides, support, privacy/data information, and language change. Legal Guides
 first asks for a legal area and then the closest category-specific issue. A
 guide never predicts an outcome or supplies an unreviewed deadline. It ends
-with a helpful/not-helpful control and a direct consultation option.
+with a helpful/not-helpful control and a direct consultation option. Every
+guide warns users not to send account secrets, complete identity numbers, or
+full bank details in chat.
 
 Sending a home/menu/help greeting after onboarding redisplays navigation
 without clearing the current flow. A pending payment remains protected: the

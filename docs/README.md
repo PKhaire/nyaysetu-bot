@@ -6,33 +6,35 @@ from external rollout work and future product ideas.
 
 ## Read in this order
 
-1. [RC3 release notes](RELEASE_NOTES_2026-07-31_RC3.md) — exact candidate
-   changes, verification evidence, and mandatory external gates.
-2. [Master product, technology, launch and growth blueprint](NYAYSETU_MASTER_BLUEPRINT.md)
+1. [RC4 release notes](RELEASE_NOTES_2026-08-07_RC4.md) — latest legal-guide,
+   routing, privacy, validation, and release-gate changes.
+2. [RC3 release notes](RELEASE_NOTES_2026-07-31_RC3.md) — infrastructure,
+   SES, verification evidence, and mandatory external gates inherited by RC4.
+3. [Master product, technology, launch and growth blueprint](NYAYSETU_MASTER_BLUEPRINT.md)
    — consolidated status, decisions, user experience, architecture, privacy,
    launch, operations, budget, roadmap and marketing strategy.
-3. [Functional specification](functional-specification.md) — implemented
+4. [Functional specification](functional-specification.md) — implemented
    user and operations behavior.
-4. [Technical architecture](technical-architecture.md) — runtime, data flow,
+5. [Technical architecture](technical-architecture.md) — runtime, data flow,
    idempotency, database, outbox, and AI design.
-5. [API and integrations](api-integrations.md) — routes and provider contracts.
-6. [Data model and governance](data-model.md) — current entities, sensitivity,
+6. [API and integrations](api-integrations.md) — routes and provider contracts.
+7. [Data model and governance](data-model.md) — current entities, sensitivity,
    lifecycle, and migration gates.
-7. [Security, risk, and compliance](security-risk-compliance.md) — controls,
+8. [Security, risk, and compliance](security-risk-compliance.md) — controls,
    limitations, and launch risks.
-8. [Legal content review checklist](legal-content-review-checklist.md) —
+9. [Legal content review checklist](legal-content-review-checklist.md) —
    version-specific reviewer scope and sign-off gate.
-9. [Testing and QA plan](testing-qa-plan.md) — automated coverage and required
+10. [Testing and QA plan](testing-qa-plan.md) — automated coverage and required
    staging/migration evidence.
-10. [Deployment and operations](deployment-operations.md) — environment,
+11. [Deployment and operations](deployment-operations.md) — environment,
    cutover, monitoring, runbooks, and rollback.
-11. [Client and user perspective](client-user-perspective.md) — user promise,
+12. [Client and user perspective](client-user-perspective.md) — user promise,
    journey, trust, and acceptance.
-12. [Business perspective](business-perspective.md) — value, operating model,
+13. [Business perspective](business-perspective.md) — value, operating model,
    metrics, and responsible growth.
-13. [Roadmap and backlog](roadmap-backlog.md) — completed foundation, launch
+14. [Roadmap and backlog](roadmap-backlog.md) — completed foundation, launch
     gates, and future milestones.
-14. [Local AI demo](local-ai-demo.md) — optional demonstration of the built-in
+15. [Local AI demo](local-ai-demo.md) — optional demonstration of the built-in
     local knowledge path; it is not the production architecture specification.
 
 ## Current product

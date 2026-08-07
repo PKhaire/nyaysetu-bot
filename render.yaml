@@ -73,7 +73,7 @@ services:
       - key: BOOKING_TERMS_VERSION
         value: booking-terms-2026-07
       - key: LEGAL_CONTENT_VERSION
-        value: legal-content-2026-07-r4
+        value: legal-content-2026-08-r5
       - key: DB_POOL_SIZE
         value: "5"
       - key: DB_MAX_OVERFLOW

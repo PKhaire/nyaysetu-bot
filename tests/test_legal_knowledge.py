@@ -103,6 +103,26 @@ def test_feedback_buttons_round_trip_without_free_text():
         ("मुझे कानूनी नोटिस मिला है", ("Other", "Legal Notice")),
         ("माझा पगार थकीत आहे", ("Job", "Unpaid Salary")),
         ("मेरे खाते से पैसे निकल गए", ("Banking", "Unauthorized Transaction")),
+        (
+            "My landlord will not return my security deposit",
+            ("Property", "Rent or Tenancy"),
+        ),
+        (
+            "Housing society sent me a notice",
+            ("Property", "Housing Society Issue"),
+        ),
+        (
+            "There is a dispute about my father's will",
+            ("Property", "Inheritance or Will"),
+        ),
+        (
+            "मकान मालिक किराया विवाद कर रहा है",
+            ("Property", "Rent or Tenancy"),
+        ),
+        (
+            "माझ्या वडिलांच्या मृत्युपत्राचा वाद आहे",
+            ("Property", "Inheritance or Will"),
+        ),
     ],
 )
 def test_free_text_routes_to_a_reviewable_guide(question, expected):
@@ -194,6 +214,25 @@ def test_high_risk_issue_has_specific_safety_overlay():
 
     assert "Prioritise immediate safety" in message
     assert "local emergency services" in message
+
+
+@pytest.mark.parametrize(
+    ("language", "privacy_text"),
+    [
+        ("en", "Do not send OTP, PIN, CVV"),
+        ("hi", "Chat mein OTP, PIN, CVV"),
+        ("mr", "चॅटमध्ये OTP, PIN, CVV"),
+    ],
+)
+def test_every_guide_warns_users_not_to_share_sensitive_secrets(
+    language,
+    privacy_text,
+):
+    user = SimpleNamespace(language=language)
+
+    for category, subcategories in CATEGORY_SUBCATEGORIES.items():
+        for subcategory in subcategories:
+            assert privacy_text in guide_message(user, category, subcategory)
 
 
 def test_local_faq_answers_hinglish_without_external_ai(monkeypatch):

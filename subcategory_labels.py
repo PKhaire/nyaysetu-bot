@@ -132,6 +132,21 @@ SUBCATEGORY_LABELS = {
         "hi": "Injunction Mamla",
         "mr": "स्थगिती प्रकरण",
     },
+    "Rent or Tenancy": {
+        "en": "Rent or Tenancy",
+        "hi": "Kiraya ya Tenancy",
+        "mr": "भाडे किंवा भाडेकरार",
+    },
+    "Housing Society Issue": {
+        "en": "Housing Society Issue",
+        "hi": "Housing Society Mamla",
+        "mr": "गृहनिर्माण संस्था",
+    },
+    "Inheritance or Will": {
+        "en": "Inheritance or Will",
+        "hi": "Virasat ya Vasiyat",
+        "mr": "वारसा किंवा मृत्युपत्र",
+    },
 
     # -------- BUSINESS --------
     "Cheque Bounce": {

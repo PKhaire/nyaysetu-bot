@@ -114,10 +114,10 @@ revocation/governance and automated export/deletion are not implemented.
 
 ## Language experience
 
-Navigation and core flow copy exist in English, Hinglish, and Marathi. Built-in
-legal guide source content is primarily English; non-English users receive a
-language note. Before launch, native reviewers should test terminology,
-truncation, tone, and safety across all three experiences.
+Navigation, core flow copy, and built-in legal guides exist in English,
+conversational Hindi/Hinglish, and Marathi. Before launch, qualified legal and
+native-language reviewers must test terminology, meaning equivalence,
+truncation, tone, privacy wording, and safety across all three experiences.
 
 ## Remaining friction
 

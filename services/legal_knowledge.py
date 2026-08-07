@@ -58,6 +58,9 @@ CATEGORY_SUBCATEGORIES = {
         "Sale Deed Issue",
         "Partition Dispute",
         "Injunction Matter",
+        "Rent or Tenancy",
+        "Housing Society Issue",
+        "Inheritance or Will",
         "Not Sure",
     ],
     "Business": [
@@ -117,6 +120,12 @@ _UI = {
         "questions": "First, think about",
         "actions": "What to do now",
         "documents": "Documents to keep ready",
+        "privacy_title": "Protect your privacy",
+        "privacy": (
+            "Do not send OTP, PIN, CVV, passwords, complete identity numbers, "
+            "or full bank details in chat. Share only necessary redacted copies "
+            "through a verified channel when a lawyer requests them."
+        ),
         "urgent": "Get urgent help when",
         "location": (
             "Law and procedure can vary by facts and location. During booking, "
@@ -156,6 +165,12 @@ _UI = {
         "questions": "Pehle yeh sochiye",
         "actions": "Abhi kya karein",
         "documents": "Kaunse documents ready rakhein",
+        "privacy_title": "Apni privacy bachayein",
+        "privacy": (
+            "Chat mein OTP, PIN, CVV, password, poora identity number ya full "
+            "bank details na bhejein. Lawyer ke kehne par sirf zaroori redacted "
+            "copy verified channel se share karein."
+        ),
         "urgent": "Turant madad kab lein",
         "location": (
             "Facts aur location ke hisaab se law aur process alag ho sakta hai. "
@@ -196,6 +211,12 @@ _UI = {
         "questions": "प्रथम याचा विचार करा",
         "actions": "आता काय करावे",
         "documents": "तयार ठेवायची कागदपत्रे",
+        "privacy_title": "आपली गोपनीयता जपा",
+        "privacy": (
+            "चॅटमध्ये OTP, PIN, CVV, पासवर्ड, संपूर्ण ओळख क्रमांक किंवा पूर्ण "
+            "बँक तपशील पाठवू नका. वकिलांनी मागितल्यास फक्त आवश्यक, झाकलेली "
+            "प्रत सत्यापित माध्यमातून पाठवा."
+        ),
         "urgent": "तातडीची मदत कधी घ्यावी",
         "location": (
             "तथ्ये आणि ठिकाणानुसार कायदा व प्रक्रिया बदलू शकते. बुकिंगच्या वेळी "
@@ -821,6 +842,48 @@ _ISSUE_OVERLAYS = {
             "urgent": "हिंसा, जबरदस्तीने प्रवेश, पाडकाम, मालमत्तेची विल्हेवाट किंवा पुरावा नष्ट होण्याचा धोका असेल",
         },
     },
+    "Rent or Tenancy": {
+        "en": {
+            "focus": "Preserve the rent agreement, payment and deposit records, notices, property-condition evidence, meter records, and all tenant-landlord communications. Do not use force or remove property.",
+            "urgent": "there is a threatened lockout or eviction, essential services are being cut, belongings may be removed, violence is threatened, or a hearing or notice deadline is near",
+        },
+        "hi": {
+            "focus": "Rent agreement, payment aur deposit records, notices, property-condition evidence, meter records aur tenant-landlord communication save karein. Force use ya samaan remove na karein.",
+            "urgent": "lockout ya eviction ka turant risk ho, essential services band ki ja rahi hon, samaan hataya ja raha ho, violence ki threat ho, ya hearing/notice deadline paas ho",
+        },
+        "mr": {
+            "focus": "भाडेकरार, भाडे व ठेव पावत्या, नोटिसा, मालमत्तेच्या स्थितीचे पुरावे, मीटर नोंदी आणि मालक-भाडेकरू संवाद जतन करा. बळाचा वापर किंवा सामान काढू नका.",
+            "urgent": "कुलूप लावणे किंवा बेदखल करण्याचा तातडीचा धोका, आवश्यक सेवा बंद करणे, सामान काढणे, हिंसेची धमकी किंवा सुनावणी/नोटीसची मुदत जवळ असेल",
+        },
+    },
+    "Housing Society Issue": {
+        "en": {
+            "focus": "Keep the society rules or bye-laws available to you, bills, receipts, notices, meeting records, complaints, replies, photographs, and the exact relief requested. Keep communications factual.",
+            "urgent": "essential access or services are blocked, personal safety is threatened, coercive recovery or demolition is occurring, or an official deadline is near",
+        },
+        "hi": {
+            "focus": "Available society rules/bye-laws, bills, receipts, notices, meeting records, complaints, replies, photos aur exact requested relief ready rakhein. Communication factual rakhein.",
+            "urgent": "essential access/services block hon, safety threat ho, zabardasti recovery ya demolition ho raha ho, ya official deadline paas ho",
+        },
+        "mr": {
+            "focus": "उपलब्ध संस्थेचे नियम/उपविधी, बिले, पावत्या, नोटिसा, बैठकीच्या नोंदी, तक्रारी, उत्तरे, फोटो आणि मागितलेला नेमका दिलासा तयार ठेवा. संवाद तथ्यात्मक ठेवा.",
+            "urgent": "आवश्यक प्रवेश किंवा सेवा रोखल्या असतील, सुरक्षिततेला धोका असेल, जबर वसुली किंवा पाडकाम सुरू असेल किंवा अधिकृत मुदत जवळ असेल",
+        },
+    },
+    "Inheritance or Will": {
+        "en": {
+            "focus": "Preserve original wills or codicils without marking them, death and family records, asset and title records, nominations, communications, and details of any pending proceeding. Do not sign a release or transfer without advice.",
+            "urgent": "an asset transfer, disposal, document alteration, dispossession, or an official filing or hearing deadline is imminent",
+        },
+        "hi": {
+            "focus": "Original will/codicil par marking na karein. Death aur family records, asset/title papers, nominations, communication aur pending proceeding details safe rakhein. Advice ke bina release ya transfer sign na karein.",
+            "urgent": "asset transfer/disposal, document alteration, possession loss ya official filing/hearing deadline turant paas ho",
+        },
+        "mr": {
+            "focus": "मूळ मृत्युपत्र किंवा पुरवणीवर खूण करू नका. मृत्यू व कुटुंब नोंदी, मालमत्ता/मालकी कागदपत्रे, नामनिर्देशन, संवाद आणि प्रलंबित कार्यवाहीची माहिती जतन करा. सल्ल्याशिवाय हक्कसोड किंवा हस्तांतरणावर सही करू नका.",
+            "urgent": "मालमत्ता हस्तांतरण/विल्हेवाट, कागदपत्रात बदल, ताबा गमावणे किंवा अधिकृत अर्ज/सुनावणीची मुदत तातडीने जवळ असेल",
+        },
+    },
     "Cheque Bounce": {
         "en": {
             "focus": "Preserve the cheque, return memo, underlying agreement or invoice, payment history, bank records, notices, and exact dates. Ask a lawyer to check deadlines.",
@@ -1079,6 +1142,54 @@ _KEYWORD_ROUTES = (
             "पुलिस ने नोटिस दिया",
             "पुलिस नोटिस",
             "पुलिस",
+        ),
+    ),
+    (
+        "Property",
+        "Rent or Tenancy",
+        (
+            "rent dispute",
+            "tenant dispute",
+            "landlord dispute",
+            "rent agreement",
+            "security deposit",
+            "eviction",
+            "kiraya",
+            "किराया",
+            "भाडेकरू",
+            "भाडे विवाद",
+        ),
+    ),
+    (
+        "Property",
+        "Housing Society Issue",
+        (
+            "housing society",
+            "society dispute",
+            "society notice",
+            "सोसाइटी विवाद",
+            "सोसायटी वाद",
+            "गृहनिर्माण संस्था",
+        ),
+    ),
+    (
+        "Property",
+        "Inheritance or Will",
+        (
+            "inheritance",
+            "will dispute",
+            "my father's will",
+            "my mother's will",
+            "parent's will",
+            "succession",
+            "ancestral property",
+            "vasiyat",
+            "virasat",
+            "वसीयत",
+            "विरासत",
+            "वारसा",
+            "मृत्युपत्र",
+            "मृत्युपत्राचा वाद",
         ),
     ),
     (
@@ -1405,6 +1516,7 @@ def guide_message(
         f"*{ui(user, 'questions')}*\n{bullets(content['questions'])}",
         f"*{ui(user, 'actions')}*\n{bullets(content['actions'])}",
         f"*{ui(user, 'documents')}*\n{bullets(content['documents'])}",
+        f"🔒 *{ui(user, 'privacy_title')}*\n{ui(user, 'privacy')}",
         f"*{ui(user, 'urgent')}*\n• {urgent}",
         ui(user, "location"),
         f"⚠️ {ui(user, 'disclaimer')}",

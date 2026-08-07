@@ -187,7 +187,7 @@ BOOKING_TERMS_VERSION = env_str(
 )
 LEGAL_CONTENT_VERSION = env_str(
     "LEGAL_CONTENT_VERSION",
-    "legal-content-2026-07-r4",
+    "legal-content-2026-08-r5",
     allow_empty=False,
 )
 LEGAL_CONTENT_REVIEWED_VERSION = env_str(

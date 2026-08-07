@@ -2,7 +2,7 @@
 
 ## Release under review
 
-- Content version: `legal-content-2026-07-r4`
+- Content version: `legal-content-2026-08-r5`
 - Supported experiences: free-text local guidance and the two-level Legal
   Guides menu
 - Supported languages: English, conversational Hindi/Hinglish (`hi`), and
@@ -45,6 +45,10 @@ The category tree also exposes every subcategory in
 category guide and does not imply specialised advice that the guide does not
 provide. Separately review every entry in `_ISSUE_OVERLAYS`; these high-risk
 issue notes can replace the category-level urgency wording.
+
+For revision `legal-content-2026-08-r5`, specifically review the new rent or
+tenancy, housing-society, and inheritance or will issue overlays, their
+English/Hindi/Marathi labels, and the privacy warning shown in every guide.
 
 ## Required legal checks
 
@@ -97,8 +101,8 @@ Record the following outside the source repository:
 After approval, configure:
 
 ```text
-LEGAL_CONTENT_VERSION=legal-content-2026-07-r4
-LEGAL_CONTENT_REVIEWED_VERSION=legal-content-2026-07-r4
+LEGAL_CONTENT_VERSION=legal-content-2026-08-r5
+LEGAL_CONTENT_REVIEWED_VERSION=legal-content-2026-08-r5
 LEGAL_CONTENT_REVIEWED_ON=YYYY-MM-DD
 ```
 
