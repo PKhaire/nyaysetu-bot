@@ -277,6 +277,38 @@ BOOKING_KEYWORDS = {
     "lawyer",
 }
 
+ADVOCATE_INTAKE_PREFIX = (
+    "Hi NyaySetu, I want to request consultation coordination with an "
+    "independent advocate."
+)
+ADVOCATE_INTAKE_NOTICE = (
+    "I understand this is NyaySetu intake, not emergency assistance or a "
+    "confirmed advocate-client relationship. Please share availability, "
+    "scope, professional details and price before any booking."
+)
+ADVOCATE_INTAKE_CATEGORIES = {
+    "Family and matrimonial",
+    "Property and housing",
+    "Employment and workplace",
+    "Consumer complaint",
+    "Money recovery and debt",
+    "Criminal complaint or police matter",
+    "Business and contracts",
+    "Cybercrime and online fraud",
+    "Other legal issue",
+}
+ADVOCATE_INTAKE_LANGUAGES = {
+    "english": "en",
+    "hindi": "hi",
+    "marathi": "mr",
+}
+ADVOCATE_INTAKE_TIMINGS = {
+    "No known immediate deadline",
+    "A date is within 7 days",
+    "A date is within 30 days",
+    "I am unsure and need to explain",
+}
+
 app.register_blueprint(admin_bp)
 
 
@@ -993,6 +1025,54 @@ def is_booking_intent(text: str) -> bool:
     normalized = re.sub(r"[^a-z\s]", " ", (text or "").lower())
     normalized = " ".join(normalized.split())
     return normalized in BOOKING_KEYWORDS
+
+
+def parse_advocate_intake(text: str) -> dict[str, str] | None:
+    """Validate and parse the structured intake created by the public site."""
+
+    normalized = unicodedata.normalize("NFKC", str(text or ""))
+    normalized = normalized.replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not 1 <= len(normalized) <= 2_000:
+        return None
+
+    pattern = re.compile(
+        rf"{re.escape(ADVOCATE_INTAKE_PREFIX)}\n\n"
+        r"Category:\s*(?P<category>[^\n]{1,100})\n"
+        r"Preferred language:\s*(?P<language>[^\n]{1,30})\n"
+        r"Known timing:\s*(?P<timing>[^\n]{1,100})\n"
+        r"Question summary:\s*(?P<summary>[\s\S]{5,600})\n\n"
+        rf"{re.escape(ADVOCATE_INTAKE_NOTICE)}",
+        re.IGNORECASE,
+    )
+    match = pattern.fullmatch(normalized)
+    if not match:
+        return None
+
+    category_lookup = {
+        value.casefold(): value for value in ADVOCATE_INTAKE_CATEGORIES
+    }
+    timing_lookup = {
+        value.casefold(): value for value in ADVOCATE_INTAKE_TIMINGS
+    }
+    category = category_lookup.get(match.group("category").strip().casefold())
+    language = match.group("language").strip().casefold()
+    timing = timing_lookup.get(match.group("timing").strip().casefold())
+    summary = match.group("summary").strip()
+    if (
+        category is None
+        or language not in ADVOCATE_INTAKE_LANGUAGES
+        or timing is None
+        or not 5 <= len(summary) <= 600
+    ):
+        return None
+
+    return {
+        "category": category,
+        "language": ADVOCATE_INTAKE_LANGUAGES[language],
+        "timing": timing,
+        "summary": summary,
+        "message": normalized,
+    }
 
 
 def masked_identifier(value: str) -> str:
@@ -2011,6 +2091,89 @@ def webhook():
 
         text_body = text_body or ""
         lower_text = text_body.lower().strip()
+
+        advocate_intake = (
+            parse_advocate_intake(text_body)
+            if interactive_id is None
+            else None
+        )
+        if advocate_intake:
+            duplicate_cutoff = utc_now() - timedelta(minutes=10)
+            support_request = (
+                db.query(SupportRequest)
+                .filter(
+                    SupportRequest.user_id == user.id,
+                    SupportRequest.request_type == "ADVOCATE_INTAKE",
+                    SupportRequest.message == advocate_intake["message"],
+                    SupportRequest.created_at >= duplicate_cutoff,
+                )
+                .order_by(SupportRequest.id.desc())
+                .first()
+            )
+            job = None
+            created = support_request is None
+            if created:
+                support_request = SupportRequest(
+                    user_id=user.id,
+                    case_id=user.case_id,
+                    request_type="ADVOCATE_INTAKE",
+                    subject=(
+                        f"Advocate intake: {advocate_intake['category']}"
+                    )[:160],
+                    message=advocate_intake["message"],
+                    sla_due_at=(
+                        utc_now() + timedelta(hours=SUPPORT_SLA_HOURS)
+                    ),
+                )
+                db.add(support_request)
+                db.flush()
+                if SUPPORT_NOTIFICATION_EMAILS:
+                    job = enqueue_job(
+                        db,
+                        "support_notification",
+                        {"support_request_id": support_request.id},
+                        dedupe_key=(
+                            f"support:{support_request.id}:notification"
+                        ),
+                    )
+
+            user.language = advocate_intake["language"]
+            user.welcome_sent = True
+            preserve_payment_flow = user.flow_state in {
+                WAITING_PAYMENT,
+                PAYMENT_CONFIRMED,
+            }
+            if not preserve_payment_flow:
+                user.flow_state = NORMAL
+            db.commit()
+
+            ticket_id = f"NSH-{support_request.id:06d}"
+            send_text(
+                wa_id,
+                t(user, "advocate_intake_saved", ticket_id=ticket_id),
+            )
+            if created:
+                record_event(
+                    "advocate_intake_created",
+                    {
+                        "category": advocate_intake["category"],
+                        "timing": advocate_intake["timing"],
+                    },
+                    user_id=user.id,
+                )
+            if job:
+                submit_outbox_job(job.id)
+            if not preserve_payment_flow:
+                send_home(wa_id, user)
+            return jsonify(
+                {
+                    "status": (
+                        "advocate_intake_recorded"
+                        if created
+                        else "advocate_intake_already_recorded"
+                    )
+                }
+            ), 200
 
         if close_completed_consultation(db, user, wa_id):
             return jsonify({"status": "ok"}), 200

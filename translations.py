@@ -285,6 +285,12 @@ TRANSLATIONS = {
             "✅ Your support request *{ticket_id}* has been recorded. The team can use "
             "this reference when following up."
         ),
+        "advocate_intake_saved": (
+            "Your advocate-intake request *{ticket_id}* has been recorded. This is "
+            "not a confirmed booking or advocate-client relationship. The NyaySetu "
+            "team will review availability, scope, and conflict-check requirements "
+            "before any consultation is offered."
+        ),
         "support_request_retry": "Please describe the support issue in at least a few words.",
         "support_latest_status": "Latest support ticket {ticket_id}: {status}",
         "support_cancel": "Cancel",
@@ -645,6 +651,12 @@ TRANSLATIONS = {
             "✅ Aapki support request *{ticket_id}* record ho gayi hai. Follow-up mein "
             "team ko yeh reference batayein."
         ),
+        "advocate_intake_saved": (
+            "Aapki advocate-intake request *{ticket_id}* record ho gayi hai. Yeh "
+            "confirmed booking ya advocate-client relationship nahi hai. NyaySetu "
+            "team kisi consultation ko offer karne se pehle availability, scope aur "
+            "conflict-check requirements review karegi."
+        ),
         "support_request_retry": "Kripya support issue ko kuch shabdon mein samjhaayein.",
         "support_latest_status": "Latest support ticket {ticket_id}: {status}",
         "support_cancel": "Cancel",
@@ -1003,6 +1015,12 @@ TRANSLATIONS = {
         "support_request_saved": (
             "✅ आपली सपोर्ट विनंती *{ticket_id}* नोंदवली आहे. पुढील संपर्कासाठी हा "
             "संदर्भ वापरा."
+        ),
+        "advocate_intake_saved": (
+            "आपली वकील-सल्ला विनंती *{ticket_id}* नोंदवली आहे. ही निश्चित बुकिंग "
+            "किंवा वकील-अशील नाते नाही. कोणतेही सल्लामसलत सत्र देण्यापूर्वी "
+            "न्यायसेतू टीम उपलब्धता, कामाची व्याप्ती आणि हितसंबंध-विरोध "
+            "तपासणीची गरज पाहील."
         ),
         "support_request_retry": "कृपया सपोर्ट समस्या काही शब्दांत स्पष्ट करा.",
         "support_latest_status": "नवीनतम सपोर्ट तिकीट {ticket_id}: {status}",

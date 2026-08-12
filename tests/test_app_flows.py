@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
-from models import Booking, InboundMessageEvent, OutboxJob, User
+from models import Booking, InboundMessageEvent, OutboxJob, SupportRequest, User
 from services import outbox_service
 
 
@@ -154,6 +154,143 @@ def _secure_whatsapp_route(monkeypatch, app_module):
     )
     monkeypatch.setattr(app_module, "ALLOW_INSECURE_WEBHOOKS", False)
     monkeypatch.setattr(app_module, "ENV", "production")
+
+
+def _website_advocate_intake(*, summary="My employer has not paid my salary."):
+    return "\n".join(
+        [
+            "Hi NyaySetu, I want to request consultation coordination with an "
+            "independent advocate.",
+            "",
+            "Category: Employment and workplace",
+            "Preferred language: English",
+            "Known timing: No known immediate deadline",
+            f"Question summary: {summary}",
+            "",
+            "I understand this is NyaySetu intake, not emergency assistance "
+            "or a confirmed advocate-client relationship. Please share "
+            "availability, scope, professional details and price before any "
+            "booking.",
+        ]
+    )
+
+
+def test_website_advocate_intake_is_recorded_and_acknowledged(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+    deferred_threads,
+):
+    _secure_whatsapp_route(monkeypatch, app_module)
+    user_id = _create_user(
+        isolated_app_db,
+        flow_state=app_module.NORMAL,
+        language="hi",
+    )
+    monkeypatch.setattr(
+        app_module,
+        "SUPPORT_NOTIFICATION_EMAILS",
+        ("support@example.com",),
+    )
+
+    response = _signed_whatsapp_post(
+        client,
+        _whatsapp_payload(
+            message_id="wamid.website-advocate-intake",
+            text=_website_advocate_intake(),
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "advocate_intake_recorded"
+    db = isolated_app_db()
+    try:
+        user = db.get(User, user_id)
+        support_request = db.query(SupportRequest).one()
+        job = db.query(OutboxJob).one()
+        assert user.language == "en"
+        assert user.flow_state == app_module.NORMAL
+        assert support_request.request_type == "ADVOCATE_INTAKE"
+        assert support_request.subject == (
+            "Advocate intake: Employment and workplace"
+        )
+        assert "Question summary: My employer" in support_request.message
+        assert json.loads(job.payload_json) == {
+            "support_request_id": support_request.id
+        }
+        assert deferred_threads == [job.id]
+    finally:
+        db.close()
+
+    acknowledgement = transport_spies["text"].call_args.args[1]
+    assert "NSH-000001" in acknowledgement
+    assert "not a confirmed booking" in acknowledgement
+    transport_spies["home"].assert_called_once()
+
+
+def test_website_advocate_intake_duplicate_is_not_recorded_twice(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+):
+    _secure_whatsapp_route(monkeypatch, app_module)
+    _create_user(isolated_app_db, flow_state=app_module.NORMAL)
+    monkeypatch.setattr(app_module, "SUPPORT_NOTIFICATION_EMAILS", ())
+    message = _website_advocate_intake()
+
+    first = _signed_whatsapp_post(
+        client,
+        _whatsapp_payload(message_id="wamid.intake-first", text=message),
+    )
+    second = _signed_whatsapp_post(
+        client,
+        _whatsapp_payload(message_id="wamid.intake-second", text=message),
+    )
+
+    assert first.get_json()["status"] == "advocate_intake_recorded"
+    assert second.get_json()["status"] == "advocate_intake_already_recorded"
+    db = isolated_app_db()
+    try:
+        assert db.query(SupportRequest).count() == 1
+    finally:
+        db.close()
+    assert transport_spies["text"].call_count == 2
+
+
+def test_lookalike_advocate_message_is_not_saved_as_intake(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+):
+    _secure_whatsapp_route(monkeypatch, app_module)
+    _create_user(isolated_app_db, flow_state=app_module.NORMAL)
+    malformed = _website_advocate_intake().replace(
+        "Category: Employment and workplace",
+        "Category: Unapproved category",
+    )
+
+    response = _signed_whatsapp_post(
+        client,
+        _whatsapp_payload(
+            message_id="wamid.invalid-advocate-intake",
+            text=malformed,
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "ignored"
+    db = isolated_app_db()
+    try:
+        assert db.query(SupportRequest).count() == 0
+    finally:
+        db.close()
+    transport_spies["text"].assert_not_called()
 
 
 def test_menu_is_persistent_and_does_not_destroy_booking_progress(
