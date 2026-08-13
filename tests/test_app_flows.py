@@ -284,13 +284,117 @@ def test_lookalike_advocate_message_is_not_saved_as_intake(
     )
 
     assert response.status_code == 200
-    assert response.get_json()["status"] == "ignored"
+    assert response.get_json()["status"] == "advocate_intake_invalid"
     db = isolated_app_db()
     try:
         assert db.query(SupportRequest).count() == 0
     finally:
         db.close()
-    transport_spies["text"].assert_not_called()
+    transport_spies["text"].assert_called_once()
+    assert "could not submit" in transport_spies["text"].call_args.args[1]
+    transport_spies["home"].assert_called_once()
+
+
+def test_primary_choice_accepts_typed_booking_and_legal_question(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+):
+    _secure_whatsapp_route(monkeypatch, app_module)
+    user_id = _create_user(
+        isolated_app_db,
+        flow_state=app_module.ASK_AI_OR_BOOK,
+    )
+
+    booking_response = _signed_whatsapp_post(
+        client,
+        _whatsapp_payload(
+            message_id="wamid.typed-booking-choice",
+            text="book consultation",
+        ),
+    )
+
+    assert booking_response.status_code == 200
+    db = isolated_app_db()
+    try:
+        assert db.get(User, user_id).flow_state == app_module.REVIEW_SERVICE
+    finally:
+        db.close()
+
+    db = isolated_app_db()
+    try:
+        db.get(User, user_id).flow_state = app_module.ASK_AI_OR_BOOK
+        db.commit()
+    finally:
+        db.close()
+
+    question_response = _signed_whatsapp_post(
+        client,
+        _whatsapp_payload(
+            message_id="wamid.typed-question-choice",
+            text="My employer has not paid my salary",
+        ),
+    )
+
+    assert question_response.status_code == 200
+    db = isolated_app_db()
+    try:
+        assert db.get(User, user_id).flow_state == app_module.ASK_AI_CONSENT
+    finally:
+        db.close()
+
+
+def test_unknown_normal_message_returns_visible_recovery_menu(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+):
+    _secure_whatsapp_route(monkeypatch, app_module)
+    _create_user(
+        isolated_app_db,
+        flow_state=app_module.NORMAL,
+        ai_enabled=False,
+    )
+
+    response = _signed_whatsapp_post(
+        client,
+        _whatsapp_payload(
+            message_id="wamid.visible-fallback",
+            text="something unexpected",
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "recovery_menu_sent"
+    transport_spies["text"].assert_called_once()
+    assert "progress is safe" in transport_spies["text"].call_args.args[1]
+    transport_spies["home"].assert_called_once()
+
+
+def test_all_booking_subcategory_lists_stay_within_whatsapp_limit(
+    app_module,
+    isolated_app_db,
+    transport_spies,
+):
+    user_id = _create_user(
+        isolated_app_db,
+        flow_state=app_module.ASK_SUBCATEGORY,
+    )
+    db = isolated_app_db()
+    try:
+        user = db.get(User, user_id)
+        for category in app_module.CATEGORY_SUBCATEGORIES:
+            transport_spies["list"].reset_mock()
+            app_module.send_subcategory_list(db, user.whatsapp_id, user, category)
+            rows = transport_spies["list"].call_args.kwargs["rows"]
+            assert 1 <= len(rows) <= 10
+            assert any("Not Sure" in row["title"] for row in rows)
+    finally:
+        db.close()
 
 
 def test_menu_is_persistent_and_does_not_destroy_booking_progress(

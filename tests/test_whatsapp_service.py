@@ -75,6 +75,24 @@ def test_text_and_interactive_fields_are_truncated_before_send(monkeypatch):
     )
 
 
+def test_list_picker_uses_the_supplied_localized_action_title(monkeypatch):
+    _configure_transport(monkeypatch)
+    request = MagicMock(return_value=_response(200, {"messages": [{"id": "1"}]}))
+    monkeypatch.setattr(whatsapp._HTTP_CLIENT, "request", request)
+
+    result = whatsapp.send_list_picker(
+        "919876543210",
+        "पर्याय",
+        "एक पर्याय निवडा",
+        [{"id": "one", "title": "पहिला", "description": ""}],
+        button_title="निवडा",
+    )
+
+    assert result["ok"] is True
+    payload = request.call_args.kwargs["json"]
+    assert payload["interactive"]["action"]["button"] == "निवडा"
+
+
 @pytest.mark.parametrize(
     "send",
     [

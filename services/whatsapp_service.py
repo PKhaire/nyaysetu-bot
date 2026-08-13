@@ -552,6 +552,7 @@ def send_list_picker(
     body: str,
     rows: list,
     section_title: str = "Options",
+    button_title: str = "Select",
 ):
     return _send(
         {
@@ -563,7 +564,7 @@ def send_list_picker(
                 "header": {"type": "text", "text": header},
                 "body": {"text": body},
                 "action": {
-                    "button": "Select",
+                    "button": button_title,
                     "sections": [
                         {
                             "title": section_title,

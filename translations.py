@@ -11,7 +11,7 @@ TRANSLATIONS = {
             "🆔 Case ID: {case_id}\n\n"
             "Please select your preferred language:"
         ),
-        "restart": "Your session has been reset.\nPlease type \"Hi\" to start again.",
+        "restart": "Your session has been reset. Choose an option from the menu below.",
 
         # ---------- LEGAL GUIDANCE ----------
         "ask_ai_or_book": "How would you like to proceed?",
@@ -351,6 +351,11 @@ TRANSLATIONS = {
         "feedback_body": "Choose a rating from 1 to 5.",
         "feedback_section": "Your rating",
         "feedback_row_desc": "Tap to submit this rating",
+        "feedback_rating_5": "5 ⭐ Excellent",
+        "feedback_rating_4": "4 ⭐ Good",
+        "feedback_rating_3": "3 ⭐ Okay",
+        "feedback_rating_2": "2 ⭐ Needs improvement",
+        "feedback_rating_1": "1 ⭐ Poor",
         "feedback_comment_prompt": (
             "Thank you. You may type one short private comment, or choose Skip."
         ),
@@ -358,7 +363,21 @@ TRANSLATIONS = {
         "feedback_thanks": "Thank you—your feedback has been saved.",
         
         # ---------- COMMON ----------
+        "select_button": "Select",
         "invalid_selection": "The selected option is invalid. Please try again.",
+        "input_not_understood": (
+            "I could not match that message to the current step. Your progress is "
+            "safe—choose an option below, or type Menu at any time."
+        ),
+        "advocate_intake_invalid": (
+            "I could not submit this advocate request because its prepared format "
+            "was changed or incomplete. Please return to Ask an Advocate on "
+            "nyaysetu.in and send a newly prepared message, or choose Support."
+        ),
+        "booking_record_problem": (
+            "I could not safely open this appointment right now. No new payment was "
+            "created. Please choose Support so the team can check it."
+        ),
         "service_busy": (
             "NyaySetu is handling unusually high traffic. "
             "Please wait a moment and try again."
@@ -379,7 +398,7 @@ TRANSLATIONS = {
             "🆔 Case ID: {case_id}\n\n"
             "Kripya apni pasand ki bhasha select karein:"
         ),
-        "restart": "Aapka session reset ho gaya hai.\nKripya \"Hi\" type karke dobara shuru karein.",
+        "restart": "Aapka session reset ho gaya hai. Neeche menu se option chunein.",
 
         # ---------- LEGAL GUIDANCE ----------
         "ask_ai_or_book": "Aap kaise aage badhna chahenge?",
@@ -717,12 +736,31 @@ TRANSLATIONS = {
         "feedback_body": "1 se 5 tak rating choose karein.",
         "feedback_section": "Aapki rating",
         "feedback_row_desc": "Rating submit karne ke liye tap karein",
+        "feedback_rating_5": "5 ⭐ Bahut achha",
+        "feedback_rating_4": "4 ⭐ Achha",
+        "feedback_rating_3": "3 ⭐ Theek",
+        "feedback_rating_2": "2 ⭐ Sudhar chahiye",
+        "feedback_rating_1": "1 ⭐ Kharab",
         "feedback_comment_prompt": "Dhanyavaad. Ek short private comment type karein ya Skip choose karein.",
         "feedback_skip": "Skip",
         "feedback_thanks": "Dhanyavaad—aapka feedback save ho gaya hai.",
         
         # ---------- COMMON ----------
+        "select_button": "Chunein",
         "invalid_selection": "Select kiya gaya option valid nahi hai. Kripya dobara koshish karein.",
+        "input_not_understood": (
+            "Yeh message current step se match nahi hua. Aapki progress safe hai—"
+            "neeche option chunein, ya kabhi bhi Menu type karein."
+        ),
+        "advocate_intake_invalid": (
+            "Advocate request ka prepared format badla hua ya adhura tha, isliye "
+            "submit nahi hua. nyaysetu.in par Ask an Advocate se naya prepared "
+            "message bhejein, ya Support chunein."
+        ),
+        "booking_record_problem": (
+            "Appointment abhi safely open nahi ho pa raha. Koi naya payment nahi "
+            "bana hai. Team se check karane ke liye Support chunein."
+        ),
         "service_busy": (
             "NyaySetu par abhi traffic zyada hai. "
             "Kripya thoda intezaar karke dobara koshish karein."
@@ -744,7 +782,7 @@ TRANSLATIONS = {
             "🆔 केस आयडी: {case_id}\n\n"
             "कृपया आपली पसंतीची भाषा निवडा:"
         ),
-        "restart": "आपले सत्र रीसेट करण्यात आले आहे.\nकृपया \"Hi\" टाइप करून पुन्हा सुरू करा.",
+        "restart": "आपले सत्र रीसेट झाले आहे. खालील मेनूमधून पर्याय निवडा.",
         
         # ---------- LEGAL GUIDANCE ----------
         "ask_ai_or_book": "आपण पुढे कसे जायचे आहे?",
@@ -1080,12 +1118,31 @@ TRANSLATIONS = {
         "feedback_body": "१ ते ५ रेटिंग निवडा.",
         "feedback_section": "आपले रेटिंग",
         "feedback_row_desc": "रेटिंग सबमिट करण्यासाठी टॅप करा",
+        "feedback_rating_5": "5 ⭐ उत्कृष्ट",
+        "feedback_rating_4": "4 ⭐ चांगले",
+        "feedback_rating_3": "3 ⭐ ठीक",
+        "feedback_rating_2": "2 ⭐ सुधारणा हवी",
+        "feedback_rating_1": "1 ⭐ खराब",
         "feedback_comment_prompt": "धन्यवाद. छोटा खाजगी अभिप्राय लिहा किंवा वगळा.",
         "feedback_skip": "वगळा",
         "feedback_thanks": "धन्यवाद—आपला अभिप्राय जतन केला आहे.",
         
         # ---------- COMMON ----------
+        "select_button": "निवडा",
         "invalid_selection": "निवडलेला पर्याय वैध नाही. कृपया पुन्हा प्रयत्न करा.",
+        "input_not_understood": (
+            "हा संदेश सध्याच्या टप्प्याशी जुळला नाही. आपली प्रगती सुरक्षित आहे—"
+            "खालील पर्याय निवडा किंवा कधीही Menu टाइप करा."
+        ),
+        "advocate_intake_invalid": (
+            "वकील विनंतीचा तयार नमुना बदललेला किंवा अपूर्ण असल्याने ती सबमिट "
+            "झाली नाही. nyaysetu.in वरील Ask an Advocate मधून नवीन तयार संदेश "
+            "पाठवा किंवा Support निवडा."
+        ),
+        "booking_record_problem": (
+            "ही अपॉइंटमेंट सध्या सुरक्षितपणे उघडता आली नाही. नवीन पेमेंट तयार "
+            "झालेले नाही. तपासणीसाठी Support निवडा."
+        ),
         "service_busy": (
             "न्यायसेतूवर सध्या जास्त रहदारी आहे. "
             "कृपया थोडा वेळ थांबून पुन्हा प्रयत्न करा."
