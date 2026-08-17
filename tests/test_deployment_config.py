@@ -112,6 +112,8 @@ def test_deployment_commands_and_render_release_controls_exist():
         "- key: LEGAL_CONTENT_REVIEWED_VERSION\n        sync: false"
         in blueprint
     )
+    assert "- key: ADMIN_PASSWORD\n        sync: false" in blueprint
+    assert "- key: SECRET_KEY\n        generateValue: true" in blueprint
 
 
 def test_render_only_schedules_existing_operational_modules():

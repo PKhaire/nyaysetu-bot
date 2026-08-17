@@ -56,7 +56,7 @@ Use distinct resources for each environment:
 | Database | staging PostgreSQL | production PostgreSQL |
 | Amazon SES | verified staging identity/destination in the selected region | verified production identity/domain, production access, and approved operational recipients |
 | AI | local first; provider test key if approved | separately approved key/model |
-| Admin token | unique staging token | unique production token |
+| Admin access | unique token/password/signing secret | distinct production token/password/signing secret |
 
 Never point a staging webhook at the production database or reuse a live
 Razorpay webhook secret in staging.
@@ -245,6 +245,8 @@ LEGAL_CONTENT_VERSION=...
 LEGAL_CONTENT_REVIEWED_VERSION=...
 LEGAL_CONTENT_REVIEWED_ON=YYYY-MM-DD
 ADMIN_TOKEN=...
+ADMIN_PASSWORD=...
+SECRET_KEY=...
 AI_SAFETY_IDENTIFIER_SECRET=...
 SUPPORT_SLA_HOURS=24
 PAYMENT_RECONCILIATION_LOOKBACK_DAYS=14
@@ -253,8 +255,9 @@ OUTBOX_COMPLETED_TTL_DAYS=30
 
 Production `/health/ready` requires both groups. It also validates live
 Razorpay mode and an `rzp_live_...` key ID of at least 16 characters; minimum
-lengths of 32 for the WhatsApp app secret/token and admin/AI secrets and 16 for
-the WhatsApp verify token plus Razorpay API/webhook secrets; valid SES
+lengths of 32 for the WhatsApp app secret/token, admin token, browser-session
+signing secret and AI secret, 16 for the admin password, WhatsApp verify token,
+and Razorpay API/webhook secrets; valid SES
 region/from-address, an AWS access-key ID of at least 16 characters, an AWS
 secret access key of at least 32 characters, and an optional session token of at
 least 16 characters; a numeric WhatsApp phone ID; valid email addresses; HTTPS
@@ -741,14 +744,41 @@ records a failed cron run when the maintenance transaction fails or the
 successful report requires operator attention. Route exit `2` and the JSON
 `alert_required` detail to the fulfilment/support/payment-review owner.
 
+## Operator appointment-console procedure
+
+Human operators open `https://api.nyaysetu.in/admin/login`, enter their stable
+operator ID and the separately stored `ADMIN_PASSWORD`, then work the
+responsive appointment queue at `/admin/appointments`. The signed session
+expires after two hours. The console masks contact numbers, provides an
+explicit WhatsApp handoff, and never marks an appointment complete merely
+because its scheduled time passed.
+
+For every paid booking:
+
+1. Open **Unassigned**, confirm the paid record and scheduled time, and assign
+   the responsible advocate/operator.
+2. Move it to **Confirmed** only after the consultation arrangement is
+   acknowledged.
+3. After the consultation, explicitly choose **Completed** and record a useful
+   operator note. This is the authoritative trigger that closes fulfilment and
+   enables the user feedback follow-up.
+4. For exceptions, record **No show**, **Reschedule required**, or
+   **Refund review** with explanatory notes. A refund is terminal only after
+   external Razorpay evidence is checked and the reviewed `REFUNDED` action is
+   recorded.
+
+The browser password is shared, so restrict distribution and retain operator
+IDs for audit attribution. Rotate `SECRET_KEY` to invalidate all active browser
+sessions after suspected exposure.
+
 ## Operator API procedure
 
-All `/admin/*` routes require the shared bearer or `X-Admin-Token`. Every
-`PATCH`, `POST`, or `DELETE` additionally requires a stable, non-secret
+Machine API calls require the shared bearer or `X-Admin-Token`. Every `PATCH`,
+`POST`, or `DELETE` additionally requires a stable, non-secret
 `X-Operator-ID`; successful mutations append `admin_audit_events` with
-before/after state and request ID. Never put the admin token in a URL. Place the
-routes behind TLS, platform access control, MFA, and restricted operator
-network/access policy because the application token itself is shared.
+before/after state and request ID. Never put the admin token in a URL. Place all
+admin routes behind TLS, platform access control, MFA, and restricted operator
+network/access policy because application credentials remain shared.
 
 Core queues and actions:
 
@@ -1075,8 +1105,9 @@ and provider intake as the incident/cutover procedure requires.
   is not a legal-hold, privacy-request, or universal deletion system.
 - Payment reconciliation is scheduled, but it is a bounded safety net rather
   than settlement/refund accounting and still requires staffed review.
-- Admin mutations are audited but still protected by a shared token rather than
-  individual application RBAC/MFA.
+- Admin mutations are audited and the browser console adds signed sessions,
+  CSRF protection and login throttling, but access still uses a shared password
+  rather than individually verified application credentials/RBAC/MFA.
 - The app tracks fulfilment, but staffing, advocate eligibility/conflicts,
   consultation channel, and refund execution remain operational/policy gates.
 - Provider health is not included in `/health/ready`.

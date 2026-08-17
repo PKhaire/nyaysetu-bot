@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>Appointments | NyaySetu Operations</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+  <script src="{{ url_for('static', filename='admin.js') }}" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('admin.appointments') }}" aria-label="NyaySetu appointment control desk">
+      <span class="brand-mark" aria-hidden="true">N</span>
+      <span><strong>NyaySetu</strong><small>Appointment control desk</small></span>
+    </a>
+    <div class="operator-block">
+      <span class="operator-label">Signed in as <strong>{{ operator_id }}</strong></span>
+      <form method="post" action="{{ url_for('admin.logout') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="button button-quiet" type="submit">Sign out</button>
+      </form>
+    </div>
+  </header>
+
+  <main class="dashboard">
+    <section class="page-heading">
+      <div>
+        <p class="eyebrow">Paid consultation operations</p>
+        <h1>Appointments</h1>
+        <p class="muted">Assign an advocate, confirm the appointment, then explicitly record the outcome.</p>
+      </div>
+      <button id="refresh-button" class="button button-secondary" type="button">Refresh</button>
+    </section>
+
+    <section class="summary-grid" aria-label="Appointment summary">
+      <article class="summary-card"><span>Needs assignment</span><strong id="count-unassigned">—</strong></article>
+      <article class="summary-card"><span>Assigned</span><strong id="count-assigned">—</strong></article>
+      <article class="summary-card"><span>Confirmed</span><strong id="count-confirmed">—</strong></article>
+      <article class="summary-card"><span>Needs attention</span><strong id="count-attention">—</strong></article>
+    </section>
+
+    <section class="work-panel" aria-labelledby="queue-heading">
+      <div class="panel-heading">
+        <div>
+          <h2 id="queue-heading">Consultation queue</h2>
+          <p id="last-updated" class="muted small">Loading current appointments…</p>
+        </div>
+        <div class="filters">
+          <label>
+            <span>Status</span>
+            <select id="status-filter">
+              <option value="ACTIVE">Active work</option>
+              <option value="ALL">All statuses</option>
+              <option value="UNASSIGNED">Unassigned</option>
+              <option value="ASSIGNED">Assigned</option>
+              <option value="CONFIRMED">Confirmed</option>
+              <option value="RESCHEDULE_REQUIRED">Reschedule required</option>
+              <option value="REFUND_REVIEW">Refund review</option>
+              <option value="NO_SHOW">No-show</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="REFUNDED">Refunded</option>
+            </select>
+          </label>
+          <label>
+            <span>Search</span>
+            <input id="queue-search" type="search" placeholder="Booking, case or client" autocomplete="off">
+          </label>
+        </div>
+      </div>
+
+      <div id="queue-error" class="alert alert-error hidden" role="alert"></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Appointment</th>
+              <th>Client</th>
+              <th>Legal need</th>
+              <th>Owner</th>
+              <th>Status</th>
+              <th>SLA</th>
+              <th><span class="visually-hidden">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody id="appointment-rows"></tbody>
+        </table>
+      </div>
+      <div id="empty-state" class="empty-state hidden">
+        <strong>No matching appointments</strong>
+        <span>Try a different status or search term.</span>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="appointment-dialog" aria-labelledby="dialog-title">
+    <form id="appointment-form" class="dialog-form">
+      <div class="dialog-heading">
+        <div>
+          <p class="eyebrow">Update paid consultation</p>
+          <h2 id="dialog-title">Appointment</h2>
+        </div>
+        <button id="dialog-close" class="icon-button" type="button" aria-label="Close dialog">×</button>
+      </div>
+      <input id="dialog-booking-id" type="hidden">
+      <div id="dialog-context" class="dialog-context"></div>
+      <label for="dialog-status">New status</label>
+      <select id="dialog-status" required></select>
+      <label for="dialog-assigned-to">Assigned advocate or operator</label>
+      <input id="dialog-assigned-to" type="text" maxlength="160" placeholder="Advocate name">
+      <div id="reschedule-fields" class="field-grid hidden">
+        <label for="dialog-date">New date
+          <input id="dialog-date" type="date">
+        </label>
+        <label for="dialog-slot">New time
+          <select id="dialog-slot">
+            <option value="">Select time</option>
+            <option value="10_11">10:00 AM – 11:00 AM</option>
+            <option value="11_12">11:00 AM – 12:00 PM</option>
+            <option value="12_13">12:00 PM – 1:00 PM</option>
+            <option value="14_15">2:00 PM – 3:00 PM</option>
+            <option value="15_16">3:00 PM – 4:00 PM</option>
+            <option value="16_17">4:00 PM – 5:00 PM</option>
+          </select>
+        </label>
+      </div>
+      <label for="dialog-notes">Operator notes</label>
+      <textarea id="dialog-notes" rows="4" maxlength="4000" placeholder="Record the action taken. Notes are mandatory for completion, no-show, reschedule and refund outcomes."></textarea>
+      <div id="dialog-error" class="alert alert-error hidden" role="alert"></div>
+      <div class="dialog-actions">
+        <button id="dialog-cancel" class="button button-quiet" type="button">Cancel</button>
+        <button id="dialog-submit" class="button button-primary" type="submit">Save appointment</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+</body>
+</html>

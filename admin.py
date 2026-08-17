@@ -5,12 +5,25 @@ from __future__ import annotations
 import hmac
 import json
 import re
+import secrets
+import time
+from collections import defaultdict, deque
 from datetime import date, timedelta
+from threading import Lock
 
-from flask import Blueprint, jsonify, request
+from flask import (
+    Blueprint,
+    current_app,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from sqlalchemy import func, or_
 
-from config import ADMIN_TOKEN
+from config import ADMIN_PASSWORD, ADMIN_TOKEN
 from db import SessionLocal
 from models import (
     AdminAuditEvent,
@@ -39,6 +52,10 @@ from services.payment_reconciliation_service import (
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 _OPERATOR_PATTERN = re.compile(r"^[A-Za-z0-9._@+-]{2,120}$")
+_LOGIN_ATTEMPT_LIMIT = 5
+_LOGIN_ATTEMPT_WINDOW_SECONDS = 15 * 60
+_login_attempts: dict[str, deque[float]] = defaultdict(deque)
+_login_attempts_guard = Lock()
 
 
 def _provided_token() -> str:
@@ -48,7 +65,7 @@ def _provided_token() -> str:
     return request.headers.get("X-Admin-Token", "").strip()
 
 
-def _authorized() -> bool:
+def _token_authorized() -> bool:
     provided = _provided_token()
     return bool(
         ADMIN_TOKEN
@@ -57,9 +74,85 @@ def _authorized() -> bool:
     )
 
 
+def _session_authorized() -> bool:
+    return bool(
+        session.get("admin_authenticated") is True
+        and _OPERATOR_PATTERN.fullmatch(
+            str(session.get("operator_id") or "")
+        )
+    )
+
+
+def _authorized() -> bool:
+    return _token_authorized() or _session_authorized()
+
+
 def _operator_id() -> str:
     value = request.headers.get("X-Operator-ID", "").strip()
+    if not value and _session_authorized():
+        value = str(session.get("operator_id") or "").strip()
     return value if _OPERATOR_PATTERN.fullmatch(value) else ""
+
+
+def _browser_admin_available() -> bool:
+    return bool(
+        ADMIN_TOKEN
+        and ADMIN_PASSWORD
+        and current_app.secret_key
+        and len(ADMIN_PASSWORD) >= 16
+    )
+
+
+def _csrf_token() -> str:
+    token = str(session.get("admin_csrf_token") or "")
+    if len(token) < 32:
+        token = secrets.token_urlsafe(32)
+        session["admin_csrf_token"] = token
+    return token
+
+
+def _csrf_authorized() -> bool:
+    expected = str(session.get("admin_csrf_token") or "")
+    provided = (
+        request.headers.get("X-CSRF-Token", "").strip()
+        or request.form.get("csrf_token", "").strip()
+    )
+    return bool(
+        expected
+        and provided
+        and hmac.compare_digest(expected, provided)
+    )
+
+
+def _login_client_key() -> str:
+    return str(request.remote_addr or "unknown")[:128]
+
+
+def _prune_login_attempts(attempts: deque[float], now: float) -> None:
+    cutoff = now - _LOGIN_ATTEMPT_WINDOW_SECONDS
+    while attempts and attempts[0] <= cutoff:
+        attempts.popleft()
+
+
+def _login_rate_limited(client_key: str) -> bool:
+    now = time.monotonic()
+    with _login_attempts_guard:
+        attempts = _login_attempts[client_key]
+        _prune_login_attempts(attempts, now)
+        return len(attempts) >= _LOGIN_ATTEMPT_LIMIT
+
+
+def _record_failed_login(client_key: str) -> None:
+    now = time.monotonic()
+    with _login_attempts_guard:
+        attempts = _login_attempts[client_key]
+        _prune_login_attempts(attempts, now)
+        attempts.append(now)
+
+
+def _clear_failed_logins(client_key: str) -> None:
+    with _login_attempts_guard:
+        _login_attempts.pop(client_key, None)
 
 
 def _json_body() -> dict:
@@ -91,16 +184,31 @@ def _audit(
 
 @admin_bp.before_request
 def protect_admin_routes():
+    if request.endpoint == "admin.login":
+        if not _browser_admin_available():
+            return jsonify({"error": "not_found"}), 404
+        return None
     if not ADMIN_TOKEN:
         return jsonify({"error": "not_found"}), 404
     if not _authorized():
+        if request.endpoint == "admin.appointments":
+            return redirect(url_for("admin.login"))
         return (
             jsonify({"error": "unauthorized"}),
             401,
             {"WWW-Authenticate": "Bearer"},
         )
-    if request.method not in {"GET", "HEAD", "OPTIONS"} and not _operator_id():
-        return jsonify({"error": "valid_x_operator_id_required"}), 400
+    if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        if not _operator_id():
+            error = (
+                "valid_x_operator_id_required"
+                if _token_authorized()
+                else "valid_operator_id_required"
+            )
+            return jsonify({"error": error}), 400
+        if _session_authorized() and not _token_authorized():
+            if not _csrf_authorized():
+                return jsonify({"error": "invalid_csrf_token"}), 403
     return None
 
 
@@ -108,7 +216,85 @@ def protect_admin_routes():
 def prevent_sensitive_caching(response):
     response.headers["Cache-Control"] = "no-store, max-age=0"
     response.headers["Pragma"] = "no-cache"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Permissions-Policy"] = (
+        "camera=(), microphone=(), geolocation=(), payment=()"
+    )
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'none'; style-src 'self'; script-src 'self'; "
+        "connect-src 'self'; form-action 'self'; base-uri 'none'; "
+        "frame-ancestors 'none'"
+    )
     return response
+
+
+@admin_bp.route("/login", methods=["GET", "POST"])
+def login():
+    if _session_authorized():
+        return redirect(url_for("admin.appointments"))
+
+    error = ""
+    csrf_token = _csrf_token()
+    if request.method == "POST":
+        client_key = _login_client_key()
+        if _login_rate_limited(client_key):
+            return (
+                render_template(
+                    "admin_login.html",
+                    csrf_token=csrf_token,
+                    error="Too many attempts. Please wait 15 minutes.",
+                ),
+                429,
+            )
+
+        operator_id = request.form.get("operator_id", "").strip()
+        password = request.form.get("password", "")
+        credentials_valid = bool(
+            _OPERATOR_PATTERN.fullmatch(operator_id)
+            and password
+            and hmac.compare_digest(password, ADMIN_PASSWORD)
+            and _csrf_authorized()
+        )
+        if credentials_valid:
+            _clear_failed_logins(client_key)
+            session.clear()
+            session.permanent = True
+            session["admin_authenticated"] = True
+            session["operator_id"] = operator_id
+            session["admin_csrf_token"] = secrets.token_urlsafe(32)
+            return redirect(url_for("admin.appointments"))
+
+        _record_failed_login(client_key)
+        error = "Invalid operator ID or password."
+
+    return render_template(
+        "admin_login.html",
+        csrf_token=csrf_token,
+        error=error,
+    )
+
+
+@admin_bp.post("/logout")
+def logout():
+    session.clear()
+    response = redirect(url_for("admin.login"))
+    response.delete_cookie(
+        current_app.config.get(
+            "SESSION_COOKIE_NAME",
+            "nyaysetu_admin_session",
+        ),
+        path="/",
+    )
+    return response
+
+
+@admin_bp.get("/appointments")
+def appointments():
+    return render_template(
+        "admin_appointments.html",
+        operator_id=_operator_id(),
+        csrf_token=_csrf_token(),
+    )
 
 
 @admin_bp.get("/metrics")
@@ -474,6 +660,21 @@ _FULFILLMENT_TRANSITIONS = {
     "REFUNDED": set(),
     "CANCELLED": set(),
 }
+
+
+@admin_bp.get("/fulfillment-workflow")
+def fulfillment_workflow():
+    """Return the server-authoritative lifecycle used by the admin console."""
+
+    return jsonify(
+        {
+            "transitions": {
+                status: sorted(destinations)
+                for status, destinations in _FULFILLMENT_TRANSITIONS.items()
+            },
+            "terminal_statuses": ["CANCELLED", "COMPLETED", "REFUNDED"],
+        }
+    )
 
 
 @admin_bp.patch("/fulfillments/<int:booking_id>")

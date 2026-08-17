@@ -474,9 +474,11 @@ BOOKING_DATE_CHOICES = env_int(
 # Descriptive compatibility alias for new code.
 BOOKING_SLOT_CAPACITY = BOOKING_MAX_PER_SLOT
 
-# Admin. ADMIN_PASSWORD is retained because the legacy admin module imports it.
+# Admin. The token protects machine-to-machine operations. The password and
+# Flask signing secret protect the browser-based operations console.
 ADMIN_TOKEN = env_str("ADMIN_TOKEN")
 ADMIN_PASSWORD = env_str("ADMIN_PASSWORD", ADMIN_TOKEN)
+SECRET_KEY = env_str("SECRET_KEY")
 
 # Database.
 DATABASE_URL = normalize_database_url(

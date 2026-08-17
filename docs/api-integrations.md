@@ -120,17 +120,26 @@ webhook event as `MANUAL_DISPOSITION`, returns `202`, creates no entitlement or
 outbox work, and is checked again after provider lookup to close an
 operator/webhook race.
 
-### Admin API
+### Admin console and API
 
-All admin routes require either `Authorization: Bearer <ADMIN_TOKEN>` or
-`X-Admin-Token: <ADMIN_TOKEN>`. When no admin token is configured they return
-`404`; invalid credentials return `401`. Responses carry no-cache headers.
-Every non-read method also requires `X-Operator-ID` matching the accepted
-operator-ID format, and every successful mutation records before/after values
-in `admin_audit_events`.
+Human operators use `GET/POST /admin/login` and the appointment board at
+`GET /admin/appointments`. Login requires the shared `ADMIN_PASSWORD` plus a
+stable operator ID. Signed browser sessions expire after two hours and unsafe
+requests require the session CSRF token. Five failed logins from one service
+address within 15 minutes temporarily throttle that address.
+
+Machine clients continue to use `Authorization: Bearer <ADMIN_TOKEN>` or
+`X-Admin-Token: <ADMIN_TOKEN>`; unsafe methods additionally require
+`X-Operator-ID`. When the admin token is absent, protected routes return `404`;
+invalid credentials return `401`. Responses carry no-cache, frame-denial and
+restrictive content-security headers. Every successful mutation records
+before/after values and the operator ID in `admin_audit_events`.
 
 | Route | Operation |
 |---|---|
+| `GET/POST /admin/login`, `POST /admin/logout` | Browser session lifecycle |
+| `GET /admin/appointments` | Responsive appointment queue for paid-consultation operations |
+| `GET /admin/fulfillment-workflow` | Server-authoritative fulfilment transitions used by the console |
 | `GET /admin/metrics` | Aggregate product and operational counts, including inbound claims, fulfilment and reconciliation risk |
 | `GET /admin/support?limit=25&status=OPEN` | Support queue |
 | `PATCH /admin/support/<ticket_id>` | Assign, prioritize, resolve, or close a ticket; closing requires a resolution note |
@@ -145,9 +154,10 @@ in `admin_audit_events`.
 | `POST/DELETE /admin/availability/capacity[...]` | Activate/deactivate date or slot capacity overrides |
 | `GET /admin/audit` | Recent operator mutation audit |
 
-These APIs expose sensitive operational data and use a shared application
-token. Put them behind TLS and platform access controls; the token does not
-provide per-operator authentication, RBAC, or MFA.
+These routes expose sensitive operational data. Keep them behind TLS and
+platform access controls. The console records a supplied operator identity but
+still uses a shared password; it does not yet provide individually verified
+credentials, application RBAC, or application MFA.
 
 A paid cancellation cannot be recorded directly from `UNASSIGNED`. The
 reviewed refund path records `REFUND_REVIEW` and then `REFUNDED`; that terminal

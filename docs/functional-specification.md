@@ -160,6 +160,17 @@ authoritative over delayed delivery. The independent reconciliation command can
 recover a missed capture only from the same exact authenticated-provider
 evidence.
 
+## Appointment control desk
+
+An authenticated browser console at `/admin/appointments` presents the
+SLA-ordered paid-consultation fulfilment queue. Operators can search and filter
+records, view masked client contact details, open a prepared WhatsApp handoff,
+assign an advocate, confirm arrangements, record a capacity-checked reschedule,
+or record an allowed exception/final outcome. Completion is always an explicit
+audited operator action with notes; elapsed time alone never completes an
+appointment. The existing token-authenticated API remains available for
+approved automation.
+
 ## Self-service and engagement
 
 ### Appointment status

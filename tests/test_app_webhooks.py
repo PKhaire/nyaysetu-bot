@@ -795,6 +795,8 @@ def test_production_readiness_validates_secret_policy_and_contact_contract(
     production_values = {
         "ENV": "production",
         "ADMIN_TOKEN": "a" * 32,
+        "ADMIN_PASSWORD": "admin-password-with-entropy",
+        "SECRET_KEY": "k" * 32,
         "AUTO_CREATE_SCHEMA": False,
         "WHATSAPP_APP_SECRET": "b" * 32,
         "WHATSAPP_APP_SECRET_PREVIOUS": "",
@@ -871,6 +873,8 @@ def test_production_readiness_validates_secret_policy_and_contact_contract(
         production_values["PRIVACY_POLICY_URL"],
     )
     weak_secrets = {
+        "ADMIN_PASSWORD": "short",
+        "SECRET_KEY": "short",
         "WHATSAPP_APP_SECRET": "short",
         "WHATSAPP_APP_SECRET_PREVIOUS": "short",
         "WHATSAPP_TOKEN": "short",
@@ -929,6 +933,8 @@ def test_staging_readiness_requires_postgresql_test_keys_and_strict_config(
     staging_values = {
         "ENV": "staging",
         "ADMIN_TOKEN": "a" * 32,
+        "ADMIN_PASSWORD": "admin-password-with-entropy",
+        "SECRET_KEY": "k" * 32,
         "AUTO_CREATE_SCHEMA": False,
         "ALLOW_INSECURE_WEBHOOKS": False,
         "WHATSAPP_APP_SECRET": "b" * 32,

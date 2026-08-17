@@ -36,10 +36,30 @@ def admin_db(monkeypatch, app_module):
     )
     monkeypatch.setattr(admin, "SessionLocal", testing_session)
     monkeypatch.setattr(admin, "ADMIN_TOKEN", "admin-test-token")
-    app_module.app.config.update(TESTING=True)
+    monkeypatch.setattr(
+        admin,
+        "ADMIN_PASSWORD",
+        "strong-admin-test-password",
+    )
+    original_config = {
+        key: app_module.app.config.get(key)
+        for key in (
+            "SECRET_KEY",
+            "SESSION_COOKIE_SECURE",
+            "TESTING",
+        )
+    }
+    app_module.app.config.update(
+        TESTING=True,
+        SECRET_KEY="test-browser-session-secret-value-123456",
+        SESSION_COOKIE_SECURE=False,
+    )
+    admin._login_attempts.clear()
     try:
         yield testing_session
     finally:
+        admin._login_attempts.clear()
+        app_module.app.config.update(original_config)
         Base.metadata.drop_all(engine)
         engine.dispose()
 
@@ -125,6 +145,97 @@ def test_admin_requires_bearer_token_and_operator_for_mutations(
     )
     assert response.status_code == 400
     assert response.get_json()["error"] == "valid_x_operator_id_required"
+
+
+def _browser_login(client, *, operator_id="ops.user@example.com"):
+    login_page = client.get("/admin/login")
+    assert login_page.status_code == 200
+    with client.session_transaction() as browser_session:
+        csrf_token = browser_session["admin_csrf_token"]
+    response = client.post(
+        "/admin/login",
+        data={
+            "operator_id": operator_id,
+            "password": "strong-admin-test-password",
+            "csrf_token": csrf_token,
+        },
+    )
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/admin/appointments")
+
+
+def test_admin_browser_login_dashboard_and_security_headers(client, admin_db):
+    unauthenticated = client.get("/admin/appointments")
+    assert unauthenticated.status_code == 302
+    assert unauthenticated.headers["Location"].endswith("/admin/login")
+
+    invalid_page = client.get("/admin/login")
+    with client.session_transaction() as browser_session:
+        csrf_token = browser_session["admin_csrf_token"]
+    invalid = client.post(
+        "/admin/login",
+        data={
+            "operator_id": "ops.user@example.com",
+            "password": "incorrect-password-value",
+            "csrf_token": csrf_token,
+        },
+    )
+    assert invalid_page.status_code == 200
+    assert invalid.status_code == 200
+    assert b"Invalid operator ID or password" in invalid.data
+
+    _browser_login(client)
+    dashboard = client.get("/admin/appointments")
+
+    assert dashboard.status_code == 200
+    assert b"Appointment control desk" in dashboard.data
+    assert dashboard.headers["Cache-Control"] == "no-store, max-age=0"
+    assert dashboard.headers["X-Frame-Options"] == "DENY"
+    assert "default-src 'none'" in dashboard.headers["Content-Security-Policy"]
+
+
+def test_admin_browser_session_requires_csrf_and_audits_operator(
+    client,
+    admin_db,
+):
+    ids = _seed_operations(admin_db)
+    _browser_login(client, operator_id="browser.ops@example.com")
+
+    queue = client.get("/admin/fulfillments")
+    workflow = client.get("/admin/fulfillment-workflow")
+    assert queue.status_code == 200
+    assert workflow.status_code == 200
+
+    missing_csrf = client.patch(
+        f"/admin/fulfillments/{ids['booking_id']}",
+        json={"status": "ASSIGNED", "assigned_to": "Advocate One"},
+    )
+    assert missing_csrf.status_code == 403
+    assert missing_csrf.get_json()["error"] == "invalid_csrf_token"
+
+    with client.session_transaction() as browser_session:
+        csrf_token = browser_session["admin_csrf_token"]
+    updated = client.patch(
+        f"/admin/fulfillments/{ids['booking_id']}",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"status": "ASSIGNED", "assigned_to": "Advocate One"},
+    )
+    assert updated.status_code == 200
+    assert updated.get_json()["item"]["fulfillment_status"] == "ASSIGNED"
+
+    db = admin_db()
+    try:
+        audit = db.query(AdminAuditEvent).order_by(AdminAuditEvent.id.desc()).first()
+        assert audit.operator_id == "browser.ops@example.com"
+    finally:
+        db.close()
+
+    logged_out = client.post(
+        "/admin/logout",
+        data={"csrf_token": csrf_token},
+    )
+    assert logged_out.status_code == 302
+    assert client.get("/admin/fulfillments").status_code == 401
 
 
 def test_support_resolution_is_audited(client, admin_db):

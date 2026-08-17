@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>Operations sign in | NyaySetu</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+</head>
+<body class="login-page">
+  <main class="login-shell">
+    <section class="login-card" aria-labelledby="login-title">
+      <div class="brand-mark" aria-hidden="true">N</div>
+      <p class="eyebrow">NyaySetu operations</p>
+      <h1 id="login-title">Appointment control desk</h1>
+      <p class="muted">Sign in to assign, confirm and close paid consultations.</p>
+
+      {% if error %}
+      <div class="alert alert-error" role="alert">{{ error }}</div>
+      {% endif %}
+
+      <form method="post" action="{{ url_for('admin.login') }}" class="login-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label for="operator_id">Operator ID</label>
+        <input
+          id="operator_id"
+          name="operator_id"
+          type="text"
+          autocomplete="username"
+          minlength="2"
+          maxlength="120"
+          pattern="[A-Za-z0-9._@+\-]{2,120}"
+          placeholder="your.name@nyaysetu.in"
+          required
+          autofocus
+        >
+        <label for="password">Admin password</label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          autocomplete="current-password"
+          minlength="16"
+          required
+        >
+        <button type="submit" class="button button-primary button-wide">Sign in securely</button>
+      </form>
+
+      <p class="security-note">This console contains restricted customer and appointment information. Access is audited.</p>
+    </section>
+  </main>
+</body>
+</html>

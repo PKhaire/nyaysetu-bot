@@ -22,6 +22,7 @@ from config import (
     AI_CONSENT_VERSION,
     ALLOW_INSECURE_WEBHOOKS,
     ADMIN_TOKEN,
+    ADMIN_PASSWORD,
     AUTO_CREATE_SCHEMA,
     ENV,
     LOG_LEVEL,
@@ -69,6 +70,7 @@ from config import (
     SES_CONFIGURATION_SET,
     SES_FROM_EMAIL,
     SES_REGION,
+    SECRET_KEY,
     WEBHOOK_EVENT_TTL_DAYS,
     WEBHOOK_MAX_PAYLOAD_BYTES,
     WEBHOOK_REPLAY_WINDOW_SECONDS,
@@ -168,7 +170,16 @@ logging.basicConfig(
 logger = logging.getLogger("app")
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = WEBHOOK_MAX_PAYLOAD_BYTES
+app.config.update(
+    MAX_CONTENT_LENGTH=WEBHOOK_MAX_PAYLOAD_BYTES,
+    SECRET_KEY=SECRET_KEY or None,
+    SESSION_COOKIE_NAME="nyaysetu_admin_session",
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Strict",
+    SESSION_COOKIE_SECURE=ENV in {"staging", "production"},
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=2),
+    SESSION_REFRESH_EACH_REQUEST=True,
+)
 if AUTO_CREATE_SCHEMA:
     init_db()
 
@@ -388,7 +399,6 @@ def send_list_picker(
     body: str,
     rows: list,
     section_title: str = "Options",
-    button_title: str = "Select",
 ):
     return _require_whatsapp_delivery(
         _wa_send_list_picker(
@@ -397,7 +407,6 @@ def send_list_picker(
             body=body,
             rows=rows,
             section_title=section_title,
-            button_title=button_title,
         ),
         operation="list",
         payload={
@@ -406,7 +415,6 @@ def send_list_picker(
             "body": body,
             "rows": rows,
             "section_title": section_title,
-            "button_title": button_title,
         },
     )
 
@@ -1078,18 +1086,6 @@ def parse_advocate_intake(text: str) -> dict[str, str] | None:
     }
 
 
-def is_advocate_intake_attempt(text: str) -> bool:
-    """Recognise a site-generated intake even when its fields were edited.
-
-    This deliberately does not make a malformed intake valid. It only gives
-    the user a useful recovery message instead of silently dropping it.
-    """
-
-    normalized = unicodedata.normalize("NFKC", str(text or ""))
-    normalized = normalized.replace("\r\n", "\n").replace("\r", "\n").strip()
-    return normalized.casefold().startswith(ADVOCATE_INTAKE_PREFIX.casefold())
-
-
 def masked_identifier(value: str) -> str:
     value = str(value or "")
     if len(value) <= 6:
@@ -1154,7 +1150,6 @@ def send_more_options(wa_id, user) -> None:
         body=t(user, "more_menu_body"),
         section_title=t(user, "more_menu_section"),
         rows=more_menu_rows(user),
-        button_title=t(user, "select_button"),
     )
 
 
@@ -1166,19 +1161,6 @@ def send_language_picker(wa_id, user) -> None:
             {"id": "lang_en", "title": "English"},
             {"id": "lang_hi", "title": "Hindi / Hinglish"},
             {"id": "lang_mr", "title": "मराठी"},
-        ],
-    )
-
-
-def send_ai_or_book_choice(wa_id, user) -> None:
-    """Show the primary next-step choice in the user's selected language."""
-
-    send_buttons(
-        wa_id,
-        t(user, "ask_ai_or_book"),
-        [
-            {"id": "opt_ai", "title": t(user, "ask_ai")},
-            {"id": "opt_book", "title": t(user, "book_consult")},
         ],
     )
 
@@ -1342,7 +1324,6 @@ def send_available_dates(db, user, wa_id) -> bool:
         body=t(user, "available_dates"),
         rows=rows,
         section_title=t(user, "next_7_days"),
-        button_title=t(user, "select_button"),
     )
     return True
 
@@ -1361,19 +1342,25 @@ def send_available_slots(db, user, wa_id, date_str: str) -> bool:
         body=t(user, "available_slots"),
         rows=rows,
         section_title=t(user, "time_slots"),
-        button_title=t(user, "select_button"),
     )
     return True
 
 
 def feedback_rows(user) -> list[dict[str, str]]:
+    labels = {
+        5: "5 ⭐ Excellent",
+        4: "4 ⭐ Good",
+        3: "3 ⭐ Okay",
+        2: "2 ⭐ Needs work",
+        1: "1 ⭐ Poor",
+    }
     return [
         {
             "id": f"feedback::{rating}",
-            "title": t(user, f"feedback_rating_{rating}"),
+            "title": label,
             "description": t(user, "feedback_row_desc"),
         }
-        for rating in range(5, 0, -1)
+        for rating, label in labels.items()
     ]
 
 # =================================================
@@ -1395,14 +1382,12 @@ def send_category_list(wa_id, user):
         body=t(user, "choose_category"),
         section_title=t(user, "select_category"),
         rows=rows,
-        button_title=t(user, "select_button"),
     )
 
 def send_subcategory_list(db, wa_id, user, category):
     """
     Sends sub-categories strictly from CATEGORY_SUBCATEGORIES.
-    Keeps every WhatsApp list within the provider's ten-row limit. Categories
-    already include a "Not Sure" route for users who need general guidance.
+    Ensures 'General Legal Query' is always present.
     Category MUST be canonical key like: banking_and_finance
     """
 
@@ -1434,6 +1419,10 @@ def send_subcategory_list(db, wa_id, user, category):
     # ===============================
     subcats = CATEGORY_SUBCATEGORIES.get(category_key, []).copy()
 
+    # ✅ Ensure "General Legal Query" always exists
+    if "General Legal Query" not in subcats:
+        subcats.append("General Legal Query")
+
     # ===============================
     # BUILD WHATSAPP ROWS
     # ===============================
@@ -1460,7 +1449,6 @@ def send_subcategory_list(db, wa_id, user, category):
         body=t(user, "choose_subcategory"),
         section_title=t(user, "select_subcategory"),
         rows=rows,
-        button_title=t(user, "select_button"),
     )
 
 def parse_subcategory_id(interactive_id: str):
@@ -1645,7 +1633,6 @@ def close_completed_consultation(db, user, wa_id) -> bool:
         body=t(user, "feedback_prompt"),
         section_title=t(user, "feedback_section"),
         rows=feedback_rows(user),
-        button_title=t(user, "select_button"),
     )
     return True
 
@@ -1768,6 +1755,8 @@ def _deployment_configuration_is_valid(
 ) -> bool:
     required_configuration = (
         ADMIN_TOKEN,
+        ADMIN_PASSWORD,
+        SECRET_KEY,
         WHATSAPP_APP_SECRET,
         WHATSAPP_PHONE_ID,
         WHATSAPP_TOKEN,
@@ -1833,6 +1822,8 @@ def _deployment_configuration_is_valid(
         and not AUTO_CREATE_SCHEMA
         and not ALLOW_INSECURE_WEBHOOKS
         and len(ADMIN_TOKEN) >= 32
+        and len(ADMIN_PASSWORD) >= 16
+        and len(SECRET_KEY) >= 32
         and len(AI_SAFETY_IDENTIFIER_SECRET) >= 32
         and len(WHATSAPP_APP_SECRET) >= 32
         and (
@@ -2199,23 +2190,6 @@ def webhook():
                 }
             ), 200
 
-        if (
-            interactive_id is None
-            and is_advocate_intake_attempt(text_body)
-        ):
-            # A user may edit the website-generated WhatsApp message or an old
-            # site version may submit a stale field. Never record malformed
-            # legal intake, but always explain how to recover.
-            send_text(wa_id, t(user, "advocate_intake_invalid"))
-            if user.welcome_sent:
-                send_home(wa_id, user)
-            else:
-                user.welcome_sent = True
-                user.flow_state = ASK_LANGUAGE
-                db.commit()
-                send_language_picker(wa_id, user)
-            return jsonify({"status": "advocate_intake_invalid"}), 200
-
         if close_completed_consultation(db, user, wa_id):
             return jsonify({"status": "ok"}), 200
 
@@ -2270,7 +2244,6 @@ def webhook():
                 body=legal_ui(user, "guide_categories_body"),
                 section_title=legal_ui(user, "guide_categories"),
                 rows=legal_guide_rows(user),
-                button_title=t(user, "select_button"),
             )
             record_event("legal_guides_opened", user_id=user.id)
             return jsonify({"status": "ok"}), 200
@@ -2287,7 +2260,6 @@ def webhook():
                 body=legal_ui(user, "guide_issues_body"),
                 section_title=legal_ui(user, "guide_issues"),
                 rows=rows,
-                button_title=t(user, "select_button"),
             )
             record_event(
                 "legal_guide_category_viewed",
@@ -2532,7 +2504,6 @@ def webhook():
                 body=t(user, "feedback_body"),
                 section_title=t(user, "feedback_section"),
                 rows=feedback_rows(user),
-                button_title=t(user, "select_button"),
             )
             return jsonify({"status": "ok"}), 200
 
@@ -2713,9 +2684,7 @@ def webhook():
                     paid_booking.date,
                     paid_booking.slot_code,
                 )
-                send_text(wa_id, t(user, "booking_record_problem"))
-                send_home(wa_id, user)
-                return jsonify({"status": "booking_record_problem"}), 200
+                return jsonify({"status": "ignored"}), 200
 
             # -------------------------------
             # SAFE booking window (single source of truth)
@@ -2729,9 +2698,7 @@ def webhook():
                     paid_booking.date,
                     paid_booking.slot_code,
                 )
-                send_text(wa_id, t(user, "booking_record_problem"))
-                send_home(wa_id, user)
-                return jsonify({"status": "booking_record_problem"}), 200
+                return jsonify({"status": "ignored"}), 200
             
             now = datetime.now(IST)
 
@@ -2819,7 +2786,6 @@ def webhook():
             db.commit()
         
             send_text(wa_id, t(user, "restart"))
-            send_home(wa_id, user)
             return jsonify({"status": "ok"}), 200
             
         # ===============================
@@ -2891,8 +2857,15 @@ def webhook():
                 #    db.commit()
                         
                 save_state(db, user, ASK_AI_OR_BOOK)
-
-                send_ai_or_book_choice(wa_id, user)
+        
+                send_buttons(
+                    wa_id,
+                    t(user, "ask_ai_or_book"),
+                    [
+                        {"id": "opt_ai", "title": t(user, "ask_ai")},
+                        {"id": "opt_book", "title": t(user, "book_consult")},
+                    ],
+                )
             else:
                 send_language_picker(wa_id, user)
 
@@ -2906,26 +2879,8 @@ def webhook():
                 begin_ai_consent(db, user, wa_id)
                 return jsonify({"status": "ok"}), 200
 
-            if interactive_id == "opt_book" or (
-                interactive_id is None and is_booking_intent(lower_text)
-            ):
+            if interactive_id == "opt_book":
                 begin_booking_scope_review(db, user, wa_id)
-                return jsonify({"status": "ok"}), 200
-
-            if (
-                interactive_id is None
-                and text_body.strip()
-                and lower_text not in RESTART_KEYWORDS
-            ):
-                # Typed legal questions at this button-based choice used to be
-                # silently ignored. Move the user to the consent step so the
-                # conversation always continues safely.
-                begin_ai_consent(db, user, wa_id)
-                return jsonify({"status": "ok"}), 200
-
-            if lower_text not in RESTART_KEYWORDS:
-                send_text(wa_id, t(user, "invalid_selection"))
-                send_ai_or_book_choice(wa_id, user)
                 return jsonify({"status": "ok"}), 200
 
         # ===============================
@@ -3127,7 +3082,6 @@ def webhook():
                     body=t(user, "district_multiple_matches"),
                     section_title=t(user, "choose_district"),
                     rows=rows,
-                    button_title=t(user, "select_button"),
                 )
                 return jsonify({"status": "ok"}), 200
         
@@ -3320,7 +3274,6 @@ def webhook():
             # ---------------------------------
             if not interactive_id.startswith("date_"):
                 send_text(wa_id, t(user, "select_date_retry"))
-                send_available_dates(db, user, wa_id)
                 return jsonify({"status": "ok"}), 200
         
             date_str = interactive_id.replace("date_", "").strip()
@@ -3340,7 +3293,6 @@ def webhook():
             
             except ValueError:
                 send_text(wa_id, t(user, "invalid_date"))
-                send_available_dates(db, user, wa_id)
                 return jsonify({"status": "ok"}), 200
             # ---------------------------------
             # Save date & move forward
@@ -3373,8 +3325,6 @@ def webhook():
             # ---------------------------------
             if interactive_id.startswith("date_"):
                 save_state(db, user, ASK_DATE)
-                send_text(wa_id, t(user, "select_date_retry"))
-                send_available_dates(db, user, wa_id)
                 return jsonify({"status": "ok"}), 200
         
             # ---------------------------------
@@ -3382,11 +3332,6 @@ def webhook():
             # ---------------------------------
             if not interactive_id.startswith("slot_"):
                 send_text(wa_id, t(user, "slot_retry"))
-                if user.temp_date:
-                    send_available_slots(db, user, wa_id, user.temp_date)
-                else:
-                    save_state(db, user, ASK_DATE)
-                    send_available_dates(db, user, wa_id)
                 return jsonify({"status": "ok"}), 200
         
             slot_code = interactive_id.replace("slot_", "").strip()
@@ -3533,11 +3478,9 @@ def webhook():
 
                 
         # -------------------------------
-        # Default fallback (safe and user-visible)
+        # Default fallback (safe)
         # -------------------------------
-        send_text(wa_id, t(user, "input_not_understood"))
-        send_home(wa_id, user)
-        return jsonify({"status": "recovery_menu_sent"}), 200
+        return jsonify({"status": "ignored"}), 200
     except WhatsAppDeliveryError as exc:
         completed, job_id = complete_inbound_after_delivery_failure(
             db,

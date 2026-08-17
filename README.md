@@ -111,7 +111,7 @@ critical:
 | Razorpay | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `RAZORPAY_MODE=live`; optional `RAZORPAY_WEBHOOK_SECRET_PREVIOUS` during rotation |
 | Email | `SES_REGION`, `SES_FROM_EMAIL`, `SES_CONFIGURATION_SET`, AWS credentials, `BOOKING_NOTIFICATION_EMAILS`, `SUPPORT_NOTIFICATION_EMAILS`, `PAYMENT_RECONCILIATION_EMAILS` |
 | User trust | reviewed `SUPPORT_*`, `PRIVACY_*`, policy URLs, and consent/terms versions |
-| Operations | a long random `ADMIN_TOKEN` and `AI_SAFETY_IDENTIFIER_SECRET` |
+| Operations | long random `ADMIN_TOKEN`, `ADMIN_PASSWORD`, `SECRET_KEY`, and `AI_SAFETY_IDENTIFIER_SECRET` values |
 
 AI is optional. The Render Blueprint defaults to `AI_PROVIDER=local`. To enable
 a third-party provider, set `AI_PROVIDER=openai`, `claude`, or `auto`, provide
@@ -145,8 +145,9 @@ and validates strict provider, recipient, support/privacy, HTTPS-policy and
 secret configuration. Staging requires Razorpay test keys; production requires
 live keys plus an exact content-review version/date pair. Current production
 credentials must also meet the enforced format/strength contract: 32 or more
-characters for the WhatsApp app secret/token and admin/AI secrets, 16 or more
-for the WhatsApp verify token and Razorpay key/webhook secrets, an
+characters for the WhatsApp app secret/token, admin token, session signing and
+AI secrets, 16 or more for the admin password, WhatsApp verify token and
+Razorpay key/webhook secrets, an
 `rzp_live_...` key ID, a valid SES region/from-address pair, an AWS access-key ID
 of at least 16 characters, an AWS secret access key of at least 32, and an
 optional session token of at least 16. A configured previous Meta app secret
@@ -166,6 +167,8 @@ remain necessary.
 | `GET /webhook` | Meta webhook verification |
 | `POST /webhook` | Signed WhatsApp events |
 | `POST /payment/webhook` | Signed Razorpay payment events |
+| `GET/POST /admin/login` | Restricted browser-console sign in |
+| `GET /admin/appointments` | Paid-consultation appointment control desk |
 | `GET /admin/metrics` | Aggregate operational metrics |
 | `GET/PATCH /admin/support[...]` | Support queue and audited ticket updates |
 | `GET/PATCH /admin/fulfillments[...]` | Paid-consultation fulfilment queue and lifecycle |
@@ -174,11 +177,15 @@ remain necessary.
 | `GET/POST /admin/outbox[...]` | Outbox inspection and controlled retry |
 | `GET /admin/audit` | Audited operator mutation history |
 
-Admin routes require `Authorization: Bearer <ADMIN_TOKEN>` or
-`X-Admin-Token: <ADMIN_TOKEN>`. Mutations additionally require a valid
-`X-Operator-ID`, and every mutation writes an audit event. Do not put admin
-credentials in query strings. The shared token is not a substitute for
-platform RBAC, MFA, or individual database access controls.
+Machine clients use `Authorization: Bearer <ADMIN_TOKEN>` or
+`X-Admin-Token: <ADMIN_TOKEN>` and send `X-Operator-ID` on mutations. Human
+operators sign in at `/admin/login` with a stable operator ID and the separately
+stored `ADMIN_PASSWORD`. Browser sessions expire after two hours, carry secure
+HttpOnly/SameSite cookies, require CSRF tokens on mutations, and every mutation
+writes an audit event. `SECRET_KEY` signs those sessions; rotating it logs out
+all browser operators. Do not put admin credentials in query strings. This
+shared-password console is not a substitute for platform access control, MFA,
+or future individual application RBAC.
 
 ## Production deployment
 
