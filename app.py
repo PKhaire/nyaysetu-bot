@@ -1387,7 +1387,7 @@ def send_category_list(wa_id, user):
 def send_subcategory_list(db, wa_id, user, category):
     """
     Sends sub-categories strictly from CATEGORY_SUBCATEGORIES.
-    Ensures 'General Legal Query' is always present.
+    Adds 'General Legal Query' when the WhatsApp row limit permits it.
     Category MUST be canonical key like: banking_and_finance
     """
 
@@ -1420,8 +1420,12 @@ def send_subcategory_list(db, wa_id, user, category):
     subcats = CATEGORY_SUBCATEGORIES.get(category_key, []).copy()
 
     # ✅ Ensure "General Legal Query" always exists
-    if "General Legal Query" not in subcats:
+    # WhatsApp list sections allow at most 10 rows. The curated source list
+    # retains the important "Not Sure" escape hatch, so add the generic option
+    # only when there is capacity and apply a final defensive cap.
+    if "General Legal Query" not in subcats and len(subcats) < 10:
         subcats.append("General Legal Query")
+    subcats = subcats[:10]
 
     # ===============================
     # BUILD WHATSAPP ROWS
@@ -2112,6 +2116,15 @@ def webhook():
             if interactive_id is None
             else None
         )
+        advocate_intake_candidate = (
+            interactive_id is None
+            and unicodedata.normalize("NFKC", text_body)
+            .replace("\r\n", "\n")
+            .replace("\r", "\n")
+            .strip()
+            .casefold()
+            .startswith(ADVOCATE_INTAKE_PREFIX.casefold())
+        )
         if advocate_intake:
             duplicate_cutoff = utc_now() - timedelta(minutes=10)
             support_request = (
@@ -2189,6 +2202,13 @@ def webhook():
                     )
                 }
             ), 200
+
+        if advocate_intake_candidate:
+            # Do not silently reinterpret a malformed website hand-off as a
+            # normal legal question. No support record is created here.
+            send_text(wa_id, t(user, "advocate_intake_invalid"))
+            send_home(wa_id, user)
+            return jsonify({"status": "advocate_intake_invalid"}), 200
 
         if close_completed_consultation(db, user, wa_id):
             return jsonify({"status": "ok"}), 200
@@ -2875,12 +2895,14 @@ def webhook():
         # AI OR BOOK
         # ===============================
         if user.flow_state == ASK_AI_OR_BOOK:
-            if interactive_id == "opt_ai":
-                begin_ai_consent(db, user, wa_id)
+            if interactive_id == "opt_book" or is_booking_intent(lower_text):
+                begin_booking_scope_review(db, user, wa_id)
                 return jsonify({"status": "ok"}), 200
 
-            if interactive_id == "opt_book":
-                begin_booking_scope_review(db, user, wa_id)
+            if interactive_id == "opt_ai" or (
+                interactive_id is None and bool(lower_text)
+            ):
+                begin_ai_consent(db, user, wa_id)
                 return jsonify({"status": "ok"}), 200
 
         # ===============================
@@ -3480,6 +3502,11 @@ def webhook():
         # -------------------------------
         # Default fallback (safe)
         # -------------------------------
+        if user.flow_state == NORMAL and text_body:
+            send_text(wa_id, t(user, "recovery_menu"))
+            send_home(wa_id, user)
+            return jsonify({"status": "recovery_menu_sent"}), 200
+
         return jsonify({"status": "ignored"}), 200
     except WhatsAppDeliveryError as exc:
         completed, job_id = complete_inbound_after_delivery_failure(
