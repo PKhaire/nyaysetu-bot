@@ -141,6 +141,7 @@ def test_render_pins_operational_policy_for_maintenance():
         "WEBHOOK_REPLAY_WINDOW_SECONDS": "0",
         "WEBHOOK_EVENT_TTL_DAYS": "30",
         "PROCESSED_MESSAGE_TTL_DAYS": "30",
+        "CASE_BRIEF_UNATTACHED_TTL_DAYS": "7",
         "ANALYTICS_EVENT_TTL_DAYS": "90",
         "OUTBOX_COMPLETED_TTL_DAYS": "30",
         "PAYMENT_LINK_TTL_MINUTES": "16",
@@ -152,6 +153,7 @@ def test_render_pins_operational_policy_for_maintenance():
 
     expected_reference_counts = {
         "PROCESSED_MESSAGE_TTL_DAYS": 1,
+        "CASE_BRIEF_UNATTACHED_TTL_DAYS": 1,
         "ANALYTICS_EVENT_TTL_DAYS": 1,
         "OUTBOX_COMPLETED_TTL_DAYS": 1,
         "PAYMENT_LINK_TTL_MINUTES": 1,

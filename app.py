@@ -32,6 +32,7 @@ from config import (
     WHATSAPP_TOKEN,
     WHATSAPP_VERIFY_TOKEN,
     BOOKING_TERMS_VERSION,
+    CASE_BRIEF_CONSENT_VERSION,
     BOOKING_PRICE,
     BOOKING_PRICE_CONFIGURED,
     CANCELLATION_POLICY_URL,
@@ -82,6 +83,7 @@ from models import (
     BookingFulfillment,
     CategoryAnalytics,
     BookingStatus,
+    CaseBrief,
     Feedback,
     InboundMessageEvent,
     PaymentReconciliation,
@@ -480,6 +482,15 @@ ASK_DISTRICT = "ASK_DISTRICT"
 CONFIRM_LOCATION = "CONFIRM_LOCATION"
 ASK_CATEGORY = "ASK_CATEGORY"
 ASK_SUBCATEGORY = "ASK_SUBCATEGORY"
+ASK_BRIEF_SUMMARY = "ASK_BRIEF_SUMMARY"
+ASK_BRIEF_STAGE = "ASK_BRIEF_STAGE"
+ASK_BRIEF_DATES = "ASK_BRIEF_DATES"
+ASK_BRIEF_OUTCOME = "ASK_BRIEF_OUTCOME"
+ASK_BRIEF_URGENCY = "ASK_BRIEF_URGENCY"
+ASK_BRIEF_SAFETY = "ASK_BRIEF_SAFETY"
+ASK_BRIEF_DOCUMENTS = "ASK_BRIEF_DOCUMENTS"
+ASK_BRIEF_OPPOSING_PARTY = "ASK_BRIEF_OPPOSING_PARTY"
+REVIEW_CASE_BRIEF = "REVIEW_CASE_BRIEF"
 ASK_DATE = "ASK_DATE"
 ASK_SLOT = "ASK_SLOT"
 WAITING_PAYMENT = "WAITING_PAYMENT"
@@ -499,6 +510,9 @@ BTN_AI_CONSENT = "ai_consent_yes"
 BTN_AI_DECLINE = "ai_consent_no"
 BTN_BOOKING_SCOPE_CONTINUE = "booking_scope_continue"
 BTN_BOOKING_SCOPE_CANCEL = "booking_scope_cancel"
+BTN_BRIEF_CONFIRM = "case_brief_confirm"
+BTN_BRIEF_EDIT = "case_brief_edit"
+BTN_BRIEF_CANCEL = "case_brief_cancel"
 BTN_REVIEW_PAY = "review_pay"
 BTN_REVIEW_CHANGE_TIME = "review_change_time"
 BTN_REVIEW_CANCEL = "review_cancel"
@@ -1215,8 +1229,203 @@ def record_user_consent(
     return consent
 
 
+_CASE_BRIEF_DOCUMENTS = {
+    "1": "Notice or legal letter",
+    "2": "Agreement or contract",
+    "3": "Receipt or payment proof",
+    "4": "Court or police papers",
+    "5": "Identity or address proof",
+    "6": "Other relevant document",
+}
+
+
+def _latest_unattached_case_brief(db, user) -> CaseBrief | None:
+    return (
+        db.query(CaseBrief)
+        .filter(
+            CaseBrief.user_id == user.id,
+            CaseBrief.booking_id.is_(None),
+            CaseBrief.status.in_(("DRAFT", "CONFIRMED")),
+        )
+        .order_by(CaseBrief.created_at.desc(), CaseBrief.id.desc())
+        .first()
+    )
+
+
+def _cancel_unattached_case_briefs(db, user) -> None:
+    briefs = (
+        db.query(CaseBrief)
+        .filter(
+            CaseBrief.user_id == user.id,
+            CaseBrief.booking_id.is_(None),
+            CaseBrief.status.in_(("DRAFT", "CONFIRMED")),
+        )
+        .all()
+    )
+    for brief in briefs:
+        brief.status = "CANCELLED"
+
+
+def begin_case_brief(db, user, wa_id) -> CaseBrief:
+    _cancel_unattached_case_briefs(db, user)
+    brief = CaseBrief(
+        user_id=user.id,
+        status="DRAFT",
+        preferred_language=str(user.language or "en")[:32],
+        documents_json="[]",
+    )
+    db.add(brief)
+    user.flow_state = ASK_BRIEF_SUMMARY
+    db.commit()
+    send_text(wa_id, t(user, "brief_summary_prompt"))
+    return brief
+
+
+def send_case_brief_stage(db, user, wa_id, brief) -> None:
+    user.flow_state = ASK_BRIEF_STAGE
+    db.commit()
+    send_list_picker(
+        wa_id,
+        header=t(user, "brief_stage_header"),
+        body=t(user, "brief_stage_body"),
+        section_title=t(user, "brief_stage_section"),
+        rows=[
+            {
+                "id": "brief_stage::notice",
+                "title": t(user, "brief_stage_notice")[:24],
+                "description": t(user, "brief_stage_notice_desc")[:72],
+            },
+            {
+                "id": "brief_stage::pre_litigation",
+                "title": t(user, "brief_stage_pre_litigation")[:24],
+                "description": t(
+                    user, "brief_stage_pre_litigation_desc"
+                )[:72],
+            },
+            {
+                "id": "brief_stage::court",
+                "title": t(user, "brief_stage_court")[:24],
+                "description": t(user, "brief_stage_court_desc")[:72],
+            },
+            {
+                "id": "brief_stage::appeal",
+                "title": t(user, "brief_stage_appeal")[:24],
+                "description": t(user, "brief_stage_appeal_desc")[:72],
+            },
+            {
+                "id": "brief_stage::other",
+                "title": t(user, "brief_stage_other")[:24],
+                "description": t(user, "brief_stage_other_desc")[:72],
+            },
+        ],
+    )
+
+
+def send_case_brief_urgency(db, user, wa_id) -> None:
+    user.flow_state = ASK_BRIEF_URGENCY
+    db.commit()
+    send_buttons(
+        wa_id,
+        t(user, "brief_urgency_prompt"),
+        [
+            {
+                "id": "brief_urgency::standard",
+                "title": t(user, "brief_urgency_standard")[:20],
+            },
+            {
+                "id": "brief_urgency::time_sensitive",
+                "title": t(user, "brief_urgency_time_sensitive")[:20],
+            },
+            {
+                "id": "brief_urgency::immediate_safety",
+                "title": t(user, "brief_urgency_safety")[:20],
+            },
+        ],
+    )
+
+
+def _case_brief_documents(brief) -> list[str]:
+    try:
+        values = json.loads(brief.documents_json or "[]")
+    except (TypeError, ValueError):
+        values = []
+    return [str(value) for value in values] if isinstance(values, list) else []
+
+
+def send_case_brief_review(db, user, wa_id, brief) -> None:
+    user.flow_state = REVIEW_CASE_BRIEF
+    db.commit()
+    documents = _case_brief_documents(brief)
+    # Keep the factual brief separate from the interactive consent message.
+    # WhatsApp limits interactive button bodies to 1,024 characters; a long
+    # client narrative must never push the consent terms out of that limit.
+    send_text(
+        wa_id,
+        t(
+            user,
+            "brief_review",
+            summary=brief.issue_summary or "N/A",
+            stage=brief.legal_stage or "N/A",
+            dates=brief.important_dates or "N/A",
+            outcome=brief.desired_outcome or "N/A",
+            urgency=brief.urgency or "N/A",
+            safety=brief.safety_concerns or "None disclosed",
+            documents=", ".join(documents) if documents else "None",
+            opposing_party=brief.opposing_party or "None disclosed",
+        ),
+    )
+    send_buttons(
+        wa_id,
+        t(
+            user,
+            "brief_consent_prompt",
+            consent_version=CASE_BRIEF_CONSENT_VERSION,
+            privacy_url=PRIVACY_POLICY_URL or "N/A",
+        ),
+        [
+            {
+                "id": BTN_BRIEF_CONFIRM,
+                "title": t(user, "brief_confirm")[:20],
+            },
+            {"id": BTN_BRIEF_EDIT, "title": t(user, "brief_edit")[:20]},
+            {
+                "id": BTN_BRIEF_CANCEL,
+                "title": t(user, "brief_cancel")[:20],
+            },
+        ],
+    )
+
+
+def _parse_case_brief_documents(value: str) -> list[str] | None:
+    normalized = re.sub(r"\s+", "", str(value or ""))
+    if normalized == "0":
+        return []
+    if not re.fullmatch(r"[1-6](,[1-6]){0,5}", normalized):
+        return None
+    choices = list(dict.fromkeys(normalized.split(",")))
+    return [_CASE_BRIEF_DOCUMENTS[choice] for choice in choices]
+
+
+def _attach_confirmed_case_brief(db, user, booking) -> None:
+    brief = (
+        db.query(CaseBrief)
+        .filter(
+            CaseBrief.user_id == user.id,
+            CaseBrief.booking_id.is_(None),
+            CaseBrief.status == "CONFIRMED",
+        )
+        .order_by(CaseBrief.confirmed_at.desc(), CaseBrief.id.desc())
+        .first()
+    )
+    if brief:
+        brief.booking_id = booking.id
+        brief.updated_at = utc_now()
+        db.flush()
+
+
 def begin_booking_scope_review(db, user, wa_id) -> None:
     user.ai_enabled = False
+    _cancel_unattached_case_briefs(db, user)
     clear_booking_draft(user)
     user.flow_state = REVIEW_SERVICE
     db.commit()
@@ -1785,6 +1994,7 @@ def _deployment_configuration_is_valid(
         CANCELLATION_POLICY_URL,
         AI_CONSENT_VERSION,
         BOOKING_TERMS_VERSION,
+        CASE_BRIEF_CONSENT_VERSION,
         LEGAL_CONTENT_VERSION,
     )
     email_values = (
@@ -3272,12 +3482,206 @@ def webhook():
         
             db.commit()
         
-            save_state(db, user, ASK_DATE)
-        
-            send_available_dates(db, user, wa_id)
+            begin_case_brief(db, user, wa_id)
         
             return jsonify({"status": "ok"}), 200
-                       
+
+        # -------------------------------
+        # Structured case brief
+        # -------------------------------
+        if user.flow_state == ASK_BRIEF_SUMMARY:
+            brief = _latest_unattached_case_brief(db, user)
+            summary = (text_body or "").strip()
+            if not brief:
+                begin_case_brief(db, user, wa_id)
+                return jsonify({"status": "ok"}), 200
+            if interactive_id or not 20 <= len(summary) <= 700:
+                send_text(wa_id, t(user, "brief_summary_retry"))
+                return jsonify({"status": "ok"}), 200
+            brief.issue_summary = summary
+            send_case_brief_stage(db, user, wa_id, brief)
+            return jsonify({"status": "ok"}), 200
+
+        if user.flow_state == ASK_BRIEF_STAGE:
+            brief = _latest_unattached_case_brief(db, user)
+            if not brief:
+                begin_case_brief(db, user, wa_id)
+                return jsonify({"status": "ok"}), 200
+            stage_values = {
+                "notice": "Notice or demand received",
+                "pre_litigation": "Before court or formal filing",
+                "court": "Court or authority proceeding",
+                "appeal": "Appeal or post-order stage",
+                "other": "Other or unsure",
+            }
+            stage_key = (
+                interactive_id.removeprefix("brief_stage::")
+                if interactive_id
+                and interactive_id.startswith("brief_stage::")
+                else ""
+            )
+            if stage_key not in stage_values:
+                send_text(wa_id, t(user, "brief_stage_retry"))
+                send_case_brief_stage(db, user, wa_id, brief)
+                return jsonify({"status": "ok"}), 200
+            brief.legal_stage = stage_values[stage_key]
+            user.flow_state = ASK_BRIEF_DATES
+            db.commit()
+            send_text(wa_id, t(user, "brief_dates_prompt"))
+            return jsonify({"status": "ok"}), 200
+
+        if user.flow_state == ASK_BRIEF_DATES:
+            brief = _latest_unattached_case_brief(db, user)
+            value = (text_body or "").strip()
+            if not brief:
+                begin_case_brief(db, user, wa_id)
+                return jsonify({"status": "ok"}), 200
+            if interactive_id or not 2 <= len(value) <= 300:
+                send_text(wa_id, t(user, "brief_dates_retry"))
+                return jsonify({"status": "ok"}), 200
+            brief.important_dates = value
+            user.flow_state = ASK_BRIEF_OUTCOME
+            db.commit()
+            send_text(wa_id, t(user, "brief_outcome_prompt"))
+            return jsonify({"status": "ok"}), 200
+
+        if user.flow_state == ASK_BRIEF_OUTCOME:
+            brief = _latest_unattached_case_brief(db, user)
+            value = (text_body or "").strip()
+            if not brief:
+                begin_case_brief(db, user, wa_id)
+                return jsonify({"status": "ok"}), 200
+            if interactive_id or not 10 <= len(value) <= 500:
+                send_text(wa_id, t(user, "brief_outcome_retry"))
+                return jsonify({"status": "ok"}), 200
+            brief.desired_outcome = value
+            send_case_brief_urgency(db, user, wa_id)
+            return jsonify({"status": "ok"}), 200
+
+        if user.flow_state == ASK_BRIEF_URGENCY:
+            brief = _latest_unattached_case_brief(db, user)
+            if not brief:
+                begin_case_brief(db, user, wa_id)
+                return jsonify({"status": "ok"}), 200
+            urgency_values = {
+                "standard": "Standard",
+                "time_sensitive": "Time-sensitive",
+                "immediate_safety": "Immediate safety concern",
+            }
+            urgency_key = (
+                interactive_id.removeprefix("brief_urgency::")
+                if interactive_id
+                and interactive_id.startswith("brief_urgency::")
+                else ""
+            )
+            if urgency_key not in urgency_values:
+                send_case_brief_urgency(db, user, wa_id)
+                return jsonify({"status": "ok"}), 200
+            brief.urgency = urgency_values[urgency_key]
+            if urgency_key == "immediate_safety":
+                user.flow_state = ASK_BRIEF_SAFETY
+                db.commit()
+                send_text(wa_id, t(user, "brief_safety_prompt"))
+            else:
+                brief.safety_concerns = "None disclosed"
+                user.flow_state = ASK_BRIEF_DOCUMENTS
+                db.commit()
+                send_text(wa_id, t(user, "brief_documents_prompt"))
+            return jsonify({"status": "ok"}), 200
+
+        if user.flow_state == ASK_BRIEF_SAFETY:
+            brief = _latest_unattached_case_brief(db, user)
+            value = (text_body or "").strip()
+            if not brief:
+                begin_case_brief(db, user, wa_id)
+                return jsonify({"status": "ok"}), 200
+            if interactive_id or not 10 <= len(value) <= 500:
+                send_text(wa_id, t(user, "brief_safety_retry"))
+                return jsonify({"status": "ok"}), 200
+            brief.safety_concerns = value
+            user.flow_state = ASK_BRIEF_DOCUMENTS
+            db.commit()
+            send_text(wa_id, t(user, "brief_documents_prompt"))
+            return jsonify({"status": "ok"}), 200
+
+        if user.flow_state == ASK_BRIEF_DOCUMENTS:
+            brief = _latest_unattached_case_brief(db, user)
+            documents = _parse_case_brief_documents(text_body or "")
+            if not brief:
+                begin_case_brief(db, user, wa_id)
+                return jsonify({"status": "ok"}), 200
+            if interactive_id or documents is None:
+                send_text(wa_id, t(user, "brief_documents_retry"))
+                return jsonify({"status": "ok"}), 200
+            brief.documents_json = json.dumps(documents, ensure_ascii=False)
+            user.flow_state = ASK_BRIEF_OPPOSING_PARTY
+            db.commit()
+            send_text(wa_id, t(user, "brief_opposing_prompt"))
+            return jsonify({"status": "ok"}), 200
+
+        if user.flow_state == ASK_BRIEF_OPPOSING_PARTY:
+            brief = _latest_unattached_case_brief(db, user)
+            value = (text_body or "").strip()
+            if not brief:
+                begin_case_brief(db, user, wa_id)
+                return jsonify({"status": "ok"}), 200
+            if interactive_id or not 2 <= len(value) <= 240:
+                send_text(wa_id, t(user, "brief_opposing_retry"))
+                return jsonify({"status": "ok"}), 200
+            if value.casefold() in {
+                "skip", "none", "na", "n/a", "nahi", "नाही", "नहीं"
+            }:
+                value = "None disclosed"
+            brief.opposing_party = value
+            send_case_brief_review(db, user, wa_id, brief)
+            return jsonify({"status": "ok"}), 200
+
+        if user.flow_state == REVIEW_CASE_BRIEF:
+            brief = _latest_unattached_case_brief(db, user)
+            if not brief:
+                begin_case_brief(db, user, wa_id)
+                return jsonify({"status": "ok"}), 200
+            if interactive_id == BTN_BRIEF_EDIT:
+                brief.issue_summary = None
+                brief.legal_stage = None
+                brief.important_dates = None
+                brief.desired_outcome = None
+                brief.urgency = None
+                brief.safety_concerns = None
+                brief.opposing_party = None
+                brief.documents_json = "[]"
+                user.flow_state = ASK_BRIEF_SUMMARY
+                db.commit()
+                send_text(wa_id, t(user, "brief_summary_prompt"))
+                return jsonify({"status": "ok"}), 200
+            if interactive_id == BTN_BRIEF_CANCEL:
+                brief.status = "CANCELLED"
+                clear_booking_draft(user)
+                user.flow_state = NORMAL
+                db.commit()
+                send_text(wa_id, t(user, "brief_cancelled"))
+                send_home(wa_id, user)
+                return jsonify({"status": "ok"}), 200
+            if interactive_id != BTN_BRIEF_CONFIRM:
+                send_case_brief_review(db, user, wa_id, brief)
+                return jsonify({"status": "ok"}), 200
+            now = utc_now()
+            brief.status = "CONFIRMED"
+            brief.consent_version = CASE_BRIEF_CONSENT_VERSION
+            brief.consented_at = now
+            brief.confirmed_at = now
+            record_user_consent(
+                db,
+                user,
+                purpose="ADVOCATE_CASE_BRIEF_SHARING",
+                policy_version=CASE_BRIEF_CONSENT_VERSION,
+            )
+            user.flow_state = ASK_DATE
+            db.commit()
+            send_text(wa_id, t(user, "brief_confirmed"))
+            send_available_dates(db, user, wa_id)
+            return jsonify({"status": "ok"}), 200
+
         
         # -------------------------------
         # Date (STRICT & SAFE)
@@ -3405,6 +3809,7 @@ def webhook():
                 return jsonify({"status": "ok"}), 200
 
             if interactive_id == BTN_REVIEW_CANCEL:
+                _cancel_unattached_case_briefs(db, user)
                 clear_booking_draft(user)
                 user.flow_state = NORMAL
                 db.commit()
@@ -3443,6 +3848,7 @@ def webhook():
                 send_available_dates(db, user, wa_id)
                 return jsonify({"status": "ok"}), 200
 
+            _attach_confirmed_case_brief(db, user, booking)
             user.last_payment_link = payment_link
             user.flow_state = WAITING_PAYMENT
             db.commit()

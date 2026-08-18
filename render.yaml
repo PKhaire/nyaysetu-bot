@@ -56,6 +56,8 @@ services:
         value: "90"
       - key: OUTBOX_COMPLETED_TTL_DAYS
         value: "30"
+      - key: CASE_BRIEF_UNATTACHED_TTL_DAYS
+        value: "7"
       - key: PAYMENT_LINK_TTL_MINUTES
         value: "16"
       - key: PAYMENT_RECONCILIATION_LOOKBACK_DAYS
@@ -72,6 +74,8 @@ services:
         value: ai-privacy-2026-07
       - key: BOOKING_TERMS_VERSION
         value: booking-terms-2026-07
+      - key: CASE_BRIEF_CONSENT_VERSION
+        value: case-brief-sharing-2026-08
       - key: LEGAL_CONTENT_VERSION
         value: legal-content-2026-08-r5
       - key: DB_POOL_SIZE
@@ -575,6 +579,11 @@ services:
           type: web
           name: nyaysetu-bot-backend
           envVarKey: PROCESSED_MESSAGE_TTL_DAYS
+      - key: CASE_BRIEF_UNATTACHED_TTL_DAYS
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: CASE_BRIEF_UNATTACHED_TTL_DAYS
       - key: ANALYTICS_EVENT_TTL_DAYS
         fromService:
           type: web

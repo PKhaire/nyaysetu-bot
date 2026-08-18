@@ -206,9 +206,20 @@ class Advocate(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
     email = Column(String, nullable=False)
+    phone = Column(String(32), nullable=True)
+    bar_registration_number = Column(String(120), nullable=True, unique=True)
+    languages = Column(String(255), nullable=True)
     category = Column(String, nullable=False)
     district = Column(String, nullable=False)
+    operator_notes = Column(Text, nullable=True)
     active = Column(Boolean, default=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )
 
 
 # =========================================================
@@ -337,6 +348,50 @@ class UserConsent(Base):
 
 
 # =========================================================
+# STRUCTURED CONSULTATION CASE BRIEF
+# =========================================================
+
+class CaseBrief(Base):
+    """Privacy-minimised facts a client confirms for advocate preparation."""
+
+    __tablename__ = "case_briefs"
+
+    __table_args__ = (
+        Index("idx_case_brief_user_status", "user_id", "status"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    booking_id = Column(
+        Integer,
+        ForeignKey("bookings.id"),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
+    status = Column(String(24), nullable=False, default="DRAFT")
+    issue_summary = Column(Text, nullable=True)
+    legal_stage = Column(String(64), nullable=True)
+    important_dates = Column(Text, nullable=True)
+    desired_outcome = Column(Text, nullable=True)
+    urgency = Column(String(24), nullable=True)
+    safety_concerns = Column(Text, nullable=True)
+    opposing_party = Column(String(240), nullable=True)
+    preferred_language = Column(String(32), nullable=True)
+    documents_json = Column(Text, nullable=False, default="[]")
+    consent_version = Column(String(64), nullable=True)
+    consented_at = Column(DateTime, nullable=True)
+    confirmed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+
+# =========================================================
 # PRODUCT ANALYTICS (ADDITIVE / STANDALONE)
 # =========================================================
 
@@ -455,6 +510,33 @@ class BookingFulfillment(Base):
         default=utc_now,
         onupdate=utc_now,
     )
+
+
+class ManualContactEvent(Base):
+    """Auditable human contact/handover event; no message body is retained."""
+
+    __tablename__ = "manual_contact_events"
+
+    __table_args__ = (
+        Index("idx_manual_contact_booking_created", "booking_id", "created_at"),
+        Index("idx_manual_contact_follow_up", "follow_up_due_at", "outcome"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    booking_id = Column(
+        Integer,
+        ForeignKey("bookings.id"),
+        nullable=False,
+        index=True,
+    )
+    audience = Column(String(16), nullable=False)
+    channel = Column(String(24), nullable=False)
+    outcome = Column(String(32), nullable=False)
+    operator_id = Column(String(120), nullable=False)
+    notes = Column(Text, nullable=True)
+    contacted_at = Column(DateTime, nullable=False, default=utc_now)
+    follow_up_due_at = Column(DateTime, nullable=True, index=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
 
 
 class PaymentReconciliation(Base):

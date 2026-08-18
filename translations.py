@@ -1140,3 +1140,219 @@ TRANSLATIONS["mr"].update(
         ),
     }
 )
+
+# Structured pre-consultation brief. The same placeholder contract is kept in
+# every language so review and consent messages cannot silently lose facts.
+TRANSLATIONS["en"].update(
+    {
+        "brief_summary_prompt": (
+            "Before selecting a time, briefly explain what happened and what "
+            "the legal issue is. Use 20-700 characters. Do not send Aadhaar, "
+            "PAN, passwords, bank details or document images."
+        ),
+        "brief_summary_retry": "Please enter a 20-700 character issue summary.",
+        "brief_stage_header": "Current legal stage",
+        "brief_stage_body": "Select the stage that best matches your matter.",
+        "brief_stage_section": "Stage",
+        "brief_stage_notice": "Notice received",
+        "brief_stage_notice_desc": "A notice, demand or legal letter was received",
+        "brief_stage_pre_litigation": "Before filing",
+        "brief_stage_pre_litigation_desc": "No court or authority case has been filed yet",
+        "brief_stage_court": "Case in progress",
+        "brief_stage_court_desc": "A court, police or authority matter is already active",
+        "brief_stage_appeal": "Appeal or order",
+        "brief_stage_appeal_desc": "An order exists or an appeal may be needed",
+        "brief_stage_other": "Other or unsure",
+        "brief_stage_other_desc": "The stage is different or you are not sure",
+        "brief_stage_retry": "Please select the legal stage from the list.",
+        "brief_dates_prompt": (
+            "List important dates or deadlines, for example notice date or "
+            "next hearing. Type None if there is no known date."
+        ),
+        "brief_dates_retry": "Please enter important dates or type None.",
+        "brief_outcome_prompt": (
+            "What help or outcome do you want from the advocate? Use 10-500 characters."
+        ),
+        "brief_outcome_retry": "Please describe the help you want in 10-500 characters.",
+        "brief_urgency_prompt": "How urgent is this matter?",
+        "brief_urgency_standard": "Standard",
+        "brief_urgency_time_sensitive": "Time-sensitive",
+        "brief_urgency_safety": "Safety concern",
+        "brief_safety_prompt": (
+            "If anyone is in immediate danger, contact emergency services or "
+            "police now. NyaySetu is not an emergency service. Briefly state the "
+            "safety concern without unnecessary sensitive details."
+        ),
+        "brief_safety_retry": "Please describe the safety concern in 10-500 characters.",
+        "brief_documents_prompt": (
+            "Which documents are available? Reply with numbers separated by commas:\n"
+            "1 Notice/legal letter\n2 Agreement/contract\n3 Receipt/payment proof\n"
+            "4 Court/police papers\n5 ID/address proof\n6 Other relevant document\n"
+            "Reply 0 if none. Do not upload files here."
+        ),
+        "brief_documents_retry": "Reply with unique numbers 1-6 separated by commas, or 0.",
+        "brief_opposing_prompt": (
+            "Enter the other party's name for conflict checking, or type Skip "
+            "if you do not want to disclose it now."
+        ),
+        "brief_opposing_retry": "Please enter 2-240 characters or type Skip.",
+        "brief_review": (
+            "CASE BRIEF REVIEW\n\nIssue: {summary}\nStage: {stage}\nImportant dates: "
+            "{dates}\nHelp requested: {outcome}\nUrgency: {urgency}\nSafety note: "
+            "{safety}\nDocuments available: {documents}\nOther party: {opposing_party}\n\n"
+            "Please check that these facts are accurate."
+        ),
+        "brief_consent_prompt": (
+            "By confirming, you allow NyaySetu to share this brief with the registered "
+            "advocate assigned after payment. No document files are uploaded. Consent "
+            "version: {consent_version}\nPrivacy: {privacy_url}"
+        ),
+        "brief_confirm": "Confirm brief",
+        "brief_edit": "Edit brief",
+        "brief_cancel": "Cancel",
+        "brief_cancelled": "The draft brief was cancelled and will not be assigned.",
+        "brief_confirmed": "Brief confirmed. Now select an appointment date.",
+    }
+)
+TRANSLATIONS["hi"].update(
+    {
+        "brief_summary_prompt": (
+            "Time select karne se pehle, 20-700 characters mein batayein kya hua "
+            "aur legal issue kya hai. Aadhaar, PAN, password, bank details ya document "
+            "image na bhejein."
+        ),
+        "brief_summary_retry": "Kripya 20-700 characters mein issue summary likhein.",
+        "brief_stage_header": "Matter ka current stage",
+        "brief_stage_body": "Apne matter se sabse milta stage select karein.",
+        "brief_stage_section": "Stage",
+        "brief_stage_notice": "Notice mila hai",
+        "brief_stage_notice_desc": "Notice, demand ya legal letter mila hai",
+        "brief_stage_pre_litigation": "Filing se pehle",
+        "brief_stage_pre_litigation_desc": "Court ya authority mein case abhi file nahi hua",
+        "brief_stage_court": "Case chal raha hai",
+        "brief_stage_court_desc": "Court, police ya authority matter active hai",
+        "brief_stage_appeal": "Appeal ya order",
+        "brief_stage_appeal_desc": "Order aa chuka hai ya appeal karni ho sakti hai",
+        "brief_stage_other": "Other ya unsure",
+        "brief_stage_other_desc": "Stage alag hai ya aap sure nahi hain",
+        "brief_stage_retry": "Kripya list se legal stage select karein.",
+        "brief_dates_prompt": (
+            "Important dates/deadlines likhein, jaise notice date ya next hearing. "
+            "Koi known date nahi ho to None likhein."
+        ),
+        "brief_dates_retry": "Important dates likhein ya None type karein.",
+        "brief_outcome_prompt": (
+            "Advocate se kya help ya outcome chahiye? 10-500 characters mein likhein."
+        ),
+        "brief_outcome_retry": "10-500 characters mein required help batayein.",
+        "brief_urgency_prompt": "Yeh matter kitna urgent hai?",
+        "brief_urgency_standard": "Standard",
+        "brief_urgency_time_sensitive": "Time-sensitive",
+        "brief_urgency_safety": "Safety concern",
+        "brief_safety_prompt": (
+            "Kisi ko immediate danger ho to abhi emergency services ya police se "
+            "contact karein. NyaySetu emergency service nahi hai. Bina unnecessary "
+            "sensitive details ke safety concern briefly likhein."
+        ),
+        "brief_safety_retry": "Safety concern 10-500 characters mein likhein.",
+        "brief_documents_prompt": (
+            "Kaunse documents available hain? Comma se numbers reply karein:\n"
+            "1 Notice/legal letter\n2 Agreement/contract\n3 Receipt/payment proof\n"
+            "4 Court/police papers\n5 ID/address proof\n6 Other relevant document\n"
+            "Koi nahi ho to 0. Yahan files upload na karein."
+        ),
+        "brief_documents_retry": "Unique numbers 1-6 commas ke saath, ya 0 reply karein.",
+        "brief_opposing_prompt": (
+            "Conflict check ke liye doosri party ka naam likhein, ya abhi nahi "
+            "batana ho to Skip type karein."
+        ),
+        "brief_opposing_retry": "2-240 characters likhein ya Skip type karein.",
+        "brief_review": (
+            "CASE BRIEF REVIEW\n\nIssue: {summary}\nStage: {stage}\nImportant dates: "
+            "{dates}\nHelp requested: {outcome}\nUrgency: {urgency}\nSafety note: "
+            "{safety}\nDocuments available: {documents}\nOther party: {opposing_party}\n\n"
+            "Kripya check karein ki yeh facts sahi hain."
+        ),
+        "brief_consent_prompt": (
+            "Confirm karke aap NyaySetu ko yeh brief payment ke baad assigned registered "
+            "advocate ke saath share karne ki permission dete hain. Document files upload "
+            "nahi hoti. Consent version: {consent_version}\nPrivacy: {privacy_url}"
+        ),
+        "brief_confirm": "Confirm brief",
+        "brief_edit": "Edit brief",
+        "brief_cancel": "Cancel",
+        "brief_cancelled": "Draft brief cancel hua aur assign nahi kiya jayega.",
+        "brief_confirmed": "Brief confirm hua. Ab appointment date select karein.",
+    }
+)
+TRANSLATIONS["mr"].update(
+    {
+        "brief_summary_prompt": (
+            "Vel nivadnyapurvi, 20-700 aksharant kay ghadale ani legal issue kay "
+            "aahe te liha. Aadhaar, PAN, password, bank details kinva document image "
+            "pathvu naka."
+        ),
+        "brief_summary_retry": "Kripaya 20-700 aksharant issue summary liha.",
+        "brief_stage_header": "Matter chi sadhyachi stage",
+        "brief_stage_body": "Tumchya matter la julnari stage nivda.",
+        "brief_stage_section": "Stage",
+        "brief_stage_notice": "Notice milali",
+        "brief_stage_notice_desc": "Notice, demand kinva legal letter milale aahe",
+        "brief_stage_pre_litigation": "Filing purvi",
+        "brief_stage_pre_litigation_desc": "Court kinva authority madhe case file zali nahi",
+        "brief_stage_court": "Case suru aahe",
+        "brief_stage_court_desc": "Court, police kinva authority matter active aahe",
+        "brief_stage_appeal": "Appeal kinva order",
+        "brief_stage_appeal_desc": "Order aahe kinva appeal karavi lagu shakte",
+        "brief_stage_other": "Other kinva unsure",
+        "brief_stage_other_desc": "Stage vegli aahe kinva tumhala mahit nahi",
+        "brief_stage_retry": "Kripaya list madhun legal stage nivda.",
+        "brief_dates_prompt": (
+            "Mahatvachya dates/deadlines liha, udaharan notice date kinva next hearing. "
+            "Known date nasel tar None liha."
+        ),
+        "brief_dates_retry": "Mahatvachya dates liha kinva None type kara.",
+        "brief_outcome_prompt": (
+            "Advocate kadun konti madat kinva outcome hava? 10-500 aksharant liha."
+        ),
+        "brief_outcome_retry": "Havi asleli madat 10-500 aksharant liha.",
+        "brief_urgency_prompt": "Ha matter kiti urgent aahe?",
+        "brief_urgency_standard": "Standard",
+        "brief_urgency_time_sensitive": "Time-sensitive",
+        "brief_urgency_safety": "Safety concern",
+        "brief_safety_prompt": (
+            "Konala tatkal dhoka asel tar ata emergency services kinva police shi "
+            "sampark kara. NyaySetu emergency service nahi. Anavashyak sensitive "
+            "details na deta safety concern thodkyat liha."
+        ),
+        "brief_safety_retry": "Safety concern 10-500 aksharant liha.",
+        "brief_documents_prompt": (
+            "Konte documents available aahet? Comma vaprun numbers reply kara:\n"
+            "1 Notice/legal letter\n2 Agreement/contract\n3 Receipt/payment proof\n"
+            "4 Court/police papers\n5 ID/address proof\n6 Other relevant document\n"
+            "Kahi nasel tar 0. Yethe files upload karu naka."
+        ),
+        "brief_documents_retry": "Unique numbers 1-6 commas sah, kinva 0 reply kara.",
+        "brief_opposing_prompt": (
+            "Conflict check sathi dusrya party che nav liha, kinva ata disclose "
+            "karayche nasel tar Skip type kara."
+        ),
+        "brief_opposing_retry": "2-240 akshare liha kinva Skip type kara.",
+        "brief_review": (
+            "CASE BRIEF REVIEW\n\nIssue: {summary}\nStage: {stage}\nImportant dates: "
+            "{dates}\nHelp requested: {outcome}\nUrgency: {urgency}\nSafety note: "
+            "{safety}\nDocuments available: {documents}\nOther party: {opposing_party}\n\n"
+            "Kripaya he facts barobar aahet ka te tapaasa."
+        ),
+        "brief_consent_prompt": (
+            "Confirm karun tumhi NyaySetu la payment nantar assigned registered advocate "
+            "sobat ha brief share karaychi permission deta. Document files upload hot "
+            "nahit. Consent version: {consent_version}\nPrivacy: {privacy_url}"
+        ),
+        "brief_confirm": "Confirm brief",
+        "brief_edit": "Edit brief",
+        "brief_cancel": "Cancel",
+        "brief_cancelled": "Draft brief cancel zala ani assign honar nahi.",
+        "brief_confirmed": "Brief confirm zala. Ata appointment date nivda.",
+    }
+)

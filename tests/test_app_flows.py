@@ -6,7 +6,15 @@ import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
-from models import Booking, InboundMessageEvent, OutboxJob, SupportRequest, User
+from models import (
+    Booking,
+    CaseBrief,
+    InboundMessageEvent,
+    OutboxJob,
+    SupportRequest,
+    User,
+    UserConsent,
+)
 from services import outbox_service
 
 
@@ -395,6 +403,70 @@ def test_all_booking_subcategory_lists_stay_within_whatsapp_limit(
             assert any("Not Sure" in row["title"] for row in rows)
     finally:
         db.close()
+
+
+def test_case_brief_is_confirmed_with_versioned_consent_before_dates(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+):
+    _secure_whatsapp_route(monkeypatch, app_module)
+    user_id = _create_user(
+        isolated_app_db,
+        flow_state=app_module.ASK_SUBCATEGORY,
+        category="Family",
+        subcategory=None,
+    )
+    messages = [
+        {"interactive_id": "subcat::Family::Divorce"},
+        {
+            "text": (
+                "My spouse and I have separated and I need to understand "
+                "the appropriate legal process."
+            )
+        },
+        {"interactive_id": "brief_stage::pre_litigation"},
+        {"text": "No known deadline"},
+        {"text": "I want to understand options and the next lawful steps."},
+        {"interactive_id": "brief_urgency::standard"},
+        {"text": "2,3"},
+        {"text": "Skip"},
+        {"interactive_id": app_module.BTN_BRIEF_CONFIRM},
+    ]
+
+    for index, message in enumerate(messages, start=1):
+        response = _signed_whatsapp_post(
+            client,
+            _whatsapp_payload(
+                message_id=f"wamid.case-brief-{index}",
+                **message,
+            ),
+        )
+        assert response.status_code == 200
+
+    db = isolated_app_db()
+    try:
+        user = db.get(User, user_id)
+        brief = db.query(CaseBrief).one()
+        consent = db.query(UserConsent).filter_by(
+            purpose="ADVOCATE_CASE_BRIEF_SHARING"
+        ).one()
+        assert user.flow_state == app_module.ASK_DATE
+        assert brief.status == "CONFIRMED"
+        assert brief.consent_version == app_module.CASE_BRIEF_CONSENT_VERSION
+        assert brief.consented_at is not None
+        assert json.loads(brief.documents_json) == [
+            "Agreement or contract",
+            "Receipt or payment proof",
+        ]
+        assert brief.opposing_party == "None disclosed"
+        assert consent.policy_version == app_module.CASE_BRIEF_CONSENT_VERSION
+        assert consent.granted is True
+    finally:
+        db.close()
+    assert transport_spies["list"].call_count >= 2
 
 
 def test_menu_is_persistent_and_does_not_destroy_booking_progress(

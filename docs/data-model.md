@@ -7,8 +7,9 @@ SQLAlchemy uses `DATABASE_URL`. PostgreSQL URLs are normalized to
 application. SQLite enables foreign keys, WAL, a busy timeout, and normal
 synchronous mode for local compatibility.
 
-Managed PostgreSQL is the required production target. The repository includes
-Alembic revision `20260729_01`, and production disables automatic
+Managed PostgreSQL is the required production target. Revision `20260729_01`
+is the original baseline and `20260818_01` is the current schema head.
+Production disables automatic
 `Base.metadata.create_all()` by default. Render applies
 `python -m alembic -c alembic.ini upgrade head` before a web release;
 `/health/ready` rejects a production database whose revision is not current.
@@ -32,11 +33,14 @@ users.whatsapp_id 1 ---- * bookings.whatsapp_id
 users.id          1 ---- * feedback.user_id
 users.id          1 ---- * support_requests.user_id
 users.id          1 ---- * user_consents.user_id
+users.id          1 ---- * case_briefs.user_id
 users.id          1 ---- * analytics_events.user_id
 
 bookings.id        1 ---- 1 booking_fulfillments.booking_id
+bookings.id        1 ---- 0..1 case_briefs.booking_id
 bookings.id        1 ---- * payment_reconciliations.booking_id
 advocates.id       1 ---- * booking_fulfillments.advocate_id
+booking_fulfillments.id 1 ---- * manual_contact_events.fulfillment_id
 bookings.id        ---- referenced inside outbox_jobs.payload_json
 
 inbound_message_events durable lease-aware Meta message inbox
@@ -108,10 +112,13 @@ explicit purpose, access, and retention controls.
 
 ### `advocates`
 
-Contains name, email, category, district, and active flag. An authorised
-operator may attach an active advocate to a paid booking's fulfilment record.
-The matching helper is not automatically invoked by the payment flow; vetting,
-conflict checks, staffing, and user notification remain operational duties.
+Contains name, email, phone, bar-registration reference, category, district,
+languages, internal notes, active flag, and timestamps. An authorised operator
+may attach only an active, verified advocate to a paid booking's fulfilment
+record. The matching helper is not automatically invoked by the payment flow;
+vetting, conflict checks, staffing, and user notification remain operational
+duties. Phone numbers are masked in ordinary responses and require an audited,
+purpose-bound reveal before use.
 
 ### `processed_messages`
 
@@ -156,6 +163,30 @@ Stores purpose, policy version, grant/revoke state, source, and timestamps under
 a unique user/purpose/version constraint. The current booking-payment and AI
 flows record versioned grants. Privacy export/deletion/legal-hold workflows are
 still separate future governance work.
+
+### `case_briefs`
+
+Stores the structured facts a user elects to share for an advocate
+consultation: summary, matter stage, important dates, desired outcome, urgency,
+safety flag, document-availability checklist, opposing party, and optional
+preparation notes. It stores no document files. Brief status is `DRAFT`,
+`CONFIRMED`, or `CANCELLED`, with a consent version/time and an optional unique
+booking link.
+
+Only a confirmed brief can be attached to a booking. An unattached draft,
+confirmed, or cancelled brief older than `CASE_BRIEF_UNATTACHED_TTL_DAYS` is
+eligible for bounded maintenance deletion. A brief attached to a booking is
+preserved with the fulfilment record until a separately approved
+booking/evidence retention policy is implemented.
+
+### `manual_contact_events`
+
+Append-only operational evidence for manual client and advocate notifications.
+Each event records fulfilment, optional advocate, party, channel, outcome,
+bounded notes, follow-up time, operator ID, and creation time. It proves that
+an operator recorded an attempt; it does not prove delivery, identity, legal
+advice, or successful consultation. Phone numbers and message bodies are not
+duplicated in this table.
 
 ### `analytics_events`
 
@@ -283,6 +314,7 @@ Neither is deleted by the conservative maintenance job.
 approved narrow maintenance policy in one bounded transaction:
 
 - expire stale `PENDING` bookings without deleting financial records;
+- delete expired unattached case briefs while preserving booking-linked briefs;
 - delete expired `DONE` webhook and inbound-inbox events;
 - delete analytics older than `ANALYTICS_EVENT_TTL_DAYS`; and
 - delete old `COMPLETED` outbox jobs.
@@ -305,6 +337,8 @@ The data set can include:
 
 - Phone/WhatsApp identifiers, names, and location.
 - Legal matter classification and support free text.
+- Consented structured case-brief facts and document-availability indicators;
+  uploaded identity or evidence files are not accepted.
 - Appointment and payment identifiers.
 - Feedback comments.
 - Provider short links and operational delivery metadata.

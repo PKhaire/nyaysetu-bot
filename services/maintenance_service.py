@@ -14,6 +14,7 @@ from sqlalchemy import func
 
 from config import (
     ANALYTICS_EVENT_TTL_DAYS,
+    CASE_BRIEF_UNATTACHED_TTL_DAYS,
     OUTBOX_COMPLETED_TTL_DAYS,
     PAYMENT_LINK_TTL_MINUTES,
     PAYMENT_RECONCILIATION_LOOKBACK_DAYS,
@@ -26,6 +27,7 @@ from models import (
     Booking,
     BookingFulfillment,
     BookingStatus,
+    CaseBrief,
     InboundMessageEvent,
     OutboxJob,
     PaymentReconciliation,
@@ -211,6 +213,9 @@ def run_maintenance(
     processed_cutoff = current - timedelta(days=PROCESSED_MESSAGE_TTL_DAYS)
     analytics_cutoff = current - timedelta(days=ANALYTICS_EVENT_TTL_DAYS)
     outbox_cutoff = current - timedelta(days=OUTBOX_COMPLETED_TTL_DAYS)
+    unattached_brief_cutoff = current - timedelta(
+        days=CASE_BRIEF_UNATTACHED_TTL_DAYS
+    )
     booking_cutoff = current - timedelta(minutes=PAYMENT_LINK_TTL_MINUTES)
 
     factory = session_factory or SessionLocal
@@ -252,6 +257,41 @@ def run_maintenance(
             affected=bookings_affected,
             action="expire",
             retention_source="PAYMENT_LINK_TTL_MINUTES",
+        )
+
+        unattached_brief_query = (
+            db.query(CaseBrief)
+            .filter(
+                CaseBrief.booking_id.is_(None),
+                CaseBrief.status.in_(("DRAFT", "CONFIRMED", "CANCELLED")),
+                CaseBrief.updated_at <= unattached_brief_cutoff,
+            )
+            .order_by(CaseBrief.updated_at.asc(), CaseBrief.id.asc())
+        )
+        unattached_brief_ids, unattached_brief_more = _bounded_ids(
+            unattached_brief_query,
+            CaseBrief.id,
+            batch_size,
+        )
+        unattached_briefs_affected = 0
+        if unattached_brief_ids and not dry_run:
+            unattached_briefs_affected = (
+                db.query(CaseBrief)
+                .filter(
+                    CaseBrief.id.in_(unattached_brief_ids),
+                    CaseBrief.booking_id.is_(None),
+                    CaseBrief.status.in_(("DRAFT", "CONFIRMED", "CANCELLED")),
+                    CaseBrief.updated_at <= unattached_brief_cutoff,
+                )
+                .delete(synchronize_session=False)
+            )
+        categories["unattached_case_briefs"] = _category_report(
+            eligible_ids=unattached_brief_ids,
+            more_remaining=unattached_brief_more,
+            dry_run=dry_run,
+            affected=unattached_briefs_affected,
+            action="delete",
+            retention_source="CASE_BRIEF_UNATTACHED_TTL_DAYS",
         )
 
         webhook_query = (
@@ -430,6 +470,7 @@ def run_maintenance(
                 "support_requests",
                 "feedback",
                 "conversations",
+                "case_briefs_attached_to_bookings",
                 "dead_or_failed_outbox_jobs",
                 "failed_or_unmatched_webhook_events",
                 "nonterminal_inbound_message_events",

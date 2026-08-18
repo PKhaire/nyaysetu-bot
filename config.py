@@ -185,6 +185,11 @@ BOOKING_TERMS_VERSION = env_str(
     "booking-terms-2026-07",
     allow_empty=False,
 )
+CASE_BRIEF_CONSENT_VERSION = env_str(
+    "CASE_BRIEF_CONSENT_VERSION",
+    "case-brief-sharing-2026-08",
+    allow_empty=False,
+)
 LEGAL_CONTENT_VERSION = env_str(
     "LEGAL_CONTENT_VERSION",
     "legal-content-2026-08-r5",
@@ -337,6 +342,15 @@ PROCESSED_MESSAGE_TTL_DAYS = env_int(
     "PROCESSED_MESSAGE_TTL_DAYS",
     30,
     minimum=1,
+)
+# A brief that never reaches a paid booking has no continuing operational
+# purpose. Keep the window short enough for a client to resume an interrupted
+# flow, then remove the sensitive narrative automatically.
+CASE_BRIEF_UNATTACHED_TTL_DAYS = env_int(
+    "CASE_BRIEF_UNATTACHED_TTL_DAYS",
+    7,
+    minimum=1,
+    maximum=30,
 )
 INBOUND_MESSAGE_LEASE_SECONDS = env_int(
     "INBOUND_MESSAGE_LEASE_SECONDS",

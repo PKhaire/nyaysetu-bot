@@ -13,6 +13,7 @@ Razorpay --------> Flask /payment/webhook ------+--> PostgreSQL (production)
                                                 |      users / bookings
 Operator --------> Flask /admin/* --------------+      idempotency / analytics
                                                 |      inbox / outbox / fulfilment
+                                                |      case briefs / contact audit
                                                 |
                                                 +--> WhatsApp Cloud API
                                                 +--> Razorpay payment links
@@ -55,7 +56,7 @@ infrastructure and concurrency/load/provider-limit tests pass.
 | `config.py` | Typed, validated environment configuration |
 | `db.py` | Engine/session setup, SQLite safety pragmas, PostgreSQL pooling, health checks |
 | `models.py` | Core and operational SQLAlchemy entities |
-| `admin.py` | Token-protected, audited metrics, support, fulfilment, reconciliation, outbox, availability, and audit operations |
+| `admin.py` | Session/token-protected metrics, support, fulfilment, structured brief review, advocate registry, audited contact reveal/manual handover, reconciliation, outbox, availability, and audit operations |
 | `migrations/` / `alembic.ini` | Versioned additive production schema and legacy backfill |
 | `services/booking_service.py` | IST-aware availability/blackouts/overrides, capacity locks, booking/payment-link creation, payment mutation |
 | `services/fulfillment_service.py` | Paid-consultation work item and SLA lifecycle |
@@ -74,9 +75,11 @@ infrastructure and concurrency/load/provider-limit tests pass.
 | `translations.py` / `utils/i18n.py` | English, Hinglish, and Marathi user text |
 
 The advocate helper is not automatically invoked, but authorised operators can
-assign an active advocate or a named fulfiller through the fulfilment API.
-Credential/conflict review and the actual consultation channel remain business
-operations.
+register a verified advocate, review the consented structured brief, assign the
+advocate, reveal contact data for a stated purpose, and record manual handover
+outcomes. Credential/conflict review and the actual consultation channel remain
+business operations. This first release does not require outbound Meta template
+approval because assignment and confirmation messages are sent manually.
 
 ## WhatsApp request lifecycle
 
@@ -264,12 +267,13 @@ Limitations:
 
 Core tables are `users`, `bookings`, `category_analytics`, `conversations`, and
 `advocates`. Operational tables include `inbound_message_events`,
-`processed_messages` (legacy), `user_consents`, `feedback`,
+`processed_messages` (legacy), `user_consents`, `case_briefs`, `feedback`,
 `support_requests`, `analytics_events`, `webhook_events`, `outbox_jobs`,
-`booking_fulfillments`, `payment_reconciliations`, availability
+`booking_fulfillments`, `manual_contact_events`, `payment_reconciliations`, availability
 blackouts/overrides, and `admin_audit_events`.
 
-Alembic revision `20260729_01` is the production baseline. On an empty database
+Alembic revision `20260729_01` is the production baseline and `20260818_01` is
+the current production head. On an empty database
 it creates the application and reliability/operations schema. It also retains
 compatibility steps for selected legacy columns/constraints and backfills, but
 those paths are not exercised by the current fresh release. Render runs

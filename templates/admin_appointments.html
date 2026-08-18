@@ -41,6 +41,22 @@
       <article class="summary-card"><span>Needs attention</span><strong id="count-attention">—</strong></article>
     </section>
 
+    <details class="work-panel advocate-panel">
+      <summary>Register an advocate for assignment</summary>
+      <form id="advocate-form" class="advocate-form">
+        <label>Full name<input id="advocate-name" maxlength="160" required></label>
+        <label>Bar registration number<input id="advocate-registration" maxlength="120" required></label>
+        <label>Email<input id="advocate-email" type="email" maxlength="255" required></label>
+        <label>Phone<input id="advocate-phone" inputmode="tel" maxlength="16" required></label>
+        <label>Practice category<input id="advocate-category" maxlength="120" required></label>
+        <label>District<input id="advocate-district" maxlength="120" required></label>
+        <label>Languages<input id="advocate-languages" maxlength="255" placeholder="English, Hindi, Marathi"></label>
+        <label class="advocate-notes">Verification notes<textarea id="advocate-notes" rows="2" maxlength="2000" placeholder="Record how registration was checked."></textarea></label>
+        <div id="advocate-error" class="alert alert-error hidden" role="alert"></div>
+        <button id="advocate-submit" class="button button-primary" type="submit">Register advocate</button>
+      </form>
+    </details>
+
     <section class="work-panel" aria-labelledby="queue-heading">
       <div class="panel-heading">
         <div>
@@ -105,10 +121,36 @@
       </div>
       <input id="dialog-booking-id" type="hidden">
       <div id="dialog-context" class="dialog-context"></div>
+      <section class="detail-panel" aria-labelledby="brief-heading">
+        <h3 id="brief-heading">Client-confirmed case brief</h3>
+        <div id="brief-empty" class="muted small">No structured brief is attached to this legacy booking.</div>
+        <dl id="brief-details" class="brief-grid hidden">
+          <div><dt>Issue summary</dt><dd id="brief-summary"></dd></div>
+          <div><dt>Legal stage</dt><dd id="brief-stage"></dd></div>
+          <div><dt>Important dates</dt><dd id="brief-dates"></dd></div>
+          <div><dt>Desired help</dt><dd id="brief-outcome"></dd></div>
+          <div><dt>Urgency / safety</dt><dd id="brief-urgency"></dd></div>
+          <div><dt>Opposing party</dt><dd id="brief-opposing-party"></dd></div>
+          <div><dt>Documents available</dt><dd id="brief-documents"></dd></div>
+          <div><dt>Consent</dt><dd id="brief-consent"></dd></div>
+        </dl>
+      </section>
+      <section class="detail-panel">
+        <h3>Protected client contact</h3>
+        <p class="muted small">The full number is hidden until you provide an operational reason. Every reveal is audited.</p>
+        <div class="inline-action">
+          <input id="contact-reveal-reason" maxlength="300" placeholder="Reason, for example: confirm paid appointment">
+          <button id="reveal-client-contact" class="button button-secondary" type="button">Reveal for 5 minutes</button>
+        </div>
+        <div id="revealed-client-contact" class="revealed-contact hidden"></div>
+      </section>
       <label for="dialog-status">New status</label>
       <select id="dialog-status" required></select>
-      <label for="dialog-assigned-to">Assigned advocate or operator</label>
-      <input id="dialog-assigned-to" type="text" maxlength="160" placeholder="Advocate name">
+      <label for="dialog-advocate">Registered advocate</label>
+      <select id="dialog-advocate">
+        <option value="">Select a verified advocate</option>
+      </select>
+      <button id="reveal-advocate-contact" class="button button-secondary" type="button">Reveal assigned advocate contact</button>
       <div id="reschedule-fields" class="field-grid hidden">
         <label for="dialog-date">New date
           <input id="dialog-date" type="date">
@@ -127,6 +169,25 @@
       </div>
       <label for="dialog-notes">Operator notes</label>
       <textarea id="dialog-notes" rows="4" maxlength="4000" placeholder="Record the action taken. Notes are mandatory for completion, no-show, reschedule and refund outcomes."></textarea>
+      <section class="detail-panel">
+        <h3>Record manual contact or handover</h3>
+        <div class="field-grid">
+          <label>Audience
+            <select id="contact-audience"><option value="CLIENT">Client</option><option value="ADVOCATE">Advocate</option></select>
+          </label>
+          <label>Channel
+            <select id="contact-channel"><option value="WHATSAPP">WhatsApp</option><option value="PHONE">Phone</option><option value="EMAIL">Email</option><option value="OTHER">Other</option></select>
+          </label>
+          <label>Outcome
+            <select id="contact-outcome"><option value="CONFIRMED">Confirmed</option><option value="AWAITING_REPLY">Awaiting reply</option><option value="UNREACHABLE">Unreachable</option><option value="INFORMATION_SHARED">Information shared</option><option value="HANDOVER_COMPLETE">Handover complete</option></select>
+          </label>
+          <label>Follow-up due (optional)<input id="contact-follow-up" type="datetime-local"></label>
+        </div>
+        <label for="contact-notes">Contact notes</label>
+        <textarea id="contact-notes" rows="2" maxlength="2000" placeholder="Do not copy sensitive legal facts here; record only the operational result."></textarea>
+        <button id="record-contact" class="button button-secondary" type="button">Record contact event</button>
+        <ol id="contact-history" class="contact-history"></ol>
+      </section>
       <div id="dialog-error" class="alert alert-error hidden" role="alert"></div>
       <div class="dialog-actions">
         <button id="dialog-cancel" class="button button-quiet" type="button">Cancel</button>

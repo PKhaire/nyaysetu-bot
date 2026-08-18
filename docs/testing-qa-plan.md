@@ -8,16 +8,16 @@ delivery, transport, and AI-safety modules:
 | File | Implemented coverage |
 |---|---|
 | `tests/test_booking_service.py` | IST slot mapping, booking horizon, daily/slot capacity, provider rollback, stored amount/link expiry, payment idempotency, pending expiry |
-| `tests/test_app_flows.py` | Meta signature rejection, persistent home, booking-scope review, durable inbound leases/batch draining, bounded/pruned early-rate-limit state, capped outbox fast-path saturation, safe post-mutation reply deferral, replay suppression, ambiguous-delivery no-send, and terminal payload scrubbing |
+| `tests/test_app_flows.py` | Meta signature rejection, persistent home, structured case-brief capture/edit/consent/booking link, durable inbound leases/batch draining, bounded/pruned early-rate-limit state, capped outbox fast-path saturation, safe post-mutation reply deferral, replay suppression, ambiguous-delivery no-send, and terminal payload scrubbing |
 | `tests/test_app_webhooks.py` | Razorpay signature-before-parse, live dual-resource entitlement validation, terminal manual-disposition authority, stored-price/reconciliation evidence, replay, retryable failures, health/schema/strong-configuration readiness |
 | `tests/test_delivery_services.py` | Structured WhatsApp failures, step-level outbox retry, receipt cleanup/private temp files, PII-safe Amazon SES failure logging |
 | `tests/test_ai_safety.py` | PII scrubbing, pseudonymous identifiers, urgent/harmful guardrails, provider short-circuiting, OpenAI privacy/request contract |
 | `tests/test_ai_provider_compatibility.py` | Thread-safe bounded/TTL response cache, provider/model contracts, one-attempt fallback, and compatibility errors |
 | `tests/test_whatsapp_service.py` | Payload limits, structured configuration failures, safe logs/provider errors, bounded retry behavior, stored-price payment confirmation |
-| `tests/test_admin_operations.py` | Operator identity/audit, support, fulfilment, reviewed refund evidence/access effects, reconciliation, outbox, and availability mutations |
+| `tests/test_admin_operations.py` | Operator identity/audit, masked queue data, purpose-bound contact reveal, structured brief review, verified advocate registration/assignment, manual handover evidence, fulfilment, reviewed refund evidence/access effects, reconciliation, outbox, and availability mutations |
 | `tests/test_payment_reconciliation.py` | Dual-resource exact/non-refunded capture recovery, ambiguity/concurrency preservation, idempotency, and provider failures |
 | `tests/test_consultation_reminders.py` | Empty-config no-op, language/template gating, due windows, deduplication, suppression, delivery ambiguity, and CLI safety |
-| `tests/test_maintenance.py` | Protected evidence, bounded cleanup/dry-run, risk report, and exit semantics |
+| `tests/test_maintenance.py` | Protected booking evidence, unattached case-brief expiry, bounded cleanup/dry-run, risk report, and exit semantics |
 | `tests/test_migrations.py` | Fresh baseline plus regression coverage for the inactive legacy schema/backfill contingency |
 | `tests/test_sqlite_postgres_cutover.py` | Regression coverage for the inactive SQLite-import contingency: full-table plan, preflight non-mutation, bounded copy, rollback, schema/source/empty-target checks, credential isolation, and CLI fail-closed behavior |
 | `tests/test_deployment_config.py` | One-worker/query-safe Gunicorn and Render process contract |
@@ -50,6 +50,8 @@ offline lock-inventory consistency check, not a vulnerability result;
 High-risk deterministic targets:
 
 - Name, district, category/subcategory, date, and slot validation.
+- Structured brief field bounds, versioned consent, edit/cancel behavior, no-file
+  policy, booking attachment, and unattached retention.
 - Timezone boundary at midnight IST and every configured cutoff.
 - Per-slot/day capacity with paid, pending, expired, cancelled, and completed
   bookings.
@@ -142,6 +144,11 @@ For admin and health:
   processed payment evidence and clears paid user state only without another
   `PAID` booking.
 - Blackouts/capacity overrides affect live availability and deactivate safely.
+- Queue/list responses keep client and advocate contacts masked; reveal requires
+  a stable operator ID plus purpose and creates an audit event.
+- Advocate registration/assignment rejects inactive or unverified records, and
+  manual client/advocate contact outcomes are append-only and scoped to the
+  correct fulfilment.
 
 ### PostgreSQL integration tests
 

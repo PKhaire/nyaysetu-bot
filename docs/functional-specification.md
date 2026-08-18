@@ -24,6 +24,12 @@ of outcome.
 - Helpful/not-helpful guide feedback with guide, support, and consultation
   handoffs.
 - Name, district/state, category, and subcategory intake.
+- Structured case-brief intake before slot selection: issue summary, current
+  legal stage, important dates, desired outcome, urgency/safety cue,
+  document-availability checklist, and optional opposing-party name.
+- A separate, short WhatsApp confirmation records versioned consent before
+  the brief can be attached to a paid booking. The product accepts no document
+  uploads in this release.
 - District ambiguity resolution through a WhatsApp list.
 - IST-aware, capacity-filtered consultation dates and five daily time slots.
 - Transparent service/fee introduction and full review before payment-link
@@ -101,6 +107,24 @@ For a new profile the bot collects:
 For a returning profile, the bot displays saved details and allows the user to
 confirm or restart detail collection.
 
+### Structured case brief and consent
+
+After category/subcategory selection, the bot collects a privacy-minimised
+brief. It tells the user not to send Aadhaar/PAN numbers, passwords, banking
+details, or document images. The document step records only whether common
+document types are available; it does not accept or store files.
+
+The complete factual review is sent as an ordinary WhatsApp message. A second,
+bounded interactive message states the assigned-registered-advocate sharing
+purpose, consent version, and privacy URL. **Confirm brief** records both the
+brief consent fields and the `ADVOCATE_CASE_BRIEF_SHARING` user-consent row;
+**Edit brief** starts a fresh draft and **Cancel** prevents assignment. Only a
+confirmed brief can be linked to the booking created for the payment link.
+
+Immediate-safety selection displays an emergency limitation and captures a
+short operational note; NyaySetu does not present itself as an emergency
+service.
+
 ### Availability
 
 The date list covers up to seven selectable days inside the configured booking
@@ -164,12 +188,20 @@ evidence.
 
 An authenticated browser console at `/admin/appointments` presents the
 SLA-ordered paid-consultation fulfilment queue. Operators can search and filter
-records, view masked client contact details, open a prepared WhatsApp handoff,
-assign an advocate, confirm arrangements, record a capacity-checked reschedule,
-or record an allowed exception/final outcome. Completion is always an explicit
-audited operator action with notes; elapsed time alone never completes an
-appointment. The existing token-authenticated API remains available for
-approved automation.
+records and review the client's consented structured case brief without opening
+separate files. Ordinary queue responses expose only masked contact details.
+A stable operator ID and a stated operational purpose are required to reveal a
+client or advocate number; every reveal is written to the admin audit trail.
+
+Operators register and select only active, verified advocates, assign the paid
+matter, and manually contact the advocate and client. Each contact attempt is
+recorded with party, channel, outcome, notes, and an optional follow-up time.
+This release therefore does not depend on approval of outbound Meta WhatsApp
+templates. Operators can then confirm arrangements, record a capacity-checked
+reschedule, or record an allowed exception/final outcome. Completion is always
+an explicit audited operator action with notes; elapsed time alone never
+completes an appointment. The existing token-authenticated API remains
+available for approved automation.
 
 ## Self-service and engagement
 

@@ -15,6 +15,10 @@ manipulative retention patterns or imply a lawyer-client relationship.
 - Consent-gated AI information with deterministic safety checks and local
   fallback content.
 - Guided legal category, district, date, and capacity-aware slot selection.
+- A privacy-minimised structured case brief, document-availability checklist,
+  urgency/safety cue, and versioned consent before appointment selection.
+- No document upload or storage: users retain their original files and only
+  state which document types are available.
 - A review step before creating a Razorpay payment link.
 - Signed and idempotent Meta and Razorpay webhook processing. Payment
   entitlement additionally requires exact, current Razorpay Payment Link and
@@ -172,6 +176,10 @@ remain necessary.
 | `GET /admin/metrics` | Aggregate operational metrics |
 | `GET/PATCH /admin/support[...]` | Support queue and audited ticket updates |
 | `GET/PATCH /admin/fulfillments[...]` | Paid-consultation fulfilment queue and lifecycle |
+| `POST /admin/fulfillments/<id>/contact-reveal` | Reason-gated, audited client-contact reveal |
+| `POST /admin/fulfillments/<id>/contact-events` | Record manual client/advocate notification outcomes |
+| `GET/POST /admin/advocates` | List or register active advocate records |
+| `POST /admin/advocates/<id>/contact-reveal` | Reason-gated, audited advocate-contact reveal |
 | `GET/PATCH /admin/payment-reconciliations[...]` | Payment-review queue and dispositions |
 | `GET/POST/DELETE /admin/availability[...]` | Blackouts and capacity overrides |
 | `GET/POST /admin/outbox[...]` | Outbox inspection and controlled retry |
@@ -262,9 +270,10 @@ untested working tree.
 
 ## Fresh database release gate
 
-The repository includes Alembic revision `20260729_01`. Render runs
+The repository includes production baseline `20260729_01` and current head
+`20260818_01`. Render runs
 `python -m alembic -c alembic.ini upgrade head` before the web release, and
-staging and production readiness require that exact revision. Automatic
+staging and production readiness require the current head. Automatic
 `create_all()` is disabled by default in both environments and remains only a
 local-development/test compatibility path.
 
@@ -277,7 +286,7 @@ This release intentionally imports no old-bot data:
 3. Complete signed Meta, Razorpay test-mode, Amazon SES, failure/retry,
    maintenance and operator-queue acceptance in staging.
 4. Create or re-create an empty production database, apply the same Alembic
-   revision, and verify that no synthetic staging rows exist.
+   head revision, and verify that no synthetic staging rows exist.
 5. Point the web service and all four cron jobs to that one production
    connection and require `/health/ready` to report PostgreSQL, the expected
    revision, complete configuration and the approved legal-content version.

@@ -16,6 +16,7 @@ from models import (
     Booking,
     BookingFulfillment,
     BookingStatus,
+    CaseBrief,
     Conversation,
     Feedback,
     InboundMessageEvent,
@@ -457,6 +458,64 @@ def test_execution_prunes_only_safe_terminal_records(maintenance_db):
             db.get(PaymentReconciliation, ids["resolved_reconciliation"]).status
             == "RESOLVED"
         )
+    finally:
+        db.close()
+
+
+def test_unattached_case_briefs_expire_but_paid_booking_brief_is_preserved(
+    maintenance_db,
+):
+    now = datetime(2026, 8, 18, 12, 0, 0)
+    expired_at = now - timedelta(
+        days=maintenance_service.CASE_BRIEF_UNATTACHED_TTL_DAYS + 1
+    )
+    db = maintenance_db()
+    try:
+        user = User(
+            whatsapp_id="919822222222",
+            case_id="NS-BRIEF-RETENTION",
+            name="Private Client",
+        )
+        paid = _booking(
+            suffix="44",
+            created_at=expired_at,
+            status=BookingStatus.PAID,
+        )
+        db.add_all([user, paid])
+        db.flush()
+        abandoned = CaseBrief(
+            user_id=user.id,
+            status="CONFIRMED",
+            issue_summary="Sensitive abandoned narrative",
+            created_at=expired_at,
+            updated_at=expired_at,
+        )
+        attached = CaseBrief(
+            user_id=user.id,
+            booking_id=paid.id,
+            status="CONFIRMED",
+            issue_summary="Paid consultation preparation",
+            created_at=expired_at,
+            updated_at=expired_at,
+        )
+        db.add_all([abandoned, attached])
+        db.commit()
+        abandoned_id = abandoned.id
+        attached_id = attached.id
+    finally:
+        db.close()
+
+    report = maintenance_service.run_maintenance(
+        batch_size=25,
+        now=now,
+        session_factory=maintenance_db,
+    )
+
+    assert report["categories"]["unattached_case_briefs"]["affected"] == 1
+    db = maintenance_db()
+    try:
+        assert db.get(CaseBrief, abandoned_id) is None
+        assert db.get(CaseBrief, attached_id) is not None
     finally:
         db.close()
 

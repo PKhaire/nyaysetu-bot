@@ -8,7 +8,7 @@ import re
 import secrets
 import time
 from collections import defaultdict, deque
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from threading import Lock
 
 from flask import (
@@ -22,6 +22,7 @@ from flask import (
     url_for,
 )
 from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 
 from config import ADMIN_PASSWORD, ADMIN_TOKEN
 from db import SessionLocal
@@ -34,8 +35,10 @@ from models import (
     BookingCapacityOverride,
     BookingFulfillment,
     BookingStatus,
+    CaseBrief,
     Feedback,
     InboundMessageEvent,
+    ManualContactEvent,
     OutboxJob,
     PaymentReconciliation,
     SupportRequest,
@@ -158,6 +161,27 @@ def _clear_failed_logins(client_key: str) -> None:
 def _json_body() -> dict:
     body = request.get_json(silent=True)
     return body if isinstance(body, dict) else {}
+
+
+def _masked_contact(value: str | None) -> str:
+    digits = re.sub(r"\D", "", str(value or ""))
+    if not digits:
+        return "Not available"
+    return f"••••••{digits[-4:]}"
+
+
+def _parse_optional_timestamp(value) -> datetime | None:
+    if value in (None, ""):
+        return None
+    try:
+        parsed = datetime.fromisoformat(
+            str(value).replace("Z", "+00:00")
+        )
+    except ValueError as exc:
+        raise ValueError("invalid_follow_up_due_at") from exc
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
 
 
 def _audit(
@@ -470,7 +494,9 @@ def support_queue():
                         "priority": item.priority,
                         "assigned_to": item.assigned_to,
                         "resolution_note": item.resolution_note,
-                        "whatsapp_id": user.whatsapp_id if user else None,
+                        "contact_masked": (
+                            _masked_contact(user.whatsapp_id) if user else None
+                        ),
                         "sla_due_at": (
                             item.sla_due_at.isoformat() + "Z"
                             if item.sla_due_at
@@ -566,11 +592,63 @@ def update_support_ticket(ticket_id: int):
         db.close()
 
 
-def _serialize_fulfillment(fulfillment, booking, user) -> dict:
+def _serialize_case_brief(brief: CaseBrief | None) -> dict | None:
+    if not brief:
+        return None
+    try:
+        documents = json.loads(brief.documents_json or "[]")
+    except (TypeError, ValueError):
+        documents = []
+    if not isinstance(documents, list):
+        documents = []
+    return {
+        "status": brief.status,
+        "issue_summary": brief.issue_summary,
+        "legal_stage": brief.legal_stage,
+        "important_dates": brief.important_dates,
+        "desired_outcome": brief.desired_outcome,
+        "urgency": brief.urgency,
+        "safety_concerns": brief.safety_concerns,
+        "opposing_party": brief.opposing_party,
+        "preferred_language": brief.preferred_language,
+        "documents_available": documents,
+        "consent_version": brief.consent_version,
+        "consented_at": (
+            brief.consented_at.isoformat() + "Z" if brief.consented_at else None
+        ),
+    }
+
+
+def _serialize_contact_event(item: ManualContactEvent) -> dict:
+    return {
+        "id": item.id,
+        "audience": item.audience,
+        "channel": item.channel,
+        "outcome": item.outcome,
+        "operator_id": item.operator_id,
+        "notes": item.notes,
+        "contacted_at": item.contacted_at.isoformat() + "Z",
+        "follow_up_due_at": (
+            item.follow_up_due_at.isoformat() + "Z"
+            if item.follow_up_due_at
+            else None
+        ),
+    }
+
+
+def _serialize_fulfillment(
+    fulfillment,
+    booking,
+    user,
+    brief=None,
+    advocate=None,
+    contact_events=None,
+) -> dict:
     return {
         "booking_id": booking.id,
         "case_id": user.case_id if user else None,
-        "whatsapp_id": booking.whatsapp_id,
+        "contact_masked": _masked_contact(booking.whatsapp_id),
+        "contact_available": bool(booking.whatsapp_id),
         "name": booking.name,
         "category": booking.category,
         "subcategory": booking.subcategory,
@@ -588,6 +666,22 @@ def _serialize_fulfillment(fulfillment, booking, user) -> dict:
         ),
         "advocate_id": fulfillment.advocate_id if fulfillment else None,
         "assigned_to": fulfillment.assigned_to if fulfillment else None,
+        "advocate": (
+            {
+                "id": advocate.id,
+                "name": advocate.name,
+                "bar_registration_number": advocate.bar_registration_number,
+                "district": advocate.district,
+                "languages": advocate.languages,
+                "contact_masked": _masked_contact(advocate.phone),
+            }
+            if advocate
+            else None
+        ),
+        "case_brief": _serialize_case_brief(brief),
+        "contact_events": [
+            _serialize_contact_event(item) for item in (contact_events or [])
+        ],
         "operator_notes": fulfillment.operator_notes if fulfillment else None,
         "sla_due_at": (
             fulfillment.sla_due_at.isoformat() + "Z"
@@ -609,9 +703,11 @@ def fulfillment_queue():
     db = SessionLocal()
     try:
         query = (
-            db.query(BookingFulfillment, Booking, User)
+            db.query(BookingFulfillment, Booking, User, CaseBrief, Advocate)
             .join(Booking, Booking.id == BookingFulfillment.booking_id)
             .outerjoin(User, User.whatsapp_id == Booking.whatsapp_id)
+            .outerjoin(CaseBrief, CaseBrief.booking_id == Booking.id)
+            .outerjoin(Advocate, Advocate.id == BookingFulfillment.advocate_id)
             .order_by(
                 BookingFulfillment.sla_due_at.asc(),
                 Booking.id.asc(),
@@ -622,11 +718,32 @@ def fulfillment_queue():
                 BookingFulfillment.status == status_filter
             )
         rows = query.limit(limit).all()
+        booking_ids = [booking.id for _, booking, _, _, _ in rows]
+        contact_events_by_booking: dict[int, list[ManualContactEvent]] = {
+            booking_id: [] for booking_id in booking_ids
+        }
+        if booking_ids:
+            for event in (
+                db.query(ManualContactEvent)
+                .filter(ManualContactEvent.booking_id.in_(booking_ids))
+                .order_by(ManualContactEvent.created_at.desc())
+                .all()
+            ):
+                contact_events_by_booking.setdefault(event.booking_id, []).append(
+                    event
+                )
         return jsonify(
             {
                 "items": [
-                    _serialize_fulfillment(fulfillment, booking, user)
-                    for fulfillment, booking, user in rows
+                    _serialize_fulfillment(
+                        fulfillment,
+                        booking,
+                        user,
+                        brief,
+                        advocate,
+                        contact_events_by_booking.get(booking.id, [])[:10],
+                    )
+                    for fulfillment, booking, user, brief, advocate in rows
                 ]
             }
         )
@@ -795,14 +912,18 @@ def update_fulfillment(booking_id: int):
                 return jsonify({"error": "active_advocate_not_found"}), 404
             fulfillment.advocate_id = advocate_id
             fulfillment.assigned_to = advocate.name
-        if "assigned_to" in body:
+        if "assigned_to" in body and advocate_id is None:
             fulfillment.assigned_to = (
                 str(body["assigned_to"]).strip()[:160] or None
             )
-        if requested_status in {"ASSIGNED", "CONFIRMED"} and not (
-            fulfillment.advocate_id or fulfillment.assigned_to
-        ):
-            return jsonify({"error": "assignment_required"}), 400
+        if requested_status in {"ASSIGNED", "CONFIRMED"}:
+            if current_status == "UNASSIGNED" and not fulfillment.advocate_id:
+                return (
+                    jsonify({"error": "registered_advocate_assignment_required"}),
+                    400,
+                )
+            if not (fulfillment.advocate_id or fulfillment.assigned_to):
+                return jsonify({"error": "assignment_required"}), 400
 
         user = (
             db.query(User)
@@ -908,6 +1029,239 @@ def update_fulfillment(booking_id: int):
                 ),
             }
         )
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+@admin_bp.post("/fulfillments/<int:booking_id>/contact-reveal")
+def reveal_client_contact(booking_id: int):
+    """Reveal contact for a stated operational purpose and audit the access."""
+
+    reason = str(_json_body().get("reason") or "").strip()
+    if len(reason) < 10 or len(reason) > 300:
+        return jsonify({"error": "contact_reveal_reason_required"}), 400
+    db = SessionLocal()
+    try:
+        booking = db.get(Booking, booking_id)
+        if not booking:
+            return jsonify({"error": "booking_not_found"}), 404
+        _audit(
+            db,
+            action="client_contact.reveal",
+            target_type="booking",
+            target_id=booking.id,
+            before={},
+            after={"reason": reason, "contact_type": "whatsapp"},
+        )
+        db.commit()
+        return jsonify(
+            {
+                "booking_id": booking.id,
+                "contact": booking.whatsapp_id,
+                "expires_in_seconds": 300,
+            }
+        )
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+@admin_bp.post("/fulfillments/<int:booking_id>/contact-events")
+def record_manual_contact(booking_id: int):
+    body = _json_body()
+    audience = str(body.get("audience") or "").strip().upper()
+    channel = str(body.get("channel") or "").strip().upper()
+    outcome = str(body.get("outcome") or "").strip().upper()
+    notes = str(body.get("notes") or "").strip()
+    if audience not in {"CLIENT", "ADVOCATE"}:
+        return jsonify({"error": "invalid_contact_audience"}), 400
+    if channel not in {"WHATSAPP", "PHONE", "EMAIL", "OTHER"}:
+        return jsonify({"error": "invalid_contact_channel"}), 400
+    if outcome not in {
+        "CONFIRMED",
+        "AWAITING_REPLY",
+        "UNREACHABLE",
+        "INFORMATION_SHARED",
+        "HANDOVER_COMPLETE",
+    }:
+        return jsonify({"error": "invalid_contact_outcome"}), 400
+    if len(notes) < 5 or len(notes) > 2_000:
+        return jsonify({"error": "contact_notes_required"}), 400
+    try:
+        follow_up_due_at = _parse_optional_timestamp(body.get("follow_up_due_at"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    db = SessionLocal()
+    try:
+        booking = db.get(Booking, booking_id)
+        if not booking:
+            return jsonify({"error": "booking_not_found"}), 404
+        fulfillment = (
+            db.query(BookingFulfillment)
+            .filter(BookingFulfillment.booking_id == booking_id)
+            .first()
+        )
+        if audience == "ADVOCATE" and not (
+            fulfillment and fulfillment.advocate_id
+        ):
+            return jsonify({"error": "registered_advocate_assignment_required"}), 409
+        event = ManualContactEvent(
+            booking_id=booking.id,
+            audience=audience,
+            channel=channel,
+            outcome=outcome,
+            operator_id=_operator_id(),
+            notes=notes,
+            follow_up_due_at=follow_up_due_at,
+        )
+        db.add(event)
+        db.flush()
+        _audit(
+            db,
+            action="manual_contact.record",
+            target_type="booking",
+            target_id=booking.id,
+            before={},
+            after={
+                "event_id": event.id,
+                "audience": audience,
+                "channel": channel,
+                "outcome": outcome,
+                "follow_up_due_at": follow_up_due_at,
+            },
+        )
+        db.commit()
+        return jsonify({"ok": True, "event": _serialize_contact_event(event)}), 201
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+@admin_bp.get("/advocates")
+def advocates():
+    db = SessionLocal()
+    try:
+        rows = db.query(Advocate).order_by(Advocate.active.desc(), Advocate.name).all()
+        return jsonify(
+            {
+                "items": [
+                    {
+                        "id": item.id,
+                        "name": item.name,
+                        "email": item.email,
+                        "contact_masked": _masked_contact(item.phone),
+                        "bar_registration_number": item.bar_registration_number,
+                        "category": item.category,
+                        "district": item.district,
+                        "languages": item.languages,
+                        "active": bool(item.active),
+                    }
+                    for item in rows
+                ]
+            }
+        )
+    finally:
+        db.close()
+
+
+@admin_bp.post("/advocates")
+def create_advocate():
+    body = _json_body()
+    values = {
+        key: str(body.get(key) or "").strip()
+        for key in (
+            "name",
+            "email",
+            "phone",
+            "bar_registration_number",
+            "category",
+            "district",
+            "languages",
+            "operator_notes",
+        )
+    }
+    if not all(
+        values[key]
+        for key in (
+            "name",
+            "email",
+            "phone",
+            "bar_registration_number",
+            "category",
+            "district",
+        )
+    ):
+        return jsonify({"error": "advocate_required_fields_missing"}), 400
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", values["email"]):
+        return jsonify({"error": "invalid_advocate_email"}), 400
+    if not re.fullmatch(r"\+?[0-9]{8,16}", values["phone"]):
+        return jsonify({"error": "invalid_advocate_phone"}), 400
+
+    db = SessionLocal()
+    try:
+        item = Advocate(
+            name=values["name"][:160],
+            email=values["email"][:255],
+            phone=values["phone"][:32],
+            bar_registration_number=values["bar_registration_number"][:120],
+            category=values["category"][:120],
+            district=values["district"][:120],
+            languages=values["languages"][:255] or None,
+            operator_notes=values["operator_notes"][:2_000] or None,
+            active=True,
+        )
+        db.add(item)
+        db.flush()
+        _audit(
+            db,
+            action="advocate.create",
+            target_type="advocate",
+            target_id=item.id,
+            before={},
+            after={
+                "name": item.name,
+                "bar_registration_number": item.bar_registration_number,
+                "category": item.category,
+                "district": item.district,
+            },
+        )
+        db.commit()
+        return jsonify({"ok": True, "id": item.id}), 201
+    except IntegrityError:
+        db.rollback()
+        return jsonify({"error": "advocate_registration_already_exists"}), 409
+    finally:
+        db.close()
+
+
+@admin_bp.post("/advocates/<int:advocate_id>/contact-reveal")
+def reveal_advocate_contact(advocate_id: int):
+    reason = str(_json_body().get("reason") or "").strip()
+    if len(reason) < 10 or len(reason) > 300:
+        return jsonify({"error": "contact_reveal_reason_required"}), 400
+    db = SessionLocal()
+    try:
+        item = db.get(Advocate, advocate_id)
+        if not item or not item.active:
+            return jsonify({"error": "active_advocate_not_found"}), 404
+        _audit(
+            db,
+            action="advocate_contact.reveal",
+            target_type="advocate",
+            target_id=item.id,
+            before={},
+            after={"reason": reason},
+        )
+        db.commit()
+        return jsonify({"id": item.id, "phone": item.phone, "email": item.email})
     except Exception:
         db.rollback()
         raise

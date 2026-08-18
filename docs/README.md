@@ -6,35 +6,40 @@ from external rollout work and future product ideas.
 
 ## Read in this order
 
-1. [RC4 release notes](RELEASE_NOTES_2026-08-07_RC4.md) — latest legal-guide,
+1. [RC7 release notes](RELEASE_NOTES_2026-08-18_RC7.md) — structured case
+   brief, consent, protected contact reveal, advocate registry, and manual
+   handover operations.
+2. [RC6 release notes](RELEASE_NOTES_2026-08-12_RC6.md) — website advocate
+   intake routing.
+3. [RC4 release notes](RELEASE_NOTES_2026-08-07_RC4.md) — legal-guide,
    routing, privacy, validation, and release-gate changes.
-2. [RC3 release notes](RELEASE_NOTES_2026-07-31_RC3.md) — infrastructure,
+4. [RC3 release notes](RELEASE_NOTES_2026-07-31_RC3.md) — infrastructure,
    SES, verification evidence, and mandatory external gates inherited by RC4.
-3. [Master product, technology, launch and growth blueprint](NYAYSETU_MASTER_BLUEPRINT.md)
+5. [Master product, technology, launch and growth blueprint](NYAYSETU_MASTER_BLUEPRINT.md)
    — consolidated status, decisions, user experience, architecture, privacy,
    launch, operations, budget, roadmap and marketing strategy.
-4. [Functional specification](functional-specification.md) — implemented
+6. [Functional specification](functional-specification.md) — implemented
    user and operations behavior.
-5. [Technical architecture](technical-architecture.md) — runtime, data flow,
+7. [Technical architecture](technical-architecture.md) — runtime, data flow,
    idempotency, database, outbox, and AI design.
-6. [API and integrations](api-integrations.md) — routes and provider contracts.
-7. [Data model and governance](data-model.md) — current entities, sensitivity,
+8. [API and integrations](api-integrations.md) — routes and provider contracts.
+9. [Data model and governance](data-model.md) — current entities, sensitivity,
    lifecycle, and migration gates.
-8. [Security, risk, and compliance](security-risk-compliance.md) — controls,
+10. [Security, risk, and compliance](security-risk-compliance.md) — controls,
    limitations, and launch risks.
-9. [Legal content review checklist](legal-content-review-checklist.md) —
+11. [Legal content review checklist](legal-content-review-checklist.md) —
    version-specific reviewer scope and sign-off gate.
-10. [Testing and QA plan](testing-qa-plan.md) — automated coverage and required
+12. [Testing and QA plan](testing-qa-plan.md) — automated coverage and required
    staging/migration evidence.
-11. [Deployment and operations](deployment-operations.md) — environment,
+13. [Deployment and operations](deployment-operations.md) — environment,
    cutover, monitoring, runbooks, and rollback.
-12. [Client and user perspective](client-user-perspective.md) — user promise,
+14. [Client and user perspective](client-user-perspective.md) — user promise,
    journey, trust, and acceptance.
-13. [Business perspective](business-perspective.md) — value, operating model,
+15. [Business perspective](business-perspective.md) — value, operating model,
    metrics, and responsible growth.
-14. [Roadmap and backlog](roadmap-backlog.md) — completed foundation, launch
+16. [Roadmap and backlog](roadmap-backlog.md) — completed foundation, launch
     gates, and future milestones.
-15. [Local AI demo](local-ai-demo.md) — optional demonstration of the built-in
+17. [Local AI demo](local-ai-demo.md) — optional demonstration of the built-in
     local knowledge path; it is not the production architecture specification.
 
 ## Current product
@@ -47,13 +52,15 @@ assistant with:
 - Persistent home, legal guides, status, preparation, support, privacy, and
   feedback.
 - IST-aware, capacity-filtered booking and review before payment.
+- Consent-based structured case briefs with no identity/evidence file upload.
 - Razorpay stored-price verification through a signed, idempotent webhook.
 - PostgreSQL-capable persistence, a lease-aware inbound inbox, and a durable
   external-delivery outbox.
 - Versioned Alembic schema releases and bounded maintenance.
 - Optional Meta-template-gated 24-hour/2-hour reminders, inert by default.
-- Token-protected, audited support, fulfilment, reconciliation, outbox,
-  availability, and metrics operations.
+- Session/token-protected, audited support, fulfilment, case-brief review,
+  verified advocate assignment, contact reveal/manual handover,
+  reconciliation, outbox, availability, and metrics operations.
 
 Operators can assign an active advocate or named fulfiller and manage the
 fulfilment lifecycle, but the product does not automatically select an
@@ -73,6 +80,9 @@ emergency response, or guarantee legal advice/outcome.
 | `GET /admin/metrics` | Token-protected aggregate metrics |
 | `GET/PATCH /admin/support[...]` | Support queue and audited updates |
 | `GET/PATCH /admin/fulfillments[...]` | Paid-consultation operations |
+| `POST /admin/fulfillments/<id>/contact-reveal` | Audited client contact reveal |
+| `POST /admin/fulfillments/<id>/contact-events` | Manual handover outcome |
+| `GET/POST /admin/advocates[...]` | Verified advocate registry and protected contact reveal |
 | `GET/PATCH /admin/payment-reconciliations[...]` | Payment review operations |
 | `GET/POST/DELETE /admin/availability[...]` | Capacity and blackout operations |
 | `GET/POST /admin/outbox[...]` | Queue inspection and retry |

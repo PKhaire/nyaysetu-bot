@@ -11,9 +11,12 @@ import admin
 from db import Base
 from models import (
     AdminAuditEvent,
+    Advocate,
     Booking,
     BookingFulfillment,
     BookingStatus,
+    CaseBrief,
+    ManualContactEvent,
     PaymentReconciliation,
     SupportRequest,
     User,
@@ -108,6 +111,30 @@ def _seed_operations(session_factory):
         )
         db.add_all([support, booking])
         db.flush()
+        advocate = Advocate(
+            name="Verified Advocate",
+            email="advocate@example.test",
+            phone="919988887777",
+            bar_registration_number="MAH/1234/2020",
+            category="Family",
+            district="Pune",
+            languages="English, Hindi, Marathi",
+            active=True,
+        )
+        brief = CaseBrief(
+            user_id=user.id,
+            booking_id=booking.id,
+            status="CONFIRMED",
+            issue_summary="A family-law consultation is required.",
+            legal_stage="Before court or formal filing",
+            important_dates="No known immediate deadline",
+            desired_outcome="Understand available legal options.",
+            urgency="Standard",
+            documents_json='["Agreement or contract"]',
+            consent_version="case-brief-sharing-2026-08",
+        )
+        db.add_all([advocate, brief])
+        db.flush()
         fulfillment = BookingFulfillment(
             booking_id=booking.id,
             status="UNASSIGNED",
@@ -125,6 +152,7 @@ def _seed_operations(session_factory):
         return {
             "support_id": support.id,
             "booking_id": booking.id,
+            "advocate_id": advocate.id,
             "reconciliation_id": reconciliation.id,
         }
     finally:
@@ -218,7 +246,7 @@ def test_admin_browser_session_requires_csrf_and_audits_operator(
     updated = client.patch(
         f"/admin/fulfillments/{ids['booking_id']}",
         headers={"X-CSRF-Token": csrf_token},
-        json={"status": "ASSIGNED", "assigned_to": "Advocate One"},
+        json={"status": "ASSIGNED", "advocate_id": ids["advocate_id"]},
     )
     assert updated.status_code == 200
     assert updated.get_json()["item"]["fulfillment_status"] == "ASSIGNED"
@@ -275,7 +303,7 @@ def test_paid_consultation_assignment_and_completion_are_explicit(
         headers=_headers(),
         json={
             "status": "ASSIGNED",
-            "assigned_to": "Verified Advocate",
+            "advocate_id": seeded["advocate_id"],
         },
     )
     assert assigned.status_code == 200
@@ -301,6 +329,72 @@ def test_paid_consultation_assignment_and_completion_are_explicit(
         )
         assert fulfillment.completed_at is not None
         assert db.query(AdminAuditEvent).count() == 2
+    finally:
+        db.close()
+
+
+def test_queue_masks_contact_and_reveal_and_manual_handover_are_audited(
+    client,
+    admin_db,
+):
+    seeded = _seed_operations(admin_db)
+    booking_id = seeded["booking_id"]
+
+    queue_response = client.get("/admin/fulfillments", headers=_headers())
+    assert queue_response.status_code == 200
+    queue_item = queue_response.get_json()["items"][0]
+    assert queue_item["contact_masked"] == "••••••1234"
+    assert "whatsapp_id" not in queue_item
+    assert queue_item["case_brief"]["issue_summary"].startswith("A family")
+
+    missing_reason = client.post(
+        f"/admin/fulfillments/{booking_id}/contact-reveal",
+        headers=_headers(),
+        json={"reason": "short"},
+    )
+    assert missing_reason.status_code == 400
+
+    revealed = client.post(
+        f"/admin/fulfillments/{booking_id}/contact-reveal",
+        headers=_headers(),
+        json={"reason": "Contacting client about paid appointment assignment."},
+    )
+    assert revealed.status_code == 200
+    assert revealed.get_json()["contact"] == "919955551234"
+
+    assigned = client.patch(
+        f"/admin/fulfillments/{booking_id}",
+        headers=_headers(),
+        json={
+            "status": "ASSIGNED",
+            "advocate_id": seeded["advocate_id"],
+        },
+    )
+    assert assigned.status_code == 200
+
+    contacted = client.post(
+        f"/admin/fulfillments/{booking_id}/contact-events",
+        headers=_headers(),
+        json={
+            "audience": "CLIENT",
+            "channel": "WHATSAPP",
+            "outcome": "INFORMATION_SHARED",
+            "notes": "Appointment and assigned advocate details shared manually.",
+        },
+    )
+    assert contacted.status_code == 201
+    assert contacted.get_json()["event"]["operator_id"] == "ops.user@example.com"
+
+    db = admin_db()
+    try:
+        actions = {
+            item.action for item in db.query(AdminAuditEvent).all()
+        }
+        assert "client_contact.reveal" in actions
+        assert "manual_contact.record" in actions
+        event = db.query(ManualContactEvent).one()
+        assert event.audience == "CLIENT"
+        assert event.outcome == "INFORMATION_SHARED"
     finally:
         db.close()
 

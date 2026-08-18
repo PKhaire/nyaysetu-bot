@@ -145,6 +145,11 @@ before/after values and the operator ID in `admin_audit_events`.
 | `PATCH /admin/support/<ticket_id>` | Assign, prioritize, resolve, or close a ticket; closing requires a resolution note |
 | `GET /admin/fulfillments?status=UNASSIGNED` | SLA-ordered paid-consultation queue |
 | `PATCH /admin/fulfillments/<booking_id>` | Audited assignment, status transition, capacity-checked paid reschedule, or reviewed refund recording |
+| `POST /admin/fulfillments/<booking_id>/contact-reveal` | Purpose-bound, audited reveal of the booked client's contact number |
+| `POST /admin/fulfillments/<booking_id>/contact-events` | Record a manual client/advocate notification attempt, result, and follow-up time |
+| `GET /admin/advocates` | Active/verified advocate directory with masked contact details |
+| `POST /admin/advocates` | Register a verified advocate for controlled assignment |
+| `POST /admin/advocates/<advocate_id>/contact-reveal` | Purpose-bound, audited reveal of an advocate contact number |
 | `GET /admin/payment-reconciliations?status=OPEN` | Captured-payment review queue |
 | `PATCH /admin/payment-reconciliations/<id>` | Audited disposition with a required resolution note |
 | `GET /admin/outbox` | Outbox inspection |
@@ -363,7 +368,8 @@ python -m jobs.maintenance --dry-run --batch-size 500 --fail-on-risk
 ```
 
 The bounded job expires stale pending bookings and deletes only eligible
-completed webhook/inbound events, old analytics, and completed outbox jobs.
+unattached case briefs, completed webhook/inbound events, old analytics, and
+completed outbox jobs. A case brief attached to a booking is preserved.
 It reports overdue/missing-SLA fulfilment and support work plus stale payment
 reviews without deleting that evidence. Exit `1` means the maintenance
 transaction failed. With `--fail-on-risk`, exit `2` means the run succeeded but

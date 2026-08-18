@@ -241,6 +241,7 @@ REFUND_POLICY_URL=...
 CANCELLATION_POLICY_URL=...
 AI_CONSENT_VERSION=...
 BOOKING_TERMS_VERSION=...
+CASE_BRIEF_CONSENT_VERSION=case-brief-sharing-2026-08
 LEGAL_CONTENT_VERSION=...
 LEGAL_CONTENT_REVIEWED_VERSION=...
 LEGAL_CONTENT_REVIEWED_ON=YYYY-MM-DD
@@ -251,6 +252,7 @@ AI_SAFETY_IDENTIFIER_SECRET=...
 SUPPORT_SLA_HOURS=24
 PAYMENT_RECONCILIATION_LOOKBACK_DAYS=14
 OUTBOX_COMPLETED_TTL_DAYS=30
+CASE_BRIEF_UNATTACHED_TTL_DAYS=7
 ```
 
 Production `/health/ready` requires both groups. It also validates live
@@ -388,9 +390,10 @@ SQLite data:
 
 ## Legacy SQLite import contingency (not authorised for this launch)
 
-Production uses Alembic revision `20260729_01`; automatic `create_all()` is
-disabled and `/health/ready` requires the expected revision. The baseline is
-additive and contains compatibility/backfill logic for pre-Alembic databases.
+Production uses baseline revision `20260729_01` and current head
+`20260818_01`; automatic `create_all()` is disabled and `/health/ready`
+requires the expected head. The baseline is additive and contains
+compatibility/backfill logic for pre-Alembic databases.
 The following utility is retained only for a separately approved future
 legacy-data project. It is not part of the clean first-release procedure above
 and must not be run against production under the current launch approval.
@@ -406,7 +409,7 @@ not a recurring sync:
   retain an untouched restore copy.
 - Prepare a separate working backup at Alembic head, then create the frozen
   import artifact from that working copy with the SQLite backup mechanism.
-  The utility requires the source and target to have revision `20260729_01`
+  The utility requires the source and target to have revision `20260818_01`
   and the full current table/column shape.
 - The source must be a regular non-symlink file with no adjacent `-wal`,
   `-journal`, or `-shm` sidecar. It is opened immutable/read-only and checked
@@ -535,7 +538,8 @@ explicit consistency design.
 
 Every later schema-changing release must add a frozen, reviewed Alembic
 revision and rehearse upgrade, compatibility rollback, and re-upgrade. Never
-edit revision `20260729_01` after it has been applied to a shared environment.
+edit revisions `20260729_01` or `20260818_01` after either has been applied to
+a shared environment.
 
 ## Webhook configuration
 
@@ -726,8 +730,9 @@ python -m jobs.maintenance --batch-size 500 --fail-on-risk
 ```
 
 One transaction expires stale pending bookings and deletes only eligible
-`DONE` webhook/inbound events, old analytics, and old `COMPLETED` outbox jobs.
-It preserves users, bookings, fulfilment/payment/support evidence, feedback,
+unattached case briefs, `DONE` webhook/inbound events, old analytics, and old
+`COMPLETED` outbox jobs. A case brief attached to a booking is preserved. It
+also preserves users, bookings, fulfilment/payment/support evidence, feedback,
 conversations, dead/failed jobs, unmatched/failed webhooks, nonterminal inbound
 claims, and legacy message claims.
 
@@ -749,20 +754,30 @@ successful report requires operator attention. Route exit `2` and the JSON
 Human operators open `https://api.nyaysetu.in/admin/login`, enter their stable
 operator ID and the separately stored `ADMIN_PASSWORD`, then work the
 responsive appointment queue at `/admin/appointments`. The signed session
-expires after two hours. The console masks contact numbers, provides an
-explicit WhatsApp handoff, and never marks an appointment complete merely
-because its scheduled time passed.
+expires after two hours. The console masks contact numbers and never marks an
+appointment complete merely because its scheduled time passed. A contact
+number is shown only after a stable operator supplies a valid operational
+purpose; the reveal is audited. The console also shows the confirmed case brief
+and manual contact history.
 
 For every paid booking:
 
-1. Open **Unassigned**, confirm the paid record and scheduled time, and assign
-   the responsible advocate/operator.
-2. Move it to **Confirmed** only after the consultation arrangement is
-   acknowledged.
-3. After the consultation, explicitly choose **Completed** and record a useful
+1. Open **Unassigned**, confirm the paid record, scheduled time, consented case
+   brief, urgency, and safety flag. Do not request or download identity or
+   evidence files through this release.
+2. Register or select an active, independently verified advocate. Complete
+   eligibility, subject-fit, availability, and conflict checks before
+   assignment.
+3. Reveal advocate/client contact only for the stated handover purpose.
+   Manually notify both parties and record each attempt, channel, outcome,
+   notes, and follow-up time. Manual communication is the release path, so Meta
+   outbound-template approval is not a launch dependency.
+4. Move it to **Confirmed** only after both sides acknowledge the consultation
+   arrangement.
+5. After the consultation, explicitly choose **Completed** and record a useful
    operator note. This is the authoritative trigger that closes fulfilment and
    enables the user feedback follow-up.
-4. For exceptions, record **No show**, **Reschedule required**, or
+6. For exceptions, record **No show**, **Reschedule required**, or
    **Refund review** with explanatory notes. A refund is terminal only after
    external Razorpay evidence is checked and the reviewed `REFUNDED` action is
    recorded.
@@ -1093,11 +1108,11 @@ and provider intake as the incident/cutover procedure requires.
 
 ## Known operational limitations
 
-- The Alembic baseline and fail-closed cross-engine import utility are present,
+- The Alembic baseline/current head and fail-closed cross-engine import utility are present,
   but real live-data backup/restore, working-copy upgrade, import/reconciliation,
   and rollback results remain external release evidence. Revision
-  `20260729_01` currently registers live `Base.metadata`; freeze future
-  historical schema operations before adding revision `02`.
+  `20260729_01` registers the baseline and `20260818_01` adds case-brief and
+  manual-handover operations. Do not rewrite applied revision files.
 - Per-user/global limits cover early menu, support, media, and paid-flow
   branches and deduplicate notices, but their state and some other abuse
   controls remain process-local.
@@ -1108,12 +1123,15 @@ and provider intake as the incident/cutover procedure requires.
 - Admin mutations are audited and the browser console adds signed sessions,
   CSRF protection and login throttling, but access still uses a shared password
   rather than individually verified application credentials/RBAC/MFA.
-- The app tracks fulfilment, but staffing, advocate eligibility/conflicts,
-  consultation channel, and refund execution remain operational/policy gates.
+- The app tracks fulfilment, verified advocate records, consented briefs,
+  audited contact reveal, and manual handover events, but independent advocate
+  eligibility/conflict review, consultation quality, and refund execution
+  remain operational/policy gates.
 - Provider health is not included in `/health/ready`.
 - The outbox runner is bounded polling, not a high-throughput queue.
 - Third-party AI PII filtering cannot be guaranteed.
-- Meta template approval and campaign consent remain external launch tasks.
+- Meta template approval remains a future automation task; the current launch
+  uses recorded manual assignment/confirmation contact and sends no campaigns.
 
 These limitations do not justify skipping the controls above; they define the
 scope for the next hardening increment.
