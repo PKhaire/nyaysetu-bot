@@ -58,6 +58,20 @@ services:
         value: "30"
       - key: CASE_BRIEF_UNATTACHED_TTL_DAYS
         value: "7"
+      # Document Studio in this release is a synthetic-data staging harness.
+      # Production health deliberately fails if the feature is enabled.
+      - key: DOCUMENT_STUDIO_ENABLED
+        value: "false"
+      - key: DOCUMENT_STUDIO_UAT_ONLY
+        value: "true"
+      - key: DOCUMENT_STUDIO_CONSENT_VERSION
+        value: document-studio-uat-2026-08
+      - key: DOCUMENT_STUDIO_PRODUCT_ALLOWLIST
+        value: residential_agreement_mh_uat
+      - key: DOCUMENT_STUDIO_TESTER_WA_IDS
+        sync: false
+      - key: DOCUMENT_STUDIO_DRAFT_TTL_DAYS
+        value: "7"
       - key: PAYMENT_LINK_TTL_MINUTES
         value: "16"
       - key: PAYMENT_RECONCILIATION_LOOKBACK_DAYS

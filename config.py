@@ -190,6 +190,28 @@ CASE_BRIEF_CONSENT_VERSION = env_str(
     "case-brief-sharing-2026-08",
     allow_empty=False,
 )
+DOCUMENT_STUDIO_ENABLED = env_bool("DOCUMENT_STUDIO_ENABLED", False)
+DOCUMENT_STUDIO_UAT_ONLY = env_bool("DOCUMENT_STUDIO_UAT_ONLY", True)
+DOCUMENT_STUDIO_CONSENT_VERSION = env_str(
+    "DOCUMENT_STUDIO_CONSENT_VERSION",
+    "document-studio-uat-2026-08",
+    allow_empty=False,
+)
+DOCUMENT_STUDIO_PRODUCT_ALLOWLIST = frozenset(
+    env_csv(
+        "DOCUMENT_STUDIO_PRODUCT_ALLOWLIST",
+        ("residential_agreement_mh_uat",),
+    )
+)
+DOCUMENT_STUDIO_TESTER_WA_IDS = frozenset(
+    env_csv("DOCUMENT_STUDIO_TESTER_WA_IDS", ())
+)
+DOCUMENT_STUDIO_DRAFT_TTL_DAYS = env_int(
+    "DOCUMENT_STUDIO_DRAFT_TTL_DAYS",
+    7,
+    minimum=1,
+    maximum=30,
+)
 LEGAL_CONTENT_VERSION = env_str(
     "LEGAL_CONTENT_VERSION",
     "legal-content-2026-08-r5",

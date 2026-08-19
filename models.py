@@ -392,6 +392,106 @@ class CaseBrief(Base):
 
 
 # =========================================================
+# DOCUMENT STUDIO (STAGING UAT FOUNDATION)
+# =========================================================
+
+class DocumentOrder(Base):
+    """A resumable Document Studio workflow without generated output."""
+
+    __tablename__ = "document_orders"
+
+    __table_args__ = (
+        Index("idx_document_order_user_state", "user_id", "state"),
+        Index("idx_document_order_updated", "updated_at"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    public_ref = Column(String(32), nullable=False, unique=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    product_code = Column(String(80), nullable=False, index=True)
+    template_version = Column(String(64), nullable=False)
+    state = Column(String(32), nullable=False, default="DRAFT", index=True)
+    current_step = Column(String(64), nullable=False, default="party_a_label")
+    draft_answers_json = Column(Text, nullable=False, default="{}")
+    output_classification = Column(
+        String(32),
+        nullable=False,
+        default="UAT_NON_LEGAL",
+    )
+    uat_only = Column(Boolean, nullable=False, default=True)
+    consent_version = Column(String(64), nullable=True)
+    consented_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+
+class DocumentAnswerRevision(Base):
+    """Immutable user-confirmed answer snapshot for one document order."""
+
+    __tablename__ = "document_answer_revisions"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "document_order_id",
+            "revision_number",
+            name="uq_document_answer_order_revision",
+        ),
+        Index(
+            "idx_document_answer_order_created",
+            "document_order_id",
+            "created_at",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    document_order_id = Column(
+        Integer,
+        ForeignKey("document_orders.id"),
+        nullable=False,
+        index=True,
+    )
+    revision_number = Column(Integer, nullable=False)
+    schema_version = Column(String(64), nullable=False)
+    answers_json = Column(Text, nullable=False)
+    content_hash = Column(String(64), nullable=False)
+    confirmed_at = Column(DateTime, nullable=False, default=utc_now)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+class DocumentAuditEvent(Base):
+    """Privacy-minimised state transition evidence for Document Studio."""
+
+    __tablename__ = "document_audit_events"
+
+    __table_args__ = (
+        Index(
+            "idx_document_audit_order_created",
+            "document_order_id",
+            "created_at",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    document_order_id = Column(
+        Integer,
+        ForeignKey("document_orders.id"),
+        nullable=False,
+        index=True,
+    )
+    actor_type = Column(String(24), nullable=False, default="CLIENT")
+    event_type = Column(String(64), nullable=False)
+    from_state = Column(String(32), nullable=True)
+    to_state = Column(String(32), nullable=True)
+    details_json = Column(Text, nullable=False, default="{}")
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+# =========================================================
 # PRODUCT ANALYTICS (ADDITIVE / STANDALONE)
 # =========================================================
 

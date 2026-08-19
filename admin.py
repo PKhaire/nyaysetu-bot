@@ -36,6 +36,7 @@ from models import (
     BookingFulfillment,
     BookingStatus,
     CaseBrief,
+    DocumentOrder,
     Feedback,
     InboundMessageEvent,
     ManualContactEvent,
@@ -461,6 +462,60 @@ def metrics():
             },
         }
         return jsonify(payload)
+    finally:
+        db.close()
+
+
+@admin_bp.get("/document-orders")
+def document_orders():
+    """Expose privacy-minimised Document Studio UAT state to operators.
+
+    Draft answers and user contact data are intentionally excluded. This is
+    an operational UAT ledger, not a document download endpoint.
+    """
+
+    try:
+        limit = max(1, min(int(request.args.get("limit", "50")), 100))
+    except (TypeError, ValueError):
+        return jsonify({"error": "invalid_limit"}), 400
+
+    db = SessionLocal()
+    try:
+        orders = (
+            db.query(DocumentOrder)
+            .filter(DocumentOrder.uat_only.is_(True))
+            .order_by(DocumentOrder.id.desc())
+            .limit(limit)
+            .all()
+        )
+        return jsonify(
+            {
+                "uat_only": True,
+                "items": [
+                    {
+                        "reference": order.public_ref,
+                        "product_code": order.product_code,
+                        "template_version": order.template_version,
+                        "state": order.state,
+                        "current_step": order.current_step,
+                        "output_classification": (
+                            order.output_classification
+                        ),
+                        "created_at": (
+                            order.created_at.isoformat()
+                            if order.created_at
+                            else None
+                        ),
+                        "updated_at": (
+                            order.updated_at.isoformat()
+                            if order.updated_at
+                            else None
+                        ),
+                    }
+                    for order in orders
+                ],
+            }
+        )
     finally:
         db.close()
 

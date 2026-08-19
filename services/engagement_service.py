@@ -24,6 +24,7 @@ from utils.i18n import t
 HOME_BUTTON_IDS = {
     "ask_ai": "home_ai",
     "book": "home_book",
+    "documents": "home_documents",
     "more": "home_more",
 }
 

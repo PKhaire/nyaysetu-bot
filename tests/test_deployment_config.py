@@ -114,6 +114,22 @@ def test_deployment_commands_and_render_release_controls_exist():
     )
     assert "- key: ADMIN_PASSWORD\n        sync: false" in blueprint
     assert "- key: SECRET_KEY\n        generateValue: true" in blueprint
+    assert (
+        '- key: DOCUMENT_STUDIO_ENABLED\n        value: "false"'
+        in blueprint
+    )
+    assert (
+        '- key: DOCUMENT_STUDIO_UAT_ONLY\n        value: "true"'
+        in blueprint
+    )
+    assert (
+        "- key: DOCUMENT_STUDIO_PRODUCT_ALLOWLIST\n"
+        "        value: residential_agreement_mh_uat"
+        in blueprint
+    )
+    assert "- key: DOCUMENT_STUDIO_TESTER_WA_IDS\n        sync: false" in (
+        blueprint
+    )
 
 
 def test_render_only_schedules_existing_operational_modules():

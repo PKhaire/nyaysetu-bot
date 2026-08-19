@@ -1141,6 +1141,118 @@ TRANSLATIONS["mr"].update(
     }
 )
 
+# Document Studio is intentionally available only as a synthetic-data UAT
+# journey.  Keeping these keys together makes the release boundary explicit:
+# none of this copy promises generation, payment, signature, or download.
+_DOCUMENT_STUDIO_EN = {
+    "home_service_header": "NyaySetu Services",
+    "home_service_section": "Choose a service",
+    "home_ai_desc": "General legal information",
+    "home_book_desc": "Paid advocate consultation",
+    "home_more_desc": "Status, guides, support and privacy",
+    "document_studio": "Document Studio",
+    "document_studio_desc": "Test a guided document journey",
+    "document_studio_unavailable": (
+        "Document Studio is not available in this environment. No document or "
+        "payment has been created."
+    ),
+    "document_landing_header": "Document Studio UAT",
+    "document_landing_body": (
+        "Staging test only. Use invented information. This flow does not create "
+        "a legal document, take payment, collect a signature, or provide a download."
+    ),
+    "document_landing_section": "Test actions",
+    "document_create_test": "Start New Test",
+    "document_create_test_desc": "Try the guided UAT questionnaire",
+    "document_continue": "Continue Test",
+    "document_continue_desc": "Resume your latest unfinished test",
+    "document_my_tests": "My Test Records",
+    "document_my_tests_desc": "View recent UAT references and states",
+    "document_help": "UAT Help",
+    "document_help_desc": "Safety rules for this test flow",
+    "document_product_header": "Choose UAT Product",
+    "document_product_body": "Only one non-legal test schema is enabled.",
+    "document_product_section": "UAT schema",
+    "document_uat_product": "Agreement Journey Test",
+    "document_uat_product_desc": "Synthetic Maharashtra residence scenario",
+    "document_uat_overview": (
+        "UAT preview only. Enter invented party labels, a city, and a term. "
+        "This test is not a legal agreement or legal advice."
+    ),
+    "document_start_uat": "Start UAT",
+    "document_back_home": "Back to Home",
+    "document_uat_party_a_prompt": (
+        "Enter an invented label for Party A (2-60 characters). Do not enter a real name."
+    ),
+    "document_uat_party_b_prompt": (
+        "Enter an invented label for Party B (2-60 characters). Do not enter a real name."
+    ),
+    "document_uat_city_prompt": (
+        "Enter a test city label (2-60 characters). Do not enter a full address."
+    ),
+    "document_uat_term_prompt": "Enter a test term in months from 1 to 60.",
+    "document_uat_answer_invalid": (
+        "That test value is invalid. Follow the stated limits and do not use real personal data."
+    ),
+    "document_uat_review": (
+        "*Document Studio UAT review*\n\nReference: {reference}\nParty A: {party_a}\n"
+        "Party B: {party_b}\nCity: {city}\nTerm: {months} months\n\n"
+        "Confirming stores an auditable test-answer revision only. It does not create "
+        "a legal document, payment, signature, or download."
+    ),
+    "document_uat_confirm": "Confirm Test",
+    "document_uat_edit": "Edit Answers",
+    "document_uat_cancel": "Cancel Test",
+    "document_uat_completed": (
+        "Test answers confirmed. Reference: {reference}. No legal document, payment, "
+        "signature, or download was created."
+    ),
+    "document_uat_cancelled": "Document Studio UAT test cancelled.",
+    "document_uat_no_draft": "No unfinished Document Studio UAT test was found.",
+    "document_uat_help_text": (
+        "Document Studio is under controlled staging testing. Use invented data only. "
+        "Do not enter names, phone numbers, addresses, identity numbers, bank data, "
+        "case documents, or confidential facts. No usable legal document is produced."
+    ),
+}
+
+TRANSLATIONS["en"].update(_DOCUMENT_STUDIO_EN)
+TRANSLATIONS["hi"].update(
+    {
+        **_DOCUMENT_STUDIO_EN,
+        "home_service_section": "Service choose karein",
+        "home_more_desc": "Status, guides, support aur privacy",
+        "document_studio_desc": "Guided document journey test karein",
+        "document_create_test": "Naya Test Shuru Karein",
+        "document_continue": "Test Continue Karein",
+        "document_my_tests": "Mere Test Records",
+        "document_start_uat": "UAT Shuru Karein",
+        "document_back_home": "Home Par Jayein",
+        "document_uat_term_prompt": "Test term 1 se 60 months ke beech enter karein.",
+        "document_uat_confirm": "Test Confirm Karein",
+        "document_uat_edit": "Answers Edit Karein",
+        "document_uat_cancel": "Test Cancel Karein",
+    }
+)
+TRANSLATIONS["mr"].update(
+    {
+        **_DOCUMENT_STUDIO_EN,
+        "home_service_header": "NyaySetu Seva",
+        "home_service_section": "Seva nivda",
+        "home_more_desc": "Status, guides, support ani privacy",
+        "document_studio_desc": "Guided document journey test kara",
+        "document_create_test": "Navin Test Suru Kara",
+        "document_continue": "Test Pudhe Chalu Theva",
+        "document_my_tests": "Maze Test Records",
+        "document_start_uat": "UAT Suru Kara",
+        "document_back_home": "Home Var Ja",
+        "document_uat_term_prompt": "Test term 1 te 60 mahinyanmadhye taka.",
+        "document_uat_confirm": "Test Confirm Kara",
+        "document_uat_edit": "Answers Edit Kara",
+        "document_uat_cancel": "Test Cancel Kara",
+    }
+)
+
 # Structured pre-consultation brief. The same placeholder contract is kept in
 # every language so review and consent messages cannot silently lose facts.
 TRANSLATIONS["en"].update(

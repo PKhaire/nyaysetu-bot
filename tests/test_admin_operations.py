@@ -16,6 +16,7 @@ from models import (
     BookingFulfillment,
     BookingStatus,
     CaseBrief,
+    DocumentOrder,
     ManualContactEvent,
     PaymentReconciliation,
     SupportRequest,
@@ -756,3 +757,58 @@ def test_availability_and_payment_review_mutations_are_audited(
         assert db.query(AdminAuditEvent).count() == 3
     finally:
         db.close()
+
+
+def test_document_studio_uat_ledger_excludes_answers_and_contact_data(
+    client,
+    admin_db,
+):
+    db = admin_db()
+    try:
+        user = User(
+            whatsapp_id="919900009999",
+            case_id="NS-DOC-ADMIN",
+            name="Private Synthetic User",
+        )
+        db.add(user)
+        db.flush()
+        db.add(
+            DocumentOrder(
+                public_ref="DSU-ADMIN01",
+                user_id=user.id,
+                product_code="residential_agreement_mh_uat",
+                template_version="uat-schema-2026-08-v1",
+                state="DRAFT",
+                current_step="party_b_label",
+                draft_answers_json=(
+                    '{"party_a_label":"Do Not Expose This Answer"}'
+                ),
+                output_classification="UAT_NON_LEGAL",
+                uat_only=True,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/admin/document-orders", headers=_headers())
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["uat_only"] is True
+    assert payload["items"] == [
+        {
+            "reference": "DSU-ADMIN01",
+            "product_code": "residential_agreement_mh_uat",
+            "template_version": "uat-schema-2026-08-v1",
+            "state": "DRAFT",
+            "current_step": "party_b_label",
+            "output_classification": "UAT_NON_LEGAL",
+            "created_at": payload["items"][0]["created_at"],
+            "updated_at": payload["items"][0]["updated_at"],
+        }
+    ]
+    serialized = response.get_data(as_text=True)
+    assert "Do Not Expose This Answer" not in serialized
+    assert "919900009999" not in serialized
+    assert "Private Synthetic User" not in serialized

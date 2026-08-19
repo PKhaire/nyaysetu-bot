@@ -12,6 +12,9 @@ manipulative retention patterns or imply a lawyer-client relationship.
 ## What the service includes
 
 - Multilingual WhatsApp onboarding and a persistent home menu.
+- A feature-gated Document Studio UAT path for authorised staging testers. It
+  stores synthetic questionnaire answers only; it does not generate legal
+  documents, take payment, accept uploads, sign, or issue downloads.
 - Consent-gated AI information with deterministic safety checks and local
   fallback content.
 - Guided legal category, district, date, and capacity-aware slot selection.

@@ -6,6 +6,16 @@ from external rollout work and future product ideas.
 
 ## Read in this order
 
+Start with:
+
+- [RC8 release notes](RELEASE_NOTES_2026-08-19_RC8.md) — the implemented
+  staging-only Document Studio navigation and synthetic questionnaire harness.
+- [Document Studio design package](document-studio/README.md) — the product,
+  legal-governance, architecture, privacy, catalogue, delivery and cost
+  baseline for future phases.
+
+Then continue with the established repository documentation:
+
 1. [RC7 release notes](RELEASE_NOTES_2026-08-18_RC7.md) — structured case
    brief, consent, protected contact reveal, advocate registry, and manual
    handover operations.

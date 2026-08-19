@@ -1106,13 +1106,39 @@ and provider intake as the incident/cutover procedure requires.
 - After rotating `AI_SAFETY_IDENTIFIER_SECRET`, expect provider safety
   identifiers to change; document the privacy/abuse-monitoring impact.
 
+## Document Studio RC8 staging UAT
+
+The Blueprint deliberately keeps `DOCUMENT_STUDIO_ENABLED=false`. To exercise
+RC8 on the existing staging service, set all of the following and redeploy:
+
+```text
+ENV=staging
+DOCUMENT_STUDIO_ENABLED=true
+DOCUMENT_STUDIO_UAT_ONLY=true
+DOCUMENT_STUDIO_CONSENT_VERSION=document-studio-uat-2026-08
+DOCUMENT_STUDIO_PRODUCT_ALLOWLIST=residential_agreement_mh_uat
+DOCUMENT_STUDIO_TESTER_WA_IDS=<comma-separated test numbers with country code>
+DOCUMENT_STUDIO_DRAFT_TTL_DAYS=7
+RAZORPAY_MODE=test
+```
+
+Use synthetic data only. Verify `/health/ready` reports `ok=true` with schema
+`20260819_01`. The UAT flow must not generate a legal document, payment,
+booking, signature, file upload, S3 object or download. The protected
+`GET /admin/document-orders` endpoint is metadata-only.
+
+After testing, set `DOCUMENT_STUDIO_ENABLED=false`, redeploy, and verify the
+original three-button home. Production readiness deliberately fails if this
+UAT flag is enabled on a production-labelled service.
+
 ## Known operational limitations
 
 - The Alembic baseline/current head and fail-closed cross-engine import utility are present,
   but real live-data backup/restore, working-copy upgrade, import/reconciliation,
   and rollback results remain external release evidence. Revision
-  `20260729_01` registers the baseline and `20260818_01` adds case-brief and
-  manual-handover operations. Do not rewrite applied revision files.
+  `20260729_01` registers the baseline, `20260818_01` adds case-brief and
+  manual-handover operations, and `20260819_01` adds the staging-only Document
+  Studio UAT ledger. Do not rewrite applied revision files.
 - Per-user/global limits cover early menu, support, media, and paid-flow
   branches and deduplicate notices, but their state and some other abuse
   controls remain process-local.

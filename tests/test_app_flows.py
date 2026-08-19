@@ -9,6 +9,9 @@ from unittest.mock import MagicMock
 from models import (
     Booking,
     CaseBrief,
+    DocumentAnswerRevision,
+    DocumentAuditEvent,
+    DocumentOrder,
     InboundMessageEvent,
     OutboxJob,
     SupportRequest,
@@ -162,6 +165,118 @@ def _secure_whatsapp_route(monkeypatch, app_module):
     )
     monkeypatch.setattr(app_module, "ALLOW_INSECURE_WEBHOOKS", False)
     monkeypatch.setattr(app_module, "ENV", "production")
+
+
+def test_document_studio_home_uses_four_ordered_list_rows(
+    monkeypatch,
+    app_module,
+):
+    user = User(
+        whatsapp_id="919911112222",
+        case_id="NS-DOC-HOME",
+        language="en",
+    )
+    monkeypatch.setattr(
+        app_module,
+        "document_studio_available",
+        lambda _user=None: True,
+    )
+    list_picker = MagicMock(return_value={"ok": True})
+    monkeypatch.setattr(app_module, "send_list_picker", list_picker)
+
+    app_module.send_home(user.whatsapp_id, user)
+
+    list_picker.assert_called_once()
+    rows = list_picker.call_args.kwargs["rows"]
+    assert [row["id"] for row in rows] == [
+        "home_ai",
+        "home_book",
+        "home_documents",
+        "home_more",
+    ]
+
+
+def test_document_studio_uat_whatsapp_flow_confirms_answers_without_booking(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+):
+    _secure_whatsapp_route(monkeypatch, app_module)
+    user_id = _create_user(
+        isolated_app_db,
+        flow_state=app_module.NORMAL,
+    )
+    monkeypatch.setattr(
+        app_module,
+        "document_studio_available",
+        lambda _user=None: True,
+    )
+    monkeypatch.setattr(app_module, "is_user_rate_limited", lambda _wa: False)
+    monkeypatch.setattr(app_module, "is_global_rate_limited", lambda: False)
+
+    selections = (
+        "home_documents",
+        "doc_create",
+        "doc_product::residential_agreement_mh_uat",
+        "doc_start::residential_agreement_mh_uat",
+    )
+    for index, selection in enumerate(selections, start=1):
+        response = _signed_whatsapp_post(
+            client,
+            _whatsapp_payload(
+                message_id=f"wamid.doc.selection.{index}",
+                interactive_id=selection,
+            ),
+        )
+        assert response.status_code == 200
+        assert response.get_json()["status"] == "ok"
+
+    for index, answer in enumerate(
+        (
+            "Synthetic Party A",
+            "Synthetic Party B",
+            "Pune Test City",
+            "11",
+        ),
+        start=1,
+    ):
+        response = _signed_whatsapp_post(
+            client,
+            _whatsapp_payload(
+                message_id=f"wamid.doc.answer.{index}",
+                text=answer,
+            ),
+        )
+        assert response.status_code == 200
+        assert response.get_json()["status"] == "ok"
+
+    confirmed = _signed_whatsapp_post(
+        client,
+        _whatsapp_payload(
+            message_id="wamid.doc.confirm",
+            interactive_id="doc_uat_confirm",
+        ),
+    )
+
+    assert confirmed.status_code == 200
+    assert confirmed.get_json()["status"] == "ok"
+    db = isolated_app_db()
+    try:
+        user = db.get(User, user_id)
+        order = db.query(DocumentOrder).one()
+        assert user.flow_state == app_module.NORMAL
+        assert order.state == "ANSWERS_CONFIRMED"
+        assert order.output_classification == "UAT_NON_LEGAL"
+        assert db.query(DocumentAnswerRevision).count() == 1
+        assert db.query(DocumentAuditEvent).count() == 2
+        assert db.query(Booking).count() == 0
+    finally:
+        db.close()
+
+    completed_copy = transport_spies["text"].call_args.args[1]
+    assert "no legal document" in completed_copy.lower()
 
 
 def _website_advocate_intake(*, summary="My employer has not paid my salary."):

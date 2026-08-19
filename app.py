@@ -33,6 +33,11 @@ from config import (
     WHATSAPP_VERIFY_TOKEN,
     BOOKING_TERMS_VERSION,
     CASE_BRIEF_CONSENT_VERSION,
+    DOCUMENT_STUDIO_ENABLED,
+    DOCUMENT_STUDIO_CONSENT_VERSION,
+    DOCUMENT_STUDIO_PRODUCT_ALLOWLIST,
+    DOCUMENT_STUDIO_TESTER_WA_IDS,
+    DOCUMENT_STUDIO_UAT_ONLY,
     BOOKING_PRICE,
     BOOKING_PRICE_CONFIGURED,
     CANCELLATION_POLICY_URL,
@@ -149,6 +154,28 @@ from services.legal_knowledge import (
     parse_guide_feedback_id,
     parse_guide_id,
     ui as legal_ui,
+)
+from services.document_studio_service import (
+    DOCUMENT_STUDIO_IDS,
+    DOCUMENT_STUDIO_QUESTION,
+    DOCUMENT_STUDIO_REVIEW,
+    START_ID_PREFIX as DOCUMENT_START_ID_PREFIX,
+    UAT_PRODUCT_CODE,
+    cancel_order as cancel_document_order,
+    confirm_answers as confirm_document_answers,
+    create_or_resume_uat_order,
+    current_question as current_document_question,
+    document_studio_available,
+    home_rows as document_home_rows,
+    landing_rows as document_landing_rows,
+    latest_draft as latest_document_draft,
+    parse_product_id,
+    product_rows as document_product_rows,
+    recent_orders_message,
+    reset_for_edit as reset_document_for_edit,
+    save_answer as save_document_answer,
+    summary_values as document_summary_values,
+    validate_answer as validate_document_answer,
 )
 from services.analytics_service import record_event
 from services.fulfillment_service import ensure_booking_fulfillment
@@ -288,6 +315,12 @@ BOOKING_KEYWORDS = {
     "consult",
     "consultation",
     "lawyer",
+}
+
+DOCUMENT_STUDIO_KEYWORDS = {
+    "document studio",
+    "document test",
+    "agreement test",
 }
 
 ADVOCATE_INTAKE_PREFIX = (
@@ -1150,6 +1183,15 @@ def clear_booking_draft(user) -> None:
 
 
 def send_home(wa_id, user) -> None:
+    if document_studio_available(user):
+        send_list_picker(
+            wa_id,
+            header=t(user, "home_service_header"),
+            body=t(user, "home_menu"),
+            section_title=t(user, "home_service_section"),
+            rows=document_home_rows(user, t),
+        )
+        return
     send_buttons(
         wa_id,
         t(user, "home_menu"),
@@ -1164,6 +1206,51 @@ def send_more_options(wa_id, user) -> None:
         body=t(user, "more_menu_body"),
         section_title=t(user, "more_menu_section"),
         rows=more_menu_rows(user),
+    )
+
+
+def send_document_studio_home(wa_id, user) -> None:
+    send_list_picker(
+        wa_id,
+        header=t(user, "document_landing_header"),
+        body=t(user, "document_landing_body"),
+        section_title=t(user, "document_landing_section"),
+        rows=document_landing_rows(user, t),
+    )
+
+
+def send_document_question(wa_id, user, order) -> None:
+    question = current_document_question(order)
+    send_buttons(
+        wa_id,
+        t(user, question["translation_key"]),
+        [
+            {
+                "id": DOCUMENT_STUDIO_IDS["cancel"],
+                "title": t(user, "document_uat_cancel")[:20],
+            }
+        ],
+    )
+
+
+def send_document_review(wa_id, user, order) -> None:
+    send_buttons(
+        wa_id,
+        t(user, "document_uat_review", **document_summary_values(order)),
+        [
+            {
+                "id": DOCUMENT_STUDIO_IDS["confirm"],
+                "title": t(user, "document_uat_confirm")[:20],
+            },
+            {
+                "id": DOCUMENT_STUDIO_IDS["edit"],
+                "title": t(user, "document_uat_edit")[:20],
+            },
+            {
+                "id": DOCUMENT_STUDIO_IDS["cancel"],
+                "title": t(user, "document_uat_cancel")[:20],
+            },
+        ],
     )
 
 
@@ -2076,7 +2163,9 @@ def _deployment_configuration_is_valid(
 
 
 def _production_configuration_is_valid() -> bool:
-    return _deployment_configuration_is_valid(
+    # The current Document Studio implementation is a synthetic-data UAT
+    # harness.  It must never be exposed by a production-labelled service.
+    return not DOCUMENT_STUDIO_ENABLED and _deployment_configuration_is_valid(
         payment_mode="live",
         payment_key_prefix="rzp_live_",
         require_legal_review=True,
@@ -2084,7 +2173,21 @@ def _production_configuration_is_valid() -> bool:
 
 
 def _staging_configuration_is_valid() -> bool:
-    return _deployment_configuration_is_valid(
+    document_studio_ok = bool(
+        not DOCUMENT_STUDIO_ENABLED
+        or (
+            DOCUMENT_STUDIO_UAT_ONLY
+            and DOCUMENT_STUDIO_CONSENT_VERSION
+            and DOCUMENT_STUDIO_PRODUCT_ALLOWLIST
+            and DOCUMENT_STUDIO_PRODUCT_ALLOWLIST <= {UAT_PRODUCT_CODE}
+            and DOCUMENT_STUDIO_TESTER_WA_IDS
+            and all(
+                tester_id.isdigit() and 7 <= len(tester_id) <= 15
+                for tester_id in DOCUMENT_STUDIO_TESTER_WA_IDS
+            )
+        )
+    )
+    return document_studio_ok and _deployment_configuration_is_valid(
         payment_mode="test",
         payment_key_prefix="rzp_test_",
         require_legal_review=False,
@@ -2427,7 +2530,238 @@ def webhook():
         # PERSISTENT HOME & SELF-SERVICE NAVIGATION
         # =================================================
         if user.welcome_sent and lower_text in HOME_KEYWORDS:
+            if user.flow_state in {
+                DOCUMENT_STUDIO_QUESTION,
+                DOCUMENT_STUDIO_REVIEW,
+            }:
+                # Keep the draft resumable but leave its active conversation
+                # state when the user explicitly returns home.
+                user.flow_state = NORMAL
+                db.commit()
             send_home(wa_id, user)
+            return jsonify({"status": "ok"}), 200
+
+        if (
+            interactive_id == HOME_BUTTON_IDS["documents"]
+            or lower_text in DOCUMENT_STUDIO_KEYWORDS
+        ):
+            if not document_studio_available(user):
+                send_text(wa_id, t(user, "document_studio_unavailable"))
+                send_home(wa_id, user)
+                return jsonify({"status": "document_studio_unavailable"}), 200
+            user.flow_state = NORMAL
+            db.commit()
+            send_document_studio_home(wa_id, user)
+            record_event("document_studio_uat_opened", user_id=user.id)
+            return jsonify({"status": "ok"}), 200
+
+        if interactive_id == DOCUMENT_STUDIO_IDS["back"]:
+            user.flow_state = NORMAL
+            db.commit()
+            send_home(wa_id, user)
+            return jsonify({"status": "ok"}), 200
+
+        if interactive_id == DOCUMENT_STUDIO_IDS["create"]:
+            if not document_studio_available(user):
+                send_text(wa_id, t(user, "document_studio_unavailable"))
+                return jsonify({"status": "document_studio_unavailable"}), 200
+            send_list_picker(
+                wa_id,
+                header=t(user, "document_product_header"),
+                body=t(user, "document_product_body"),
+                section_title=t(user, "document_product_section"),
+                rows=document_product_rows(user, t),
+            )
+            return jsonify({"status": "ok"}), 200
+
+        selected_document_product = parse_product_id(interactive_id)
+        if selected_document_product:
+            if not document_studio_available(user):
+                send_text(wa_id, t(user, "document_studio_unavailable"))
+                return jsonify({"status": "document_studio_unavailable"}), 200
+            send_buttons(
+                wa_id,
+                t(user, "document_uat_overview"),
+                [
+                    {
+                        "id": (
+                            f"{DOCUMENT_START_ID_PREFIX}"
+                            f"{selected_document_product}"
+                        ),
+                        "title": t(user, "document_start_uat")[:20],
+                    },
+                    {
+                        "id": DOCUMENT_STUDIO_IDS["back"],
+                        "title": t(user, "document_back_home")[:20],
+                    },
+                ],
+            )
+            return jsonify({"status": "ok"}), 200
+
+        started_document_product = parse_product_id(
+            interactive_id,
+            start=True,
+        )
+        if started_document_product:
+            if not document_studio_available(user):
+                send_text(wa_id, t(user, "document_studio_unavailable"))
+                return jsonify({"status": "document_studio_unavailable"}), 200
+            order = create_or_resume_uat_order(db, user.id)
+            user.flow_state = (
+                DOCUMENT_STUDIO_REVIEW
+                if order.current_step == "review"
+                else DOCUMENT_STUDIO_QUESTION
+            )
+            db.commit()
+            if user.flow_state == DOCUMENT_STUDIO_REVIEW:
+                send_document_review(wa_id, user, order)
+            else:
+                send_document_question(wa_id, user, order)
+            record_event(
+                "document_studio_uat_started",
+                {"product_code": started_document_product},
+                user_id=user.id,
+            )
+            return jsonify({"status": "ok"}), 200
+
+        if interactive_id == DOCUMENT_STUDIO_IDS["continue"]:
+            if not document_studio_available(user):
+                send_text(wa_id, t(user, "document_studio_unavailable"))
+                return jsonify({"status": "document_studio_unavailable"}), 200
+            order = latest_document_draft(db, user.id)
+            if not order:
+                send_text(wa_id, t(user, "document_uat_no_draft"))
+                send_document_studio_home(wa_id, user)
+                return jsonify({"status": "ok"}), 200
+            user.flow_state = (
+                DOCUMENT_STUDIO_REVIEW
+                if order.current_step == "review"
+                else DOCUMENT_STUDIO_QUESTION
+            )
+            db.commit()
+            if user.flow_state == DOCUMENT_STUDIO_REVIEW:
+                send_document_review(wa_id, user, order)
+            else:
+                send_document_question(wa_id, user, order)
+            return jsonify({"status": "ok"}), 200
+
+        if interactive_id == DOCUMENT_STUDIO_IDS["mine"]:
+            if not document_studio_available(user):
+                send_text(wa_id, t(user, "document_studio_unavailable"))
+                return jsonify({"status": "document_studio_unavailable"}), 200
+            send_text(wa_id, recent_orders_message(db, user.id))
+            return jsonify({"status": "ok"}), 200
+
+        if interactive_id == DOCUMENT_STUDIO_IDS["help"]:
+            if not document_studio_available(user):
+                send_text(wa_id, t(user, "document_studio_unavailable"))
+                return jsonify({"status": "document_studio_unavailable"}), 200
+            send_text(wa_id, t(user, "document_uat_help_text"))
+            return jsonify({"status": "ok"}), 200
+
+        if user.flow_state in {
+            DOCUMENT_STUDIO_QUESTION,
+            DOCUMENT_STUDIO_REVIEW,
+        } and interactive_id in set(HOME_BUTTON_IDS.values()):
+            # Home selections always win over an unfinished UAT draft. The
+            # draft remains available through Continue Test.
+            user.flow_state = NORMAL
+            db.commit()
+
+        if user.flow_state == DOCUMENT_STUDIO_QUESTION:
+            if not document_studio_available(user):
+                user.flow_state = NORMAL
+                db.commit()
+                send_text(wa_id, t(user, "document_studio_unavailable"))
+                send_home(wa_id, user)
+                return jsonify({"status": "document_studio_unavailable"}), 200
+            order = latest_document_draft(db, user.id)
+            if not order:
+                user.flow_state = NORMAL
+                db.commit()
+                send_text(wa_id, t(user, "document_uat_no_draft"))
+                send_home(wa_id, user)
+                return jsonify({"status": "ok"}), 200
+            if (
+                interactive_id == DOCUMENT_STUDIO_IDS["cancel"]
+                or lower_text in RESTART_KEYWORDS
+            ):
+                cancel_document_order(db, order)
+                user.flow_state = NORMAL
+                db.commit()
+                send_text(wa_id, t(user, "document_uat_cancelled"))
+                send_home(wa_id, user)
+                return jsonify({"status": "ok"}), 200
+            if interactive_id:
+                send_text(wa_id, t(user, "document_uat_answer_invalid"))
+                send_document_question(wa_id, user, order)
+                return jsonify({"status": "ok"}), 200
+            question = current_document_question(order)
+            answer = validate_document_answer(question["key"], text_body)
+            if answer is None:
+                send_text(wa_id, t(user, "document_uat_answer_invalid"))
+                send_document_question(wa_id, user, order)
+                return jsonify({"status": "ok"}), 200
+            review_ready = save_document_answer(order, answer)
+            user.flow_state = (
+                DOCUMENT_STUDIO_REVIEW
+                if review_ready
+                else DOCUMENT_STUDIO_QUESTION
+            )
+            db.commit()
+            if review_ready:
+                send_document_review(wa_id, user, order)
+            else:
+                send_document_question(wa_id, user, order)
+            return jsonify({"status": "ok"}), 200
+
+        if user.flow_state == DOCUMENT_STUDIO_REVIEW:
+            if not document_studio_available(user):
+                user.flow_state = NORMAL
+                db.commit()
+                send_text(wa_id, t(user, "document_studio_unavailable"))
+                send_home(wa_id, user)
+                return jsonify({"status": "document_studio_unavailable"}), 200
+            order = latest_document_draft(db, user.id)
+            if not order:
+                user.flow_state = NORMAL
+                db.commit()
+                send_text(wa_id, t(user, "document_uat_no_draft"))
+                send_home(wa_id, user)
+                return jsonify({"status": "ok"}), 200
+            if interactive_id == DOCUMENT_STUDIO_IDS["confirm"]:
+                confirm_document_answers(db, order)
+                user.flow_state = NORMAL
+                reference = order.public_ref
+                db.commit()
+                send_text(
+                    wa_id,
+                    t(user, "document_uat_completed", reference=reference),
+                )
+                record_event(
+                    "document_studio_uat_answers_confirmed",
+                    {"product_code": order.product_code},
+                    user_id=user.id,
+                )
+                send_home(wa_id, user)
+                return jsonify({"status": "ok"}), 200
+            if interactive_id == DOCUMENT_STUDIO_IDS["edit"]:
+                reset_document_for_edit(order)
+                user.flow_state = DOCUMENT_STUDIO_QUESTION
+                db.commit()
+                send_document_question(wa_id, user, order)
+                return jsonify({"status": "ok"}), 200
+            if (
+                interactive_id == DOCUMENT_STUDIO_IDS["cancel"]
+                or lower_text in RESTART_KEYWORDS
+            ):
+                cancel_document_order(db, order)
+                user.flow_state = NORMAL
+                db.commit()
+                send_text(wa_id, t(user, "document_uat_cancelled"))
+                send_home(wa_id, user)
+                return jsonify({"status": "ok"}), 200
+            send_document_review(wa_id, user, order)
             return jsonify({"status": "ok"}), 200
 
         if interactive_id in {

@@ -29,7 +29,7 @@ from config import (
 logger = logging.getLogger(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "nyaysetu.db")
-EXPECTED_SCHEMA_REVISION = "20260818_01"
+EXPECTED_SCHEMA_REVISION = "20260819_01"
 
 
 def _resolved_database_url(raw_url: str) -> URL:

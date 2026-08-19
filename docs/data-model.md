@@ -410,6 +410,20 @@ rollback, and data-governance plan authorizes an existing SQLite data import:
 10. Test signed webhooks, operator queues, reminders, reconciliation,
     maintenance dry-run, and rollback before live cutover.
 
+## Document Studio UAT tables in revision `20260819_01`
+
+- `document_orders` stores one resumable synthetic test workflow, its public
+  UAT reference, product/template identifiers, state, current step, draft JSON,
+  output classification, UAT flag and consent evidence.
+- `document_answer_revisions` stores immutable user-confirmed synthetic answer
+  snapshots with a monotonically increasing revision and SHA-256 content hash.
+- `document_audit_events` stores privacy-minimised state-transition evidence;
+  its details are empty in RC8.
+
+These are not production artifact tables. They contain no payment reference,
+storage key, download URL, signature, generated PDF/DOCX or advocate approval.
+The admin ledger excludes draft answers and user/contact identity.
+
 ## Future schema work
 
 - Booking status-transition/audit history.
