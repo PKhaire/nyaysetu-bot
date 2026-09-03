@@ -15,6 +15,7 @@ from sqlalchemy import func
 from config import (
     ANALYTICS_EVENT_TTL_DAYS,
     CASE_BRIEF_UNATTACHED_TTL_DAYS,
+    DOCUMENT_STUDIO_DRAFT_TTL_DAYS,
     OUTBOX_COMPLETED_TTL_DAYS,
     PAYMENT_LINK_TTL_MINUTES,
     PAYMENT_RECONCILIATION_LOOKBACK_DAYS,
@@ -28,6 +29,10 @@ from models import (
     BookingFulfillment,
     BookingStatus,
     CaseBrief,
+    DocumentAccessEvent,
+    DocumentAnswerRevision,
+    DocumentArtifact,
+    DocumentOrder,
     InboundMessageEvent,
     OutboxJob,
     PaymentReconciliation,
@@ -36,6 +41,8 @@ from models import (
     WebhookEvent,
     utc_now,
 )
+from services.document_artifact_vault import S3ArtifactVault
+from services.document_capacity_service import release_capacity
 
 
 DEFAULT_BATCH_SIZE = 500
@@ -43,6 +50,19 @@ MAX_BATCH_SIZE = 1_000
 
 _TERMINAL_FULFILLMENT_STATUSES = ("COMPLETED", "REFUNDED", "CANCELLED")
 _ACTIVE_SUPPORT_STATUSES = ("OPEN", "IN_PROGRESS", "WAITING_USER")
+_EXPIRABLE_DOCUMENT_STATES = (
+    "DRAFT",
+    "STARTED",
+    "ELIGIBILITY",
+    "DRAFTING",
+    "INELIGIBLE",
+    "ROUTED_OUT",
+    "CONFIRMED",
+    "PREVIEW_READY",
+    "PAYMENT_PENDING",
+    "CANCELLED",
+    "ABANDONED",
+)
 
 
 class MaintenanceError(RuntimeError):
@@ -199,6 +219,7 @@ def run_maintenance(
     batch_size: int = DEFAULT_BATCH_SIZE,
     now: datetime | None = None,
     session_factory: Callable[[], Any] | None = None,
+    artifact_vault_factory: Callable[[], Any] | None = None,
 ) -> dict[str, Any]:
     """Run one bounded maintenance transaction and return a PII-free report."""
 
@@ -215,6 +236,9 @@ def run_maintenance(
     outbox_cutoff = current - timedelta(days=OUTBOX_COMPLETED_TTL_DAYS)
     unattached_brief_cutoff = current - timedelta(
         days=CASE_BRIEF_UNATTACHED_TTL_DAYS
+    )
+    document_draft_cutoff = current - timedelta(
+        days=DOCUMENT_STUDIO_DRAFT_TTL_DAYS
     )
     booking_cutoff = current - timedelta(minutes=PAYMENT_LINK_TTL_MINUTES)
 
@@ -292,6 +316,125 @@ def run_maintenance(
             affected=unattached_briefs_affected,
             action="delete",
             retention_source="CASE_BRIEF_UNATTACHED_TTL_DAYS",
+        )
+
+        document_draft_query = (
+            db.query(DocumentOrder)
+            .filter(
+                DocumentOrder.payment_processed.is_(False),
+                DocumentOrder.state.in_(_EXPIRABLE_DOCUMENT_STATES),
+                DocumentOrder.updated_at <= document_draft_cutoff,
+            )
+            .order_by(DocumentOrder.updated_at.asc(), DocumentOrder.id.asc())
+        )
+        document_draft_ids, document_draft_more = _bounded_ids(
+            document_draft_query,
+            DocumentOrder.id,
+            batch_size,
+        )
+        document_drafts_affected = 0
+        if document_draft_ids and not dry_run:
+            expiring_document_orders = (
+                db.query(DocumentOrder)
+                .filter(
+                    DocumentOrder.id.in_(document_draft_ids),
+                    DocumentOrder.payment_processed.is_(False),
+                    DocumentOrder.state.in_(_EXPIRABLE_DOCUMENT_STATES),
+                    DocumentOrder.updated_at <= document_draft_cutoff,
+                )
+                .all()
+            )
+            for expiring_order in expiring_document_orders:
+                release_capacity(
+                    db,
+                    expiring_order,
+                    reason="DRAFT_RETENTION_EXPIRED",
+                )
+            db.query(DocumentAnswerRevision).filter(
+                DocumentAnswerRevision.document_order_id.in_(
+                    document_draft_ids
+                )
+            ).delete(synchronize_session=False)
+            document_drafts_affected = (
+                db.query(DocumentOrder)
+                .filter(
+                    DocumentOrder.id.in_(document_draft_ids),
+                    DocumentOrder.payment_processed.is_(False),
+                    DocumentOrder.state.in_(_EXPIRABLE_DOCUMENT_STATES),
+                    DocumentOrder.updated_at <= document_draft_cutoff,
+                )
+                .update(
+                    {
+                        DocumentOrder.state: "EXPIRED",
+                        DocumentOrder.current_step: "expired",
+                        DocumentOrder.draft_answers_json: "{}",
+                        DocumentOrder.active_revision_number: None,
+                        DocumentOrder.exception_code: "DRAFT_RETENTION_EXPIRED",
+                    },
+                    synchronize_session=False,
+                )
+            )
+        categories["document_studio_unpaid_drafts"] = _category_report(
+            eligible_ids=document_draft_ids,
+            more_remaining=document_draft_more,
+            dry_run=dry_run,
+            affected=document_drafts_affected,
+            action="expire_and_redact",
+            retention_source="DOCUMENT_STUDIO_DRAFT_TTL_DAYS",
+        )
+
+        document_artifact_query = (
+            db.query(DocumentArtifact)
+            .filter(
+                DocumentArtifact.state == "AVAILABLE",
+                DocumentArtifact.expires_at <= current,
+            )
+            .order_by(
+                DocumentArtifact.expires_at.asc(),
+                DocumentArtifact.id.asc(),
+            )
+        )
+        document_artifact_ids, document_artifact_more = _bounded_ids(
+            document_artifact_query,
+            DocumentArtifact.id,
+            batch_size,
+        )
+        document_artifacts_affected = 0
+        if document_artifact_ids and not dry_run:
+            vault = (artifact_vault_factory or S3ArtifactVault)()
+            artifacts = (
+                db.query(DocumentArtifact)
+                .filter(
+                    DocumentArtifact.id.in_(document_artifact_ids),
+                    DocumentArtifact.state == "AVAILABLE",
+                    DocumentArtifact.expires_at <= current,
+                )
+                .order_by(DocumentArtifact.id.asc())
+                .all()
+            )
+            for artifact in artifacts:
+                vault.delete(artifact.object_key)
+                artifact.state = "DELETED"
+                artifact.deleted_at = current
+                db.add(
+                    DocumentAccessEvent(
+                        document_order_id=artifact.document_order_id,
+                        document_artifact_id=artifact.id,
+                        actor_type="SYSTEM",
+                        actor_ref="maintenance",
+                        action="ARTIFACT_DELETE",
+                        decision="ALLOWED",
+                        reason_code="RETENTION_EXPIRED",
+                    )
+                )
+                document_artifacts_affected += 1
+        categories["document_studio_expired_artifacts"] = _category_report(
+            eligible_ids=document_artifact_ids,
+            more_remaining=document_artifact_more,
+            dry_run=dry_run,
+            affected=document_artifacts_affected,
+            action="delete_private_object_and_tombstone",
+            retention_source="DocumentArtifact.expires_at",
         )
 
         webhook_query = (
@@ -471,6 +614,9 @@ def run_maintenance(
                 "feedback",
                 "conversations",
                 "case_briefs_attached_to_bookings",
+                "document_studio_paid_order_evidence",
+                "document_studio_audit_events",
+                "document_studio_access_events",
                 "dead_or_failed_outbox_jobs",
                 "failed_or_unmatched_webhook_events",
                 "nonterminal_inbound_message_events",

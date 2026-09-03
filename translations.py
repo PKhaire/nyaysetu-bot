@@ -62,7 +62,7 @@ TRANSLATIONS = {
         
         "name_invalid": (
             "❌ Please enter a valid personal name.\n"
-            "Example: Prashant Keshav Khaire"
+            "Example: Rahul Sharma"
         ),
         
         "verify_details": "Please verify your details:",
@@ -430,7 +430,7 @@ TRANSLATIONS = {
         
         "name_invalid": (
             "❌ Kripya ek valid personal naam darj karein.\n"
-            "Udaharan: Prashant Keshav Khaire"
+            "Udaharan: Rahul Sharma"
         ),
         
         "verify_details": "Kripya apni details verify karein:",
@@ -796,7 +796,7 @@ TRANSLATIONS = {
         
         "name_invalid": (
             "❌ कृपया वैध वैयक्तिक नाव नोंदवा.\n"
-            "उदाहरण: Prashant Keshav Khaire"
+            "उदाहरण: Rahul Sharma"
         ),
         
         "verify_details": "कृपया आपली माहिती तपासा:",
@@ -1141,9 +1141,8 @@ TRANSLATIONS["mr"].update(
     }
 )
 
-# Document Studio is intentionally available only as a synthetic-data UAT
-# journey.  Keeping these keys together makes the release boundary explicit:
-# none of this copy promises generation, payment, signature, or download.
+# Document Studio product copy. Paid release remains fail-closed behind the
+# authenticated template-package gate; visibility is global, never per-user.
 _DOCUMENT_STUDIO_EN = {
     "home_service_header": "NyaySetu Services",
     "home_service_section": "Choose a service",
@@ -1151,68 +1150,70 @@ _DOCUMENT_STUDIO_EN = {
     "home_book_desc": "Paid advocate consultation",
     "home_more_desc": "Status, guides, support and privacy",
     "document_studio": "Document Studio",
-    "document_studio_desc": "Test a guided document journey",
+    "document_studio_desc": "Prepare a guided self-service draft",
     "document_studio_unavailable": (
         "Document Studio is not available in this environment. No document or "
         "payment has been created."
     ),
-    "document_landing_header": "Document Studio UAT",
+    "document_studio_capacity_reached": (
+        "Document Studio has reached today's drafting capacity. Your place was "
+        "not reserved and no payment was created. Please try again tomorrow."
+    ),
+    "document_landing_header": "Document Studio",
     "document_landing_body": (
-        "Staging test only. Use invented information. This flow does not create "
-        "a legal document, take payment, collect a signature, or provide a download."
+        "Answer a guided questionnaire, review your facts and prepare a "
+        "self-service draft. NyaySetu does not verify identity, title or facts."
     ),
-    "document_landing_section": "Test actions",
-    "document_create_test": "Start New Test",
-    "document_create_test_desc": "Try the guided UAT questionnaire",
-    "document_continue": "Continue Test",
-    "document_continue_desc": "Resume your latest unfinished test",
-    "document_my_tests": "My Test Records",
-    "document_my_tests_desc": "View recent UAT references and states",
-    "document_help": "UAT Help",
-    "document_help_desc": "Safety rules for this test flow",
-    "document_product_header": "Choose UAT Product",
-    "document_product_body": "Only one non-legal test schema is enabled.",
-    "document_product_section": "UAT schema",
-    "document_uat_product": "Agreement Journey Test",
-    "document_uat_product_desc": "Synthetic Maharashtra residence scenario",
+    "document_landing_section": "Document actions",
+    "document_create_test": "Create a Document",
+    "document_create_test_desc": "Start the guided questionnaire",
+    "document_continue": "Continue Draft",
+    "document_continue_desc": "Resume your latest saved answers",
+    "document_my_tests": "My Documents",
+    "document_my_tests_desc": "View document references and availability",
+    "document_help": "How It Works",
+    "document_help_desc": "Scope, exclusions, payment and delivery",
+    "document_product_header": "Choose a Document",
+    "document_product_body": "Select the self-service draft you need.",
+    "document_product_section": "Available drafts",
+    "document_uat_product": "Residential Leave & Licence",
+    "document_uat_product_desc": "Maharashtra, 11-month, English draft",
     "document_uat_overview": (
-        "UAT preview only. Enter invented party labels, a city, and a term. "
-        "This test is not a legal agreement or legal advice."
+        "For one adult licensor and one adult licensee, one completed "
+        "residential premises in Maharashtra, and an 11-month term. "
+        "Unsupported matters are routed to an advocate."
     ),
-    "document_start_uat": "Start UAT",
+    "document_start_uat": "Start Questionnaire",
     "document_back_home": "Back to Home",
-    "document_uat_party_a_prompt": (
-        "Enter an invented label for Party A (2-60 characters). Do not enter a real name."
-    ),
-    "document_uat_party_b_prompt": (
-        "Enter an invented label for Party B (2-60 characters). Do not enter a real name."
-    ),
-    "document_uat_city_prompt": (
-        "Enter a test city label (2-60 characters). Do not enter a full address."
-    ),
-    "document_uat_term_prompt": "Enter a test term in months from 1 to 60.",
-    "document_uat_answer_invalid": (
-        "That test value is invalid. Follow the stated limits and do not use real personal data."
-    ),
+    # Legacy key names are retained for compatible in-progress records. The
+    # customer-facing copy reflects the current controlled workflow.
+    "document_uat_party_a_prompt": "Enter Party A's full name (2-120 characters).",
+    "document_uat_party_b_prompt": "Enter Party B's full name (2-120 characters).",
+    "document_uat_city_prompt": "Enter the city or town of the premises.",
+    "document_uat_term_prompt": "Enter the term requested in months.",
+    "document_uat_answer_invalid": "That answer is invalid. Please follow the stated format.",
     "document_uat_review": (
-        "*Document Studio UAT review*\n\nReference: {reference}\nParty A: {party_a}\n"
+        "*Document Studio fact review*\n\nReference: {reference}\nParty A: {party_a}\n"
         "Party B: {party_b}\nCity: {city}\nTerm: {months} months\n\n"
-        "Confirming stores an auditable test-answer revision only. It does not create "
-        "a legal document, payment, signature, or download."
+        "Confirm only if every fact is accurate. Preview and payment remain blocked "
+        "unless all release and private-storage checks pass."
     ),
-    "document_uat_confirm": "Confirm Test",
+    "document_uat_confirm": "Confirm Facts",
     "document_uat_edit": "Edit Answers",
-    "document_uat_cancel": "Cancel Test",
+    "document_uat_cancel": "Cancel Draft",
     "document_uat_completed": (
-        "Test answers confirmed. Reference: {reference}. No legal document, payment, "
-        "signature, or download was created."
+        "Answers confirmed. Reference: {reference}. Follow the next message for "
+        "preview or release status."
     ),
-    "document_uat_cancelled": "Document Studio UAT test cancelled.",
-    "document_uat_no_draft": "No unfinished Document Studio UAT test was found.",
+    "document_uat_cancelled": "Document Studio draft cancelled.",
+    "document_uat_no_draft": "No unfinished Document Studio draft was found.",
     "document_uat_help_text": (
-        "Document Studio is under controlled staging testing. Use invented data only. "
-        "Do not enter names, phone numbers, addresses, identity numbers, bank data, "
-        "case documents, or confidential facts. No usable legal document is produced."
+        "The first product is an English self-service Maharashtra residential "
+        "Leave & Licence draft for the supported facts shown in the questionnaire. "
+        "Preview, payment and final files are enabled only after the exact template "
+        "package is approved and private storage is ready. Do not enter Aadhaar, PAN, "
+        "bank credentials, signatures or identity-document images. Stamping, signing, "
+        "registration and case-specific legal advice are outside this flow."
     ),
 }
 
@@ -1222,16 +1223,21 @@ TRANSLATIONS["hi"].update(
         **_DOCUMENT_STUDIO_EN,
         "home_service_section": "Service choose karein",
         "home_more_desc": "Status, guides, support aur privacy",
-        "document_studio_desc": "Guided document journey test karein",
-        "document_create_test": "Naya Test Shuru Karein",
-        "document_continue": "Test Continue Karein",
-        "document_my_tests": "Mere Test Records",
-        "document_start_uat": "UAT Shuru Karein",
+        "document_studio_desc": "Guided self-service draft taiyar karein",
+        "document_studio_capacity_reached": (
+            "Document Studio ki aaj ki drafting capacity poori ho gayi hai. "
+            "Aapka place reserve nahi hua aur koi payment nahi bana. Kripya "
+            "kal phir try karein."
+        ),
+        "document_create_test": "Document Banayein",
+        "document_continue": "Draft Continue Karein",
+        "document_my_tests": "Mere Documents",
+        "document_start_uat": "Questionnaire Shuru Karein",
         "document_back_home": "Home Par Jayein",
-        "document_uat_term_prompt": "Test term 1 se 60 months ke beech enter karein.",
-        "document_uat_confirm": "Test Confirm Karein",
+        "document_uat_term_prompt": "Maanga gaya term months mein enter karein.",
+        "document_uat_confirm": "Facts Confirm Karein",
         "document_uat_edit": "Answers Edit Karein",
-        "document_uat_cancel": "Test Cancel Karein",
+        "document_uat_cancel": "Draft Cancel Karein",
     }
 )
 TRANSLATIONS["mr"].update(
@@ -1240,16 +1246,21 @@ TRANSLATIONS["mr"].update(
         "home_service_header": "NyaySetu Seva",
         "home_service_section": "Seva nivda",
         "home_more_desc": "Status, guides, support ani privacy",
-        "document_studio_desc": "Guided document journey test kara",
-        "document_create_test": "Navin Test Suru Kara",
-        "document_continue": "Test Pudhe Chalu Theva",
-        "document_my_tests": "Maze Test Records",
-        "document_start_uat": "UAT Suru Kara",
+        "document_studio_desc": "Guided self-service draft tayar kara",
+        "document_studio_capacity_reached": (
+            "Document Studio chi aajchi drafting capacity purna zali aahe. "
+            "Tumchi jaga reserve zali nahi ani payment tayar zalele nahi. "
+            "Kripaya udya punha prayatna kara."
+        ),
+        "document_create_test": "Document Tayar Kara",
+        "document_continue": "Draft Pudhe Chalu Theva",
+        "document_my_tests": "Maze Documents",
+        "document_start_uat": "Questionnaire Suru Kara",
         "document_back_home": "Home Var Ja",
-        "document_uat_term_prompt": "Test term 1 te 60 mahinyanmadhye taka.",
-        "document_uat_confirm": "Test Confirm Kara",
+        "document_uat_term_prompt": "Magitlela kalavadhi mahinyanmadhye taka.",
+        "document_uat_confirm": "Facts Confirm Kara",
         "document_uat_edit": "Answers Edit Kara",
-        "document_uat_cancel": "Test Cancel Kara",
+        "document_uat_cancel": "Draft Cancel Kara",
     }
 )
 

@@ -1,4 +1,4 @@
-"""Safe, staging-only Document Studio workflow primitives.
+"""Legacy RC8 Document Studio harness retained for migration compatibility.
 
 This module deliberately does not generate a legal document, take payment,
 collect signatures, upload files, or create a public download.  It provides a
@@ -22,9 +22,6 @@ from config import (
     DOCUMENT_STUDIO_DRAFT_TTL_DAYS,
     DOCUMENT_STUDIO_ENABLED,
     DOCUMENT_STUDIO_PRODUCT_ALLOWLIST,
-    DOCUMENT_STUDIO_TESTER_WA_IDS,
-    DOCUMENT_STUDIO_UAT_ONLY,
-    ENV,
 )
 from models import (
     DocumentAnswerRevision,
@@ -78,15 +75,11 @@ _QUESTION_DEFINITIONS = (
 
 
 def document_studio_available(user=None) -> bool:
-    """Return whether the intentionally limited UAT feature may be exposed."""
+    """Return global legacy-product availability without user sampling."""
 
-    tester_wa_id = str(getattr(user, "whatsapp_id", "") or "").strip()
     return bool(
         DOCUMENT_STUDIO_ENABLED
-        and DOCUMENT_STUDIO_UAT_ONLY
-        and ENV in {"development", "test", "staging"}
         and UAT_PRODUCT_CODE in DOCUMENT_STUDIO_PRODUCT_ALLOWLIST
-        and tester_wa_id in DOCUMENT_STUDIO_TESTER_WA_IDS
     )
 
 

@@ -76,7 +76,8 @@ invalid JSON; `403` for invalid signatures; `413` for an oversized body; and
 
 ### `POST /payment/webhook`
 
-This endpoint accepts Razorpay `payment_link.paid` events.
+This endpoint accepts Razorpay `payment_link.paid` events for consultation
+bookings and Document Studio orders.
 
 The current implementation:
 
@@ -91,9 +92,10 @@ The current implementation:
    `IGNORED`) before continuing.
 5. Requires the signed event snapshot to contain a captured payment and paid
    payment-link entity.
-6. Resolves the booking by its stored Razorpay payment-link ID, then requires
-   INR and compares provider paise against that booking's stored amount, not
-   the current global price.
+6. Resolves exactly one consultation booking or Document Studio order by its
+   stored Razorpay payment-link ID, then requires INR and compares provider
+   paise against that record's snapshotted amount, not the current global
+   price.
 7. Outside the database transaction, independently fetches the current
    authenticated Payment Link and Payment resources. It then locks and
    revalidates the booking plus every matching payment/link review row in a
@@ -108,9 +110,11 @@ The current implementation:
 10. Preserves unmatched evidence and returns `503`. Invalid current evidence,
     amount/currency changes, or a different prior payment are durable review
     cases acknowledged with `202`; none marks the booking paid.
-11. Atomically marks an exact payment paid, updates the user, completes the
-    webhook event, creates the fulfilment work item, and inserts separate
-    outbox jobs.
+11. For a consultation, atomically marks the booking paid, updates the user,
+    completes the webhook event, creates the fulfilment work item, and inserts
+    separate outbox jobs. For a document order, atomically records payment,
+    renders and stores the exact final PDF/DOCX artifacts, completes the event,
+    and sends only short-lived owner download links.
 
 Duplicate completed events return `200` and do not repeat payment mutation or
 outbox insertion. A signed but non-final event returns `409`; payment conflicts
@@ -140,7 +144,7 @@ before/after values and the operator ID in `admin_audit_events`.
 | `GET/POST /admin/login`, `POST /admin/logout` | Browser session lifecycle |
 | `GET /admin/appointments` | Responsive appointment queue for paid-consultation operations |
 | `GET /admin/fulfillment-workflow` | Server-authoritative fulfilment transitions used by the console |
-| `GET /admin/metrics` | Aggregate product and operational counts, including inbound claims, fulfilment and reconciliation risk |
+| `GET /admin/metrics` | Aggregate product and operational counts, including current Document Studio capacity, inbound claims, fulfilment and reconciliation risk |
 | `GET /admin/support?limit=25&status=OPEN` | Support queue |
 | `PATCH /admin/support/<ticket_id>` | Assign, prioritize, resolve, or close a ticket; closing requires a resolution note |
 | `GET /admin/fulfillments?status=UNASSIGNED` | SLA-ordered paid-consultation queue |
@@ -158,6 +162,9 @@ before/after values and the operator ID in `admin_audit_events`.
 | `POST/DELETE /admin/availability/blackouts[...]` | Activate/deactivate date or slot blackouts |
 | `POST/DELETE /admin/availability/capacity[...]` | Activate/deactivate date or slot capacity overrides |
 | `GET /admin/audit` | Recent operator mutation audit |
+| `GET /admin/document-orders` | Privacy-minimised Document Studio order/artifact/release ledger plus current global daily-capacity snapshot |
+| `GET/POST /admin/document-template-release` | Read the exact manifest or append an authenticated decision for its exact hashes |
+| `POST /admin/document-template-release/revoke` | Append an audited revocation of the current exact release approval |
 
 These routes expose sensitive operational data. Keep them behind TLS and
 platform access controls. The console records a supplied operator identity but
@@ -421,6 +428,10 @@ The authoritative defaults and validation rules are in `config.py` and
   reminder template pairs plus catch-up/batch bounds.
 - Product trust: support SLA, privacy/terms/refund/cancellation URLs, consent
   versions, admin token, and AI safety settings.
+- Document Studio: global enable switch, allowlisted product, reviewed
+  non-zero price, consent version, draft/final/download TTLs, and a private S3
+  bucket/region/least-privilege credential set. There are deliberately no
+  tester-number, cohort, or percentage-rollout variables.
 
 Never put secrets in committed files, URLs, request logs, or analytics
 properties.
@@ -448,5 +459,9 @@ Before production traffic:
 - Amazon SES identity/domain, DKIM/SPF/DMARC, production access,
   least-privilege permission, configuration-set monitoring, recipients, and
   Meta templates are explicitly approved.
+- The exact Document Studio manifest and golden hashes have an unexpired,
+  unrevoked authenticated advocate approval; preview watermarking, exact
+  payment ownership, private owner-only downloads, access audit, and S3
+  retention deletion are exercised in staging.
 - Fresh-production backup/restore, staging test-transaction reconciliation,
   retention, privacy, refund, and support procedures are signed off.

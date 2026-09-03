@@ -191,26 +191,61 @@ CASE_BRIEF_CONSENT_VERSION = env_str(
     allow_empty=False,
 )
 DOCUMENT_STUDIO_ENABLED = env_bool("DOCUMENT_STUDIO_ENABLED", False)
-DOCUMENT_STUDIO_UAT_ONLY = env_bool("DOCUMENT_STUDIO_UAT_ONLY", True)
 DOCUMENT_STUDIO_CONSENT_VERSION = env_str(
     "DOCUMENT_STUDIO_CONSENT_VERSION",
-    "document-studio-uat-2026-08",
+    "document-studio-self-service-2026-08",
     allow_empty=False,
 )
 DOCUMENT_STUDIO_PRODUCT_ALLOWLIST = frozenset(
     env_csv(
         "DOCUMENT_STUDIO_PRODUCT_ALLOWLIST",
-        ("residential_agreement_mh_uat",),
+        ("mh_residential_leave_licence_11m_self_service",),
     )
-)
-DOCUMENT_STUDIO_TESTER_WA_IDS = frozenset(
-    env_csv("DOCUMENT_STUDIO_TESTER_WA_IDS", ())
 )
 DOCUMENT_STUDIO_DRAFT_TTL_DAYS = env_int(
     "DOCUMENT_STUDIO_DRAFT_TTL_DAYS",
     7,
     minimum=1,
     maximum=30,
+)
+DOCUMENT_STUDIO_DAILY_CAPACITY = env_int(
+    "DOCUMENT_STUDIO_DAILY_CAPACITY",
+    10,
+    minimum=1,
+    maximum=1000,
+)
+DOCUMENT_STUDIO_PRICE_INR = env_int(
+    "DOCUMENT_STUDIO_PRICE_INR",
+    0,
+    minimum=0,
+    maximum=100000,
+)
+DOCUMENT_STUDIO_FINAL_TTL_DAYS = env_int(
+    "DOCUMENT_STUDIO_FINAL_TTL_DAYS",
+    30,
+    minimum=1,
+    maximum=90,
+)
+DOCUMENT_STUDIO_DOWNLOAD_TTL_SECONDS = env_int(
+    "DOCUMENT_STUDIO_DOWNLOAD_TTL_SECONDS",
+    600,
+    minimum=300,
+    maximum=900,
+)
+DOCUMENT_STUDIO_S3_BUCKET = env_str("DOCUMENT_STUDIO_S3_BUCKET")
+DOCUMENT_STUDIO_S3_REGION = env_str(
+    "DOCUMENT_STUDIO_S3_REGION",
+    "ap-south-1",
+    allow_empty=False,
+)
+DOCUMENT_STUDIO_S3_ACCESS_KEY_ID = env_str(
+    "DOCUMENT_STUDIO_S3_ACCESS_KEY_ID"
+)
+DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY = env_str(
+    "DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY"
+)
+DOCUMENT_STUDIO_S3_ENDPOINT_URL = env_str(
+    "DOCUMENT_STUDIO_S3_ENDPOINT_URL"
 )
 LEGAL_CONTENT_VERSION = env_str(
     "LEGAL_CONTENT_VERSION",

@@ -164,11 +164,13 @@ shortcuts. These keywords open the landing list; they do not infer a product.
 The home message may mention document preparation only when at least one
 product is active.
 
-While `DOCUMENT_STUDIO_ENABLED=false`, the existing three-button home remains
-unchanged. Enabling the feature switches the home to the four-row list above.
-The flag also ignores contextual actions and returns a neutral unavailable
-message for direct/old action identifiers. A second product allowlist prevents
-an approved code deployment from publishing an unapproved legal template.
+RC9 retains one disabled-by-default global product switch and a product-code
+allowlist, but has no named-user control or sampling. When enabled, navigation
+is available to all users and release services return only immutable Template
+Versions with an exact authenticated, unexpired and non-revoked approval. A
+global suspension remains available for emergency legal, security, payment or
+operational response. Production has no tester-ID, customer-cohort or
+percentage gate.
 
 ## Success measures
 

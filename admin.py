@@ -52,6 +52,14 @@ from services.fulfillment_service import ensure_booking_fulfillment
 from services.payment_reconciliation_service import (
     lock_matching_payment_reconciliations,
 )
+from services.document_catalogue import resolve_product
+from services.document_capacity_service import capacity_snapshot
+from services.document_release_service import (
+    approval_for_product,
+    record_approval,
+    release_gate,
+    release_manifest,
+)
 
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -459,6 +467,7 @@ def metrics():
                     .scalar()
                     or 0
                 ),
+                "document_studio_capacity": capacity_snapshot(db),
             },
         }
         return jsonify(payload)
@@ -468,10 +477,10 @@ def metrics():
 
 @admin_bp.get("/document-orders")
 def document_orders():
-    """Expose privacy-minimised Document Studio UAT state to operators.
+    """Expose privacy-minimised Document Studio state to operators.
 
     Draft answers and user contact data are intentionally excluded. This is
-    an operational UAT ledger, not a document download endpoint.
+    an operational ledger, not a document download endpoint.
     """
 
     try:
@@ -483,14 +492,14 @@ def document_orders():
     try:
         orders = (
             db.query(DocumentOrder)
-            .filter(DocumentOrder.uat_only.is_(True))
             .order_by(DocumentOrder.id.desc())
             .limit(limit)
             .all()
         )
         return jsonify(
             {
-                "uat_only": True,
+                "scope": "all_document_orders",
+                "capacity": capacity_snapshot(db),
                 "items": [
                     {
                         "reference": order.public_ref,
@@ -500,6 +509,14 @@ def document_orders():
                         "current_step": order.current_step,
                         "output_classification": (
                             order.output_classification
+                        ),
+                        "release_status": order.release_status,
+                        "exception_code": order.exception_code,
+                        "payment_processed": bool(order.payment_processed),
+                        "final_available_until": (
+                            order.final_available_until.isoformat() + "Z"
+                            if order.final_available_until
+                            else None
                         ),
                         "created_at": (
                             order.created_at.isoformat()
@@ -516,6 +533,128 @@ def document_orders():
                 ],
             }
         )
+    finally:
+        db.close()
+
+
+@admin_bp.route("/document-template-release", methods=["GET", "POST"])
+def document_template_release():
+    """Inspect or append the authenticated release decision for RC9."""
+
+    db = SessionLocal()
+    try:
+        product = resolve_product()
+        manifest = release_manifest(product)
+        current = approval_for_product(db, product)
+        if request.method == "GET":
+            gate = release_gate(db, product)
+            return jsonify(
+                {
+                    "manifest": manifest,
+                    "gate": {
+                        "allowed": gate.allowed,
+                        "reason_code": gate.reason_code,
+                    },
+                    "approval": (
+                        {
+                            "id": current.id,
+                            "reviewer_name": current.reviewer_name,
+                            "reviewer_enrolment_ref": (
+                                current.reviewer_enrolment_ref
+                            ),
+                            "decision": current.decision,
+                            "conditions": current.conditions,
+                            "authenticated_method": (
+                                current.authenticated_method
+                            ),
+                            "authenticated_at": (
+                                current.authenticated_at.isoformat() + "Z"
+                            ),
+                            "next_review_at": (
+                                current.next_review_at.isoformat() + "Z"
+                            ),
+                        }
+                        if current
+                        else None
+                    ),
+                }
+            )
+
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            payload = request.form.to_dict()
+        operator = _operator_id()
+        try:
+            approval = record_approval(
+                db,
+                payload,
+                recorded_by=operator,
+            )
+        except ValueError as exc:
+            db.rollback()
+            return jsonify({"error": str(exc)}), 400
+        _audit(
+            db,
+            action="DOCUMENT_TEMPLATE_RELEASE_RECORDED",
+            target_type="document_template_approval",
+            target_id=approval.id,
+            before={},
+            after={
+                "product_code": approval.product_code,
+                "template_version": approval.template_version,
+                "template_aggregate_hash": (
+                    approval.template_aggregate_hash
+                ),
+                "decision": approval.decision,
+                "authenticated_at": approval.authenticated_at,
+                "next_review_at": approval.next_review_at,
+            },
+        )
+        db.commit()
+        gate = release_gate(db, product)
+        return jsonify(
+            {
+                "ok": True,
+                "approval_id": approval.id,
+                "gate": {
+                    "allowed": gate.allowed,
+                    "reason_code": gate.reason_code,
+                },
+            }
+        ), 201
+    finally:
+        db.close()
+
+
+@admin_bp.post("/document-template-release/revoke")
+def revoke_document_template_release():
+    """Fail closed immediately; reactivation requires a new package."""
+
+    db = SessionLocal()
+    try:
+        product = resolve_product()
+        approval = approval_for_product(db, product)
+        if (
+            approval is None
+            or approval.decision != "APPROVED"
+            or approval.revoked_at is not None
+        ):
+            return jsonify({"error": "active_approval_not_found"}), 404
+        before = {
+            "decision": approval.decision,
+            "revoked_at": approval.revoked_at,
+        }
+        approval.revoked_at = utc_now()
+        _audit(
+            db,
+            action="DOCUMENT_TEMPLATE_RELEASE_REVOKED",
+            target_type="document_template_approval",
+            target_id=approval.id,
+            before=before,
+            after={"revoked_at": approval.revoked_at},
+        )
+        db.commit()
+        return jsonify({"ok": True, "gate": "blocked"})
     finally:
         db.close()
 

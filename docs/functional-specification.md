@@ -3,9 +3,10 @@
 ## Product purpose
 
 NyaySetu is a WhatsApp-first legal-information and consultation-booking
-assistant for users in India. It helps a user understand a common legal topic,
-prepare a matter summary, choose a consultation slot, pay through Razorpay, and
-track the resulting appointment.
+and governed self-service document assistant for users in India. It helps a
+user understand a common legal topic, prepare a matter summary, choose a
+consultation slot, pay through Razorpay, track the resulting appointment, and
+prepare an eligible legal draft from a reviewed deterministic template.
 
 The AI and built-in guides provide general legal information, not
 representation, an advocate assignment, an emergency response, or a guarantee
@@ -44,15 +45,23 @@ of outcome.
 - Manual receipt resend; optional automatic PDF receipt delivery.
 - Optional deduplicated 24-hour/2-hour consultation reminders, disabled until
   exact Meta-approved language/template pairs are configured.
+- A globally visible Document Studio entry when the product-level switch is
+  enabled; there is no tester phone list, cohort, or percentage sampling.
+- A privacy-minimised eligibility screen and 43-question English questionnaire
+  for the Maharashtra 11-month residential leave-and-licence self-service
+  draft. Ineligible or out-of-scope matters are routed out before payment.
+- Immutable answer revisions, an exact advocate-approved release gate,
+  watermarked preview PDF, exact Razorpay payment verification, and private
+  time-limited PDF/DOCX delivery.
 
 ## Main navigation
 
-Immediately after language selection, the bot offers Ask AI or Book a
-consultation. The persistent home menu, available through `home`, `menu`, or
-`help`, presents:
+Immediately after language selection, the bot presents the persistent home
+menu, also available through `home`, `menu`, or `help`:
 
-- Ask AI.
+- Ask Legal Question.
 - Book a consultation.
+- Document Studio, when the global product switch is enabled.
 - More options.
 
 More options contains appointment status, consultation preparation, legal
@@ -67,6 +76,60 @@ Sending a home/menu/help greeting after onboarding redisplays navigation
 without clearing the current flow. A pending payment remains protected: the
 bot shows payment/status/support options instead of silently starting a second
 booking.
+
+WhatsApp permits at most three reply buttons. NyaySetu therefore renders the
+four top-level choices as a list rather than hiding Document Studio behind a
+tester-only route. Disabling the single product switch removes Document Studio
+for everyone; enabling it makes the same catalogue visible to every user. A
+separate release gate still blocks preview/payment if the exact deployed
+template package lacks a current authenticated advocate approval.
+
+## Document Studio flow
+
+The first governed product is
+`mh_residential_leave_licence_11m_self_service`: an English self-service draft
+for a Maharashtra residential leave-and-licence arrangement of up to 11
+months, between one adult individual licensor and one adult individual
+licensee, both acting for themselves, for completed residential premises.
+
+1. The user opens Document Studio, sees the scope, price, retention notice and
+   safety boundary, and chooses to create or resume a draft. A new draft
+   atomically reserves one of the globally shared India-business-day slots;
+   resuming the same draft does not consume another slot. When capacity is
+   full, no order or payment is created and the user is asked to try tomorrow.
+2. Eligibility questions run before detailed intake. A company/firm party,
+   representative/POA arrangement, multiple party, minor, non-residential or
+   under-construction premises, non-Maharashtra property, disputed title,
+   security/loan arrangement, or other excluded condition routes the user to
+   support/consultation without creating a payment entitlement and releases an
+   unconsumed slot. Explicit cancellation and retention expiry do the same.
+3. The eligible user completes the bounded 43-question questionnaire. Answers
+   are validated against the catalogue schema and saved as immutable numbered
+   revisions; the working draft can be resumed for seven days.
+4. The review message presents material terms and versioned consent. NyaySetu
+   does not request Aadhaar/PAN numbers, bank credentials, identity documents,
+   signatures, evidence files, or scans in this flow.
+5. Confirming answers first checks the exact release package. Monetisation is
+   denied unless the latest append-only decision for the deployed aggregate
+   hash is `APPROVED`, unrevoked, within its review window, and matches the
+   deterministic golden PDF and DOCX hashes.
+   Confirmation also consumes the reservation; later payment failure does not
+   erase drafting work already counted against that day's limit.
+6. An approved release produces a watermarked preview PDF in private object
+   storage, then creates a Razorpay link for the price snapshotted on the
+   order. A user message claiming payment is never accepted as proof.
+7. The signed payment event is followed by authenticated current Payment Link
+   and Payment reads. Exact identity, notes, amount, INR currency, one full
+   capture, payment ID, and zero-refund state must all match the order.
+8. Exact payment renders immutable final PDF and DOCX artifacts. Only
+   short-lived presigned download URLs are sent to the owning WhatsApp user.
+   Final artifacts expire after 30 days; every permitted or denied access and
+   retention deletion is audited without logging document contents.
+
+The generated files are an automated self-service draft, not advocate-signed
+work and not a substitute for registration, stamping, witnessing, legal
+advice, or a title/identity check. The exact scope and questionnaire contract
+are maintained under `docs/document-studio/`.
 
 ## AI flow
 
@@ -280,6 +343,9 @@ Implemented:
   `python -m jobs.reconcile_payments --limit 100`.
 - Template-gated reminder scheduling: `python -m jobs.consultation_reminders`.
 - Bounded retention and operational-risk maintenance.
+- Governed Document Studio catalogue, questionnaire, release-approval ledger,
+  deterministic PDF/DOCX rendering, private object storage, exact payment
+  confirmation, download audit, and retention deletion.
 - Category and privacy-minimised product analytics events.
 - Compatibility daily-appointment email command.
 
@@ -328,6 +394,9 @@ reminder scheduling, and daily maintenance/risk reporting.
   only for explicitly approved terminal operational categories.
 - Source-cited legal retrieval or jurisdiction-specific case-law research.
 - Distributed rate limiting across multiple web processes.
+- Advocate signature/e-signing, identity/KYC verification, evidence uploads,
+  registration/stamp-duty execution, multi-party/POA/company document flows,
+  and documents outside the one approved RC9 catalogue item.
 
 ## Rollout acceptance criteria
 
@@ -366,5 +435,9 @@ production provisioning gates below are complete:
   evaluation.
 - Amazon SES identity/domain, email-authentication records, production access,
   monitored configuration set, recipients, and any Meta templates are approved.
+- Document Studio remains disabled until the exact RC9 hashes have a current
+  authenticated licensed-Maharashtra-advocate approval, a non-zero reviewed
+  price, a private S3 bucket with least-privilege credentials and lifecycle
+  controls, and tested preview/payment/final-download/expiry evidence.
 
 Passing unit tests alone does not satisfy these external acceptance criteria.

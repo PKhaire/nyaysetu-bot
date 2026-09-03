@@ -2,15 +2,18 @@
 
 ## Delivery strategy
 
-Document Studio is delivered behind a feature flag and product allowlist. Each
-phase has a reviewable result and does not require enabling public sales.
+Document Studio is built and proven without enabling public sales. Staging may
+use synthetic-only UAT controls. Production publication is bound to an
+immutable, advocate-approved Template Version and is universal for all
+eligible users; it has no named-user, cohort or percentage rollout gate.
 
 ## Phase 0: design and legal discovery
 
 Deliverables:
 
 - Approved design baseline in this package.
-- One selected pilot product and one reviewed-path product.
+- One selected self-service pilot product. The advocate-review add-on remains
+  a separately designed future product, not a first-release dependency.
 - Advocate workshop notes converted into the catalogue standard.
 - Customer wording, classification, price, revisions and refund decision.
 - Retention/legal-hold decision and data-flow/privacy update.
@@ -25,25 +28,28 @@ it, what the output means, or how long NyaySetu retains it.
   revisions, reviews, artifacts, access and audit events.
 - Implement state transition and authorization services.
 - Implement schema validation with synthetic examples.
-- Add a disabled `DOCUMENT_STUDIO_ENABLED=false` configuration gate.
-- Add the feature-gated four-row home list, Document Studio landing-list
+- Keep the disabled staging/UAT gate while replacing the synthetic harness;
+  do not carry named-user gating into production.
+- Add the catalogue-driven four-row home list, Document Studio landing-list
   contract and safe keyword routing. Prove the current three-button home is
-  unchanged while the feature flag/product allowlist is disabled.
+  unchanged while no production Template Version is active.
 - Add admin aggregate/queue views without document contents in list endpoints.
 
 Exit gate: migration/model parity, unit tests and transition/property tests
 pass on SQLite test compatibility and disposable PostgreSQL.
 
-RC8 implementation status: the safe subset is complete. Revision
-`20260819_01` creates resumable UAT orders, immutable answer revisions and
-privacy-minimised audit events. The feature-gated four-row home list and one
-synthetic questionnaire are implemented. Product/version/review/artifact
-models, rendering and storage remain later phases and must not be inferred
-from the UAT tables.
+RC9 implementation status: phases 1-4 are represented in code and automated
+tests. Revision `20260827_01` extends the initial ledger with exact payment,
+append-only release decisions, private artifact metadata and access audits;
+revision `20260903_01` adds global daily-capacity reservations.
+External S3 provisioning, authenticated exact-template approval and full
+staging evidence remain release gates and must not be inferred from code
+presence.
 
 ## Phase 2: deterministic rendering
 
-- Add pinned `python-docx` and update lock/SBOM.
+- Generate deterministic minimal OOXML directly, avoiding an unnecessary
+  runtime dependency, and keep lock/SBOM consistent.
 - Build canonical render model and one pilot template package.
 - Generate watermarked PDF and final PDF/DOCX locally.
 - Bundle reviewed fonts and license notices.
@@ -65,11 +71,12 @@ source template.
 Exit gate: no public object/ACL, no PII object key, deletion/recovery evidence
 and AWS budget alerts are recorded.
 
-## Phase 4: payment and advocate operations
+## Phase 4: payment and document operations
 
 - Create document-specific Razorpay order/link references and price snapshots.
 - Reuse the existing exact provider-evidence and idempotency principles.
-- Add document review assignment, revision, approve/reject and issuance audit.
+- Add paid self-service release, exception and refund-review operations. Do not
+  add advocate review, signature or issuance to this first product.
 - Add manual WhatsApp/contact delivery workflow.
 - Add exception queues for payment, render, review and delivery failure.
 
@@ -79,11 +86,13 @@ changed answers/templates invalidate approval; manual operations are auditable.
 ## Phase 5: staging/UAT
 
 - Deploy only to isolated staging with synthetic data and Razorpay test mode.
-- Activate one product for an internal allowlist.
+- Exercise the globally visible product in isolated staging with synthetic
+  facts only; the release gate remains unpublished until exact approval.
 - Run full user, advocate and operator journeys.
 - Exercise backup/recovery, lifecycle, credential rotation and template
   suspension.
-- Perform accessibility, mobile, Hindi/Marathi UI and support rehearsals.
+- Perform English accessibility, mobile and support rehearsals. Hindi/Marathi
+  questionnaire and legal text require separately reviewed later versions.
 - Reconcile storage inventory with metadata and verify no files enter logs.
 
 Exit gate: signed acceptance evidence for product, legal content, privacy,
@@ -97,7 +106,7 @@ security, payment, operations and rollback.
 - Back/edit/resume, normalization and repeated-party boundaries.
 - Ineligible, urgent, conflicting and unknown-answer paths.
 - Preview watermark/classification and exact confirmed fact summary.
-- Review approve/revise/reject and stale-approval invalidation.
+- Template suspension, stale-preview invalidation and paid-release recovery.
 - PDF/DOCX parity, page headers, numbering, defined terms and fonts.
 - Delivery, re-download, expiry and deleted-document behavior.
 
@@ -154,7 +163,8 @@ security, payment, operations and rollback.
 - [ ] Razorpay live/ReKYC and product pricing are approved.
 - [ ] Production migration is rehearsed and rollback-compatible.
 - [ ] CI, dependency audit, migration check and synthetic UAT pass.
-- [ ] Product is initially allowlisted with a daily order/capacity limit.
+- [ ] The exact approved version is activated globally with a global daily
+  capacity limit and emergency suspension control.
 - [ ] Advocate staffing, SLA and manual fallback are confirmed.
 - [ ] Support can suspend sales and resolve paid exceptions.
 - [ ] Monitoring covers payment, render, review, delivery and overdue deletion.
@@ -164,10 +174,14 @@ security, payment, operations and rollback.
 
 1. Deploy disabled code and migrations.
 2. Verify readiness and unchanged consultation/payment behavior.
-3. Enable for named internal UAT identities in Razorpay test mode.
-4. Enable one product for a small controlled production cohort.
-5. Review every order manually during the observation window.
-6. Increase capacity only after payment, content, delivery, support and deletion
+3. Complete synthetic staging UAT in Razorpay test mode without publishing the
+   candidate version.
+4. Verify deployed questionnaire/clause/golden-output hashes equal the
+   advocate-approved candidate.
+5. Activate that exact version globally for all eligible users with a bounded
+   daily capacity; do not use tester or customer flags.
+6. Review operational evidence during the observation window.
+7. Increase capacity only after payment, content, delivery, support and deletion
    evidence are clean.
 
 ## Rollback

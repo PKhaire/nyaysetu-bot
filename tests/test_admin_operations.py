@@ -759,7 +759,7 @@ def test_availability_and_payment_review_mutations_are_audited(
         db.close()
 
 
-def test_document_studio_uat_ledger_excludes_answers_and_contact_data(
+def test_document_studio_ledger_excludes_answers_and_contact_data(
     client,
     admin_db,
 ):
@@ -776,15 +776,19 @@ def test_document_studio_uat_ledger_excludes_answers_and_contact_data(
             DocumentOrder(
                 public_ref="DSU-ADMIN01",
                 user_id=user.id,
-                product_code="residential_agreement_mh_uat",
-                template_version="uat-schema-2026-08-v1",
-                state="DRAFT",
-                current_step="party_b_label",
-                draft_answers_json=(
-                    '{"party_a_label":"Do Not Expose This Answer"}'
+                product_code=(
+                    "mh_residential_leave_licence_11m_self_service"
                 ),
-                output_classification="UAT_NON_LEGAL",
-                uat_only=True,
+                template_version="mh-ll-11m-self-service-2026-08-v1",
+                state="DRAFTING",
+                current_step="licensee_full_name",
+                draft_answers_json=(
+                    '{"licensor_full_name":"Do Not Expose This Answer"}'
+                ),
+                output_classification="SELF_SERVICE_DRAFT",
+                uat_only=False,
+                release_status="CANDIDATE",
+                exception_code="AWAITING_EXACT_APPROVAL",
             )
         )
         db.commit()
@@ -795,15 +799,24 @@ def test_document_studio_uat_ledger_excludes_answers_and_contact_data(
 
     assert response.status_code == 200
     payload = response.get_json()
-    assert payload["uat_only"] is True
+    assert payload["scope"] == "all_document_orders"
+    assert payload["capacity"]["limit"] == 10
+    assert payload["capacity"]["used"] == 0
+    assert payload["capacity"]["remaining"] == 10
     assert payload["items"] == [
         {
             "reference": "DSU-ADMIN01",
-            "product_code": "residential_agreement_mh_uat",
-            "template_version": "uat-schema-2026-08-v1",
-            "state": "DRAFT",
-            "current_step": "party_b_label",
-            "output_classification": "UAT_NON_LEGAL",
+            "product_code": (
+                "mh_residential_leave_licence_11m_self_service"
+            ),
+            "template_version": "mh-ll-11m-self-service-2026-08-v1",
+            "state": "DRAFTING",
+            "current_step": "licensee_full_name",
+            "output_classification": "SELF_SERVICE_DRAFT",
+            "release_status": "CANDIDATE",
+            "exception_code": "AWAITING_EXACT_APPROVAL",
+            "payment_processed": False,
+            "final_available_until": None,
             "created_at": payload["items"][0]["created_at"],
             "updated_at": payload["items"][0]["updated_at"],
         }

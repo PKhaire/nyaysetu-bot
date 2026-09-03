@@ -392,11 +392,11 @@ class CaseBrief(Base):
 
 
 # =========================================================
-# DOCUMENT STUDIO (STAGING UAT FOUNDATION)
+# DOCUMENT STUDIO
 # =========================================================
 
 class DocumentOrder(Base):
-    """A resumable Document Studio workflow without generated output."""
+    """A resumable, product-bound Document Studio order."""
 
     __tablename__ = "document_orders"
 
@@ -411,17 +411,84 @@ class DocumentOrder(Base):
     product_code = Column(String(80), nullable=False, index=True)
     template_version = Column(String(64), nullable=False)
     state = Column(String(32), nullable=False, default="DRAFT", index=True)
-    current_step = Column(String(64), nullable=False, default="party_a_label")
+    current_step = Column(String(64), nullable=False, default="property_state")
     draft_answers_json = Column(Text, nullable=False, default="{}")
     output_classification = Column(
         String(32),
         nullable=False,
-        default="UAT_NON_LEGAL",
+        default="SELF_SERVICE_DRAFT",
     )
-    uat_only = Column(Boolean, nullable=False, default=True)
+    uat_only = Column(Boolean, nullable=False, default=False)
     consent_version = Column(String(64), nullable=True)
     consented_at = Column(DateTime, nullable=True)
+    active_revision_number = Column(Integer, nullable=True)
+    schema_hash = Column(String(64), nullable=True)
+    template_hash = Column(String(64), nullable=True)
+    preview_manifest_hash = Column(String(64), nullable=True)
+    price_minor = Column(Integer, nullable=True)
+    currency = Column(String(3), nullable=False, default="INR")
+    payment_token = Column(String(64), nullable=True, unique=True, index=True)
+    razorpay_payment_link_id = Column(
+        String(128),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
+    razorpay_payment_id = Column(
+        String(128),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
+    payment_processed = Column(Boolean, nullable=False, default=False)
+    paid_at = Column(DateTime, nullable=True)
+    release_status = Column(
+        String(32),
+        nullable=False,
+        default="CANDIDATE",
+    )
+    exception_code = Column(String(64), nullable=True)
+    final_available_until = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, default=utc_now)
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+
+class DocumentCapacityReservation(Base):
+    """Auditable allocation from one global Document Studio business day."""
+
+    __tablename__ = "document_capacity_reservations"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "document_order_id",
+            name="uq_document_capacity_order",
+        ),
+        Index(
+            "idx_document_capacity_day_status",
+            "business_date",
+            "status",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    document_order_id = Column(
+        Integer,
+        ForeignKey("document_orders.id"),
+        nullable=False,
+        index=True,
+    )
+    business_date = Column(Date, nullable=False, index=True)
+    capacity_limit = Column(Integer, nullable=False)
+    status = Column(String(16), nullable=False, default="RESERVED")
+    release_reason = Column(String(64), nullable=True)
+    reserved_at = Column(DateTime, nullable=False, default=utc_now)
+    consumed_at = Column(DateTime, nullable=True)
+    released_at = Column(DateTime, nullable=True)
     updated_at = Column(
         DateTime,
         nullable=False,
@@ -488,6 +555,123 @@ class DocumentAuditEvent(Base):
     from_state = Column(String(32), nullable=True)
     to_state = Column(String(32), nullable=True)
     details_json = Column(Text, nullable=False, default="{}")
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+class DocumentTemplateApproval(Base):
+    """Authenticated internal evidence for one immutable template package."""
+
+    __tablename__ = "document_template_approvals"
+
+    __table_args__ = (
+        Index(
+            "idx_document_template_approval_package_history",
+            "product_code",
+            "template_version",
+            "template_aggregate_hash",
+            "authenticated_at",
+        ),
+        Index(
+            "idx_document_template_approval_active",
+            "product_code",
+            "decision",
+            "revoked_at",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    product_code = Column(String(80), nullable=False, index=True)
+    template_version = Column(String(64), nullable=False)
+    reviewer_name = Column(String(160), nullable=False)
+    reviewer_enrolment_ref = Column(String(160), nullable=False)
+    authority_statement = Column(Text, nullable=False)
+    decision = Column(String(24), nullable=False)
+    conditions = Column(Text, nullable=True)
+    template_aggregate_hash = Column(String(64), nullable=False)
+    golden_pdf_hash = Column(String(64), nullable=False)
+    golden_docx_hash = Column(String(64), nullable=False)
+    authenticated_method = Column(String(80), nullable=False)
+    authenticated_at = Column(DateTime, nullable=False)
+    next_review_at = Column(DateTime, nullable=False)
+    recorded_by = Column(String(120), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+    revoked_at = Column(DateTime, nullable=True)
+
+
+class DocumentArtifact(Base):
+    """Metadata for one immutable artifact; bytes live in private storage."""
+
+    __tablename__ = "document_artifacts"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "document_order_id",
+            "revision_number",
+            "artifact_kind",
+            name="uq_document_artifact_order_revision_kind",
+        ),
+        Index(
+            "idx_document_artifact_expiry",
+            "state",
+            "expires_at",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    public_ref = Column(String(32), nullable=False, unique=True, index=True)
+    document_order_id = Column(
+        Integer,
+        ForeignKey("document_orders.id"),
+        nullable=False,
+        index=True,
+    )
+    revision_number = Column(Integer, nullable=False)
+    artifact_kind = Column(String(24), nullable=False)
+    state = Column(String(24), nullable=False, default="AVAILABLE")
+    storage_provider = Column(String(24), nullable=False, default="S3")
+    bucket = Column(String(255), nullable=False)
+    object_key = Column(String(700), nullable=False, unique=True)
+    content_type = Column(String(120), nullable=False)
+    size_bytes = Column(Integer, nullable=False)
+    content_hash = Column(String(64), nullable=False)
+    manifest_hash = Column(String(64), nullable=False)
+    renderer_version = Column(String(64), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    deleted_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+class DocumentAccessEvent(Base):
+    """Privacy-minimised authorization and lifecycle evidence."""
+
+    __tablename__ = "document_access_events"
+
+    __table_args__ = (
+        Index(
+            "idx_document_access_order_created",
+            "document_order_id",
+            "created_at",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    document_order_id = Column(
+        Integer,
+        ForeignKey("document_orders.id"),
+        nullable=False,
+        index=True,
+    )
+    document_artifact_id = Column(
+        Integer,
+        ForeignKey("document_artifacts.id"),
+        nullable=True,
+        index=True,
+    )
+    actor_type = Column(String(24), nullable=False)
+    actor_ref = Column(String(120), nullable=False)
+    action = Column(String(48), nullable=False)
+    decision = Column(String(24), nullable=False)
+    reason_code = Column(String(64), nullable=False)
     created_at = Column(DateTime, nullable=False, default=utc_now)
 
 

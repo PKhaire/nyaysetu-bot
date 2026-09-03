@@ -1,8 +1,11 @@
 # NyaySetu Document Studio
 
-Status: design baseline plus an RC8 staging-only synthetic UAT harness. No
-legal output, payment, signature, file upload, S3 object or public download is
-created by the implemented harness.
+Status: RC9 controlled implementation complete in the repository. Global menu
+visibility, eligibility, deterministic questionnaire/rendering, exact payment,
+private artifact storage, short-lived downloads and retention controls are
+implemented. Production publication remains blocked until the exact candidate
+package receives authenticated advocate approval and storage/payment evidence
+passes.
 
 ## Decision summary
 
@@ -51,6 +54,16 @@ Choose product
 | [Catalogue standard](05-catalogue-and-template-standard.md) | How document products and clauses are approved |
 | [Delivery plan](06-implementation-test-launch.md) | Phases, tests, rollout gates and rollback |
 | [Dependencies and cost](07-dependencies-and-cost.md) | Mandatory/optional dependencies and cost controls |
+| [Source register](08-source-register.md) | Primary law, official guidance, provider constraints and review duties |
+| [First product specification](09-residential-leave-license-mh-product-spec.md) | Exact V1 scope, eligibility and artifact contract |
+| [Questionnaire contract](10-residential-leave-license-questionnaire.md) | Stable fields, validation, derivation and confirmation evidence |
+| [Clause catalogue](11-residential-leave-license-clause-catalogue.md) | Clause intent, variables, branches and advocate decisions |
+| [Retention register](12-data-retention-and-processing-register.md) | Purpose, location, retention trigger and deletion control by data class |
+| [Implementation contract](13-implementation-contract.md) | Deep module interfaces, provider seams, invariants and test evidence |
+| [Advocate review pack](14-advocate-review-pack.md) | Per-version content approval and activation record |
+| [V1 legal-drafting decisions](15-v1-legal-drafting-decision-record.md) | Conservative selected terms, route-outs, limitations and final human gate |
+| [Candidate agreement template](16-residential-leave-license-candidate-template.md) | Exact English candidate prose and renderer-token contract for authentication |
+| [ADR 0001](../adr/0001-document-studio-publication-and-artifact-contract.md) | Universal publication and preview/payment/final binding decision |
 
 ## Non-negotiable launch principles
 
@@ -67,17 +80,26 @@ Choose product
 - Development and UAT use synthetic people, addresses, account numbers and
   disputes only.
 
-## Required approval before implementation
+## Required approval before publication
 
-Approval of this design baseline authorizes engineering work but does not
-approve any legal template. Template approval is a separate, per-version
-advocate decision recorded using the standard in this package.
+Approval of this design baseline authorized engineering work but does not
+approve any legal template. Template approval is a separate, per-version,
+authenticated advocate decision recorded using the standard in this package.
 
-## Implemented UAT boundary
+## Implemented RC9 boundary
 
-RC8 implements only the navigation and answer-capture slice described in
-[the RC8 release notes](../RELEASE_NOTES_2026-08-19_RC8.md). It uses one
-synthetic allowlisted product, persists resumable test drafts, stores an
-immutable confirmed-answer revision, and emits privacy-minimised audit events.
-The complete V1 flow above remains the future product design, not current
-customer functionality.
+RC9 implements the controlled workflow described in
+[the RC9 release notes](../RELEASE_NOTES_2026-08-27_RC9.md). Once the global
+switch is enabled, the same Document Studio menu is visible to every user; no
+named-user UAT allowlist exists. Eligibility, answer confirmation,
+deterministic watermarked preview, exact test-payment verification, private
+final PDF/DOCX generation, owner-authorized download and bounded deletion are
+implemented behind fail-closed release controls.
+
+The current advocate review pack remains blank and the decision record says
+authentication is pending. Therefore the exact template is not `ACTIVE` and
+preview/payment/final release must remain blocked. Repository implementation,
+synthetic testing, a submitted packet or a verbal/general green signal is not
+legal-template approval. Production can expose only an exact authenticated,
+unexpired and non-revoked package to every eligible user under
+[ADR 0001](../adr/0001-document-studio-publication-and-artifact-contract.md).

@@ -39,26 +39,18 @@ def _session_factory():
     )
 
 
-def test_uat_availability_is_restricted_to_explicit_testers(monkeypatch):
+def test_legacy_uat_availability_is_global_not_user_sampled(monkeypatch):
     allowed = User(whatsapp_id="919900001111")
     denied = User(whatsapp_id="919900002222")
     monkeypatch.setattr(studio, "DOCUMENT_STUDIO_ENABLED", True)
-    monkeypatch.setattr(studio, "DOCUMENT_STUDIO_UAT_ONLY", True)
-    monkeypatch.setattr(studio, "ENV", "staging")
     monkeypatch.setattr(
         studio,
         "DOCUMENT_STUDIO_PRODUCT_ALLOWLIST",
         frozenset({studio.UAT_PRODUCT_CODE}),
     )
-    monkeypatch.setattr(
-        studio,
-        "DOCUMENT_STUDIO_TESTER_WA_IDS",
-        frozenset({allowed.whatsapp_id}),
-    )
-
     assert studio.document_studio_available(allowed) is True
-    assert studio.document_studio_available(denied) is False
-    assert studio.document_studio_available() is False
+    assert studio.document_studio_available(denied) is True
+    assert studio.document_studio_available() is True
 
 
 def test_uat_answers_are_resumable_and_confirmed_as_immutable_revision():

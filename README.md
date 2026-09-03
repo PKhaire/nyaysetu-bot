@@ -12,16 +12,23 @@ manipulative retention patterns or imply a lawyer-client relationship.
 ## What the service includes
 
 - Multilingual WhatsApp onboarding and a persistent home menu.
-- A feature-gated Document Studio UAT path for authorised staging testers. It
-  stores synthetic questionnaire answers only; it does not generate legal
-  documents, take payment, accept uploads, sign, or issue downloads.
+- A globally visible Document Studio entry when the product switch is enabled;
+  it never samples users or depends on tester phone numbers. The first product
+  uses an atomic global daily capacity, bounded eligibility checks, a deterministic questionnaire, a
+  watermarked preview, exact Razorpay payment verification, and private final
+  PDF/DOCX delivery. Preview, payment and release fail closed unless the exact
+  template package has authenticated advocate approval and private storage is
+  ready.
 - Consent-gated AI information with deterministic safety checks and local
   fallback content.
 - Guided legal category, district, date, and capacity-aware slot selection.
 - A privacy-minimised structured case brief, document-availability checklist,
   urgency/safety cue, and versioned consent before appointment selection.
-- No document upload or storage: users retain their original files and only
-  state which document types are available.
+- Consultation intake accepts no evidence or identity-document upload: users
+  retain original files and only state which document types are available.
+  Document Studio likewise accepts no Aadhaar, PAN, bank credential,
+  signature or identity-document upload; it stores only generated artifacts in
+  private object storage for the configured availability window.
 - A review step before creating a Razorpay payment link.
 - Signed and idempotent Meta and Razorpay webhook processing. Payment
   entitlement additionally requires exact, current Razorpay Payment Link and
@@ -52,6 +59,7 @@ Meta Cloud API --> Flask webhook --> SQLAlchemy --> PostgreSQL
                          +--> local/OpenAI/Claude information provider
                          +--> Razorpay payment links and signed webhook
                          +--> Amazon SES v2 notifications
+                         +--> private S3 generated-artifact vault
 ```
 
 SQLite is a development fallback. A managed PostgreSQL database is a production
@@ -274,7 +282,7 @@ untested working tree.
 ## Fresh database release gate
 
 The repository includes production baseline `20260729_01` and current head
-`20260818_01`. Render runs
+`20260903_01`. Render runs
 `python -m alembic -c alembic.ini upgrade head` before the web release, and
 staging and production readiness require the current head. Automatic
 `create_all()` is disabled by default in both environments and remains only a

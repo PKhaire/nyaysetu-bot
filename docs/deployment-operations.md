@@ -391,7 +391,7 @@ SQLite data:
 ## Legacy SQLite import contingency (not authorised for this launch)
 
 Production uses baseline revision `20260729_01` and current head
-`20260818_01`; automatic `create_all()` is disabled and `/health/ready`
+`20260903_01`; automatic `create_all()` is disabled and `/health/ready`
 requires the expected head. The baseline is additive and contains
 compatibility/backfill logic for pre-Alembic databases.
 The following utility is retained only for a separately approved future
@@ -409,7 +409,7 @@ not a recurring sync:
   retain an untouched restore copy.
 - Prepare a separate working backup at Alembic head, then create the frozen
   import artifact from that working copy with the SQLite backup mechanism.
-  The utility requires the source and target to have revision `20260818_01`
+  The utility requires the source and target to have revision `20260903_01`
   and the full current table/column shape.
 - The source must be a regular non-symlink file with no adjacent `-wal`,
   `-journal`, or `-shm` sidecar. It is opened immutable/read-only and checked
@@ -538,8 +538,9 @@ explicit consistency design.
 
 Every later schema-changing release must add a frozen, reviewed Alembic
 revision and rehearse upgrade, compatibility rollback, and re-upgrade. Never
-edit revisions `20260729_01` or `20260818_01` after either has been applied to
-a shared environment.
+edit any applied revision, including `20260729_01`, `20260818_01`,
+`20260819_01`, `20260827_01`, or `20260903_01`, after it has reached a shared
+environment.
 
 ## Webhook configuration
 
@@ -1106,30 +1107,58 @@ and provider intake as the incident/cutover procedure requires.
 - After rotating `AI_SAFETY_IDENTIFIER_SECRET`, expect provider safety
   identifiers to change; document the privacy/abuse-monitoring impact.
 
-## Document Studio RC8 staging UAT
+## Document Studio RC9 controlled staging release
 
-The Blueprint deliberately keeps `DOCUMENT_STUDIO_ENABLED=false`. To exercise
-RC8 on the existing staging service, set all of the following and redeploy:
+The Blueprint deliberately keeps `DOCUMENT_STUDIO_ENABLED=false`. Enabling it
+publishes the menu entry to every WhatsApp user; there is no tester-number
+allowlist or per-user sampling. Keep the service labelled `staging`, use only
+synthetic facts and Razorpay test mode, and configure all of the following:
 
 ```text
 ENV=staging
 DOCUMENT_STUDIO_ENABLED=true
-DOCUMENT_STUDIO_UAT_ONLY=true
-DOCUMENT_STUDIO_CONSENT_VERSION=document-studio-uat-2026-08
-DOCUMENT_STUDIO_PRODUCT_ALLOWLIST=residential_agreement_mh_uat
-DOCUMENT_STUDIO_TESTER_WA_IDS=<comma-separated test numbers with country code>
+DOCUMENT_STUDIO_CONSENT_VERSION=document-studio-self-service-2026-08
+DOCUMENT_STUDIO_PRODUCT_ALLOWLIST=mh_residential_leave_licence_11m_self_service
 DOCUMENT_STUDIO_DRAFT_TTL_DAYS=7
+DOCUMENT_STUDIO_DAILY_CAPACITY=10
+DOCUMENT_STUDIO_FINAL_TTL_DAYS=30
+DOCUMENT_STUDIO_DOWNLOAD_TTL_SECONDS=600
+DOCUMENT_STUDIO_PRICE_INR=<approved positive test amount>
+DOCUMENT_STUDIO_S3_BUCKET=<private staging bucket>
+DOCUMENT_STUDIO_S3_REGION=ap-south-1
+DOCUMENT_STUDIO_S3_ACCESS_KEY_ID=<scoped staging credential>
+DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY=<scoped staging credential>
 RAZORPAY_MODE=test
 ```
 
-Use synthetic data only. Verify `/health/ready` reports `ok=true` with schema
-`20260819_01`. The UAT flow must not generate a legal document, payment,
-booking, signature, file upload, S3 object or download. The protected
-`GET /admin/document-orders` endpoint is metadata-only.
+Before enabling the switch:
 
-After testing, set `DOCUMENT_STUDIO_ENABLED=false`, redeploy, and verify the
-original three-button home. Production readiness deliberately fails if this
-UAT flag is enabled on a production-labelled service.
+1. Create a staging-only S3 bucket with Block Public Access, default
+   encryption, versioning/lifecycle appropriate to the approved retention,
+   and an IAM identity limited to the Document Studio object prefix. Do not
+   reuse the SES sender credential.
+2. Record an authenticated licensed-Maharashtra-advocate decision for the
+   exact questionnaire, template aggregate, renderer, golden PDF and golden
+   DOCX hashes. The blank review pack or a verbal/general approval is not an
+   activation record. A mismatch, rejection, revocation or expired review
+   blocks preview/payment/final release.
+3. Set the approved price and the matching Razorpay test keys/webhook secret.
+4. Apply Alembic head and require `/health/ready` to report `ok=true`,
+   PostgreSQL and schema `20260903_01`.
+
+The supported first product is a self-service English 11-month Maharashtra
+residential leave-and-licence draft for one adult individual licensor and one
+adult individual licensee acting for themselves. Ineligible, unusual,
+disputed or uncertain facts route to an advocate before preview or payment.
+The workflow never accepts Aadhaar, PAN, bank credentials, signature images or
+identity-document/evidence uploads. A paid final artifact is generated only
+from the exact confirmed answer revision and approved template version.
+
+Run the boundary scenarios in `docs/document-studio/06-implementation-test-launch.md`,
+including interrupted resume, cross-user download denial, expired links,
+duplicate/mismatched/refunded payment evidence, renderer parity, retention
+cleanup and approval revocation. Disable the switch after staging evidence is
+captured; enabling staging does not authorize production publication.
 
 ## Known operational limitations
 
@@ -1137,8 +1166,10 @@ UAT flag is enabled on a production-labelled service.
   but real live-data backup/restore, working-copy upgrade, import/reconciliation,
   and rollback results remain external release evidence. Revision
   `20260729_01` registers the baseline, `20260818_01` adds case-brief and
-  manual-handover operations, and `20260819_01` adds the staging-only Document
-  Studio UAT ledger. Do not rewrite applied revision files.
+  manual-handover operations, `20260819_01` adds the initial Document Studio
+  ledger, and `20260827_01` adds the controlled RC9 payment, approval,
+  artifact and access-audit model. Revision `20260903_01` adds global daily
+  capacity reservations. Do not rewrite applied revision files.
 - Per-user/global limits cover early menu, support, media, and paid-flow
   branches and deduplicate notices, but their state and some other abuse
   controls remain process-local.

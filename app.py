@@ -35,9 +35,12 @@ from config import (
     CASE_BRIEF_CONSENT_VERSION,
     DOCUMENT_STUDIO_ENABLED,
     DOCUMENT_STUDIO_CONSENT_VERSION,
+    DOCUMENT_STUDIO_DAILY_CAPACITY,
+    DOCUMENT_STUDIO_PRICE_INR,
     DOCUMENT_STUDIO_PRODUCT_ALLOWLIST,
-    DOCUMENT_STUDIO_TESTER_WA_IDS,
-    DOCUMENT_STUDIO_UAT_ONLY,
+    DOCUMENT_STUDIO_S3_ACCESS_KEY_ID,
+    DOCUMENT_STUDIO_S3_BUCKET,
+    DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY,
     BOOKING_PRICE,
     BOOKING_PRICE_CONFIGURED,
     CANCELLATION_POLICY_URL,
@@ -89,6 +92,7 @@ from models import (
     CategoryAnalytics,
     BookingStatus,
     CaseBrief,
+    DocumentOrder,
     Feedback,
     InboundMessageEvent,
     PaymentReconciliation,
@@ -155,27 +159,40 @@ from services.legal_knowledge import (
     parse_guide_id,
     ui as legal_ui,
 )
-from services.document_studio_service import (
+from services.document_studio_rc9_service import (
     DOCUMENT_STUDIO_IDS,
     DOCUMENT_STUDIO_QUESTION,
     DOCUMENT_STUDIO_REVIEW,
     START_ID_PREFIX as DOCUMENT_START_ID_PREFIX,
-    UAT_PRODUCT_CODE,
     cancel_order as cancel_document_order,
     confirm_answers as confirm_document_answers,
-    create_or_resume_uat_order,
+    create_or_resume_order,
     current_question as current_document_question,
     document_studio_available,
     home_rows as document_home_rows,
     landing_rows as document_landing_rows,
     latest_draft as latest_document_draft,
+    latest_order as latest_document_order,
+    order_routed_out as document_order_routed_out,
+    parse_answer_id as parse_document_answer_id,
     parse_product_id,
     product_rows as document_product_rows,
     recent_orders_message,
     reset_for_edit as reset_document_for_edit,
+    review_message as document_review_message,
     save_answer as save_document_answer,
-    summary_values as document_summary_values,
     validate_answer as validate_document_answer,
+)
+from services.document_catalogue import PRODUCT_CODE as DOCUMENT_PRODUCT_CODE
+from services.document_capacity_service import DocumentStudioCapacityExhausted
+from services.document_release_service import release_gate as document_release_gate
+from services.document_payment_service import validate_current_document_capture
+from services.document_workflow import (
+    apply_verified_payment as apply_verified_document_payment,
+    build_preview as build_document_preview,
+    download_links_for_user as document_download_links_for_user,
+    preview_link_for_user as document_preview_link_for_user,
+    request_payment as request_document_payment,
 )
 from services.analytics_service import record_event
 from services.fulfillment_service import ensure_booking_fulfillment
@@ -1221,22 +1238,33 @@ def send_document_studio_home(wa_id, user) -> None:
 
 def send_document_question(wa_id, user, order) -> None:
     question = current_document_question(order)
-    send_buttons(
-        wa_id,
-        t(user, question["translation_key"]),
-        [
+    options = list(question.get("options") or ())
+    if options:
+        buttons = [
+            {
+                "id": f"doc_answer::{question['key']}::{code}",
+                "title": str(label)[:20],
+            }
+            for code, label in options[:3]
+        ]
+    else:
+        buttons = [
             {
                 "id": DOCUMENT_STUDIO_IDS["cancel"],
                 "title": t(user, "document_uat_cancel")[:20],
             }
-        ],
+        ]
+    send_buttons(
+        wa_id,
+        str(question["prompt"]),
+        buttons,
     )
 
 
 def send_document_review(wa_id, user, order) -> None:
     send_buttons(
         wa_id,
-        t(user, "document_uat_review", **document_summary_values(order)),
+        document_review_message(order),
         [
             {
                 "id": DOCUMENT_STUDIO_IDS["confirm"],
@@ -2163,9 +2191,20 @@ def _deployment_configuration_is_valid(
 
 
 def _production_configuration_is_valid() -> bool:
-    # The current Document Studio implementation is a synthetic-data UAT
-    # harness.  It must never be exposed by a production-labelled service.
-    return not DOCUMENT_STUDIO_ENABLED and _deployment_configuration_is_valid(
+    document_studio_ok = bool(
+        not DOCUMENT_STUDIO_ENABLED
+        or (
+            DOCUMENT_STUDIO_CONSENT_VERSION
+            and DOCUMENT_STUDIO_PRODUCT_ALLOWLIST
+            == {DOCUMENT_PRODUCT_CODE}
+            and DOCUMENT_STUDIO_DAILY_CAPACITY > 0
+            and DOCUMENT_STUDIO_PRICE_INR > 0
+            and DOCUMENT_STUDIO_S3_BUCKET
+            and len(DOCUMENT_STUDIO_S3_ACCESS_KEY_ID) >= 16
+            and len(DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY) >= 32
+        )
+    )
+    return document_studio_ok and _deployment_configuration_is_valid(
         payment_mode="live",
         payment_key_prefix="rzp_live_",
         require_legal_review=True,
@@ -2176,15 +2215,10 @@ def _staging_configuration_is_valid() -> bool:
     document_studio_ok = bool(
         not DOCUMENT_STUDIO_ENABLED
         or (
-            DOCUMENT_STUDIO_UAT_ONLY
-            and DOCUMENT_STUDIO_CONSENT_VERSION
+            DOCUMENT_STUDIO_CONSENT_VERSION
             and DOCUMENT_STUDIO_PRODUCT_ALLOWLIST
-            and DOCUMENT_STUDIO_PRODUCT_ALLOWLIST <= {UAT_PRODUCT_CODE}
-            and DOCUMENT_STUDIO_TESTER_WA_IDS
-            and all(
-                tester_id.isdigit() and 7 <= len(tester_id) <= 15
-                for tester_id in DOCUMENT_STUDIO_TESTER_WA_IDS
-            )
+            == {DOCUMENT_PRODUCT_CODE}
+            and DOCUMENT_STUDIO_DAILY_CAPACITY > 0
         )
     )
     return document_studio_ok and _deployment_configuration_is_valid(
@@ -2238,6 +2272,31 @@ def health_ready():
         configuration_ok = _staging_configuration_is_valid()
     else:
         configuration_ok = True
+    document_release = None
+    if (
+        DOCUMENT_STUDIO_ENABLED
+        and database.get("ok")
+        and schema_ok
+    ):
+        release_db = SessionLocal()
+        try:
+            gate = document_release_gate(release_db)
+            document_release = {
+                "ok": gate.allowed,
+                "reason_code": gate.reason_code,
+            }
+        except Exception:
+            logger.exception("Document Studio release readiness check failed")
+            document_release = {
+                "ok": False,
+                "reason_code": "RELEASE_CHECK_FAILED",
+            }
+        finally:
+            release_db.close()
+        if ENV == "production":
+            configuration_ok = bool(
+                configuration_ok and document_release["ok"]
+            )
     ready = bool(
         database["ok"]
         and database_compatible
@@ -2256,6 +2315,7 @@ def health_ready():
                     "expected": EXPECTED_SCHEMA_REVISION,
                 },
                 "configuration": "ok" if configuration_ok else "incomplete",
+                "document_studio_release": document_release,
             }
         ),
         200 if ready else 503,
@@ -2552,7 +2612,7 @@ def webhook():
             user.flow_state = NORMAL
             db.commit()
             send_document_studio_home(wa_id, user)
-            record_event("document_studio_uat_opened", user_id=user.id)
+            record_event("document_studio_opened", user_id=user.id)
             return jsonify({"status": "ok"}), 200
 
         if interactive_id == DOCUMENT_STUDIO_IDS["back"]:
@@ -2581,14 +2641,20 @@ def webhook():
                 return jsonify({"status": "document_studio_unavailable"}), 200
             send_buttons(
                 wa_id,
-                t(user, "document_uat_overview"),
+                (
+                    "Prepare an English self-service draft for one "
+                    "11-month residential leave-and-licence arrangement "
+                    "in Maharashtra. NyaySetu does not verify identity, "
+                    "title or authority. Ineligible or disputed matters "
+                    "are routed to consultation before payment."
+                ),
                 [
                     {
                         "id": (
                             f"{DOCUMENT_START_ID_PREFIX}"
                             f"{selected_document_product}"
                         ),
-                        "title": t(user, "document_start_uat")[:20],
+                        "title": "Check eligibility",
                     },
                     {
                         "id": DOCUMENT_STUDIO_IDS["back"],
@@ -2606,7 +2672,22 @@ def webhook():
             if not document_studio_available(user):
                 send_text(wa_id, t(user, "document_studio_unavailable"))
                 return jsonify({"status": "document_studio_unavailable"}), 200
-            order = create_or_resume_uat_order(db, user.id)
+            try:
+                order = create_or_resume_order(db, user.id)
+            except DocumentStudioCapacityExhausted:
+                db.rollback()
+                send_text(
+                    wa_id,
+                    t(user, "document_studio_capacity_reached"),
+                )
+                record_event(
+                    "document_studio_capacity_exhausted",
+                    user_id=user.id,
+                )
+                send_document_studio_home(wa_id, user)
+                return jsonify(
+                    {"status": "document_studio_capacity_reached"}
+                ), 200
             user.flow_state = (
                 DOCUMENT_STUDIO_REVIEW
                 if order.current_step == "review"
@@ -2618,7 +2699,7 @@ def webhook():
             else:
                 send_document_question(wa_id, user, order)
             record_event(
-                "document_studio_uat_started",
+                "document_studio_started",
                 {"product_code": started_document_product},
                 user_id=user.id,
             )
@@ -2650,21 +2731,53 @@ def webhook():
                 send_text(wa_id, t(user, "document_studio_unavailable"))
                 return jsonify({"status": "document_studio_unavailable"}), 200
             send_text(wa_id, recent_orders_message(db, user.id))
+            newest_order = latest_document_order(db, user.id)
+            if newest_order and newest_order.state == "FINAL_AVAILABLE":
+                link_result = document_download_links_for_user(
+                    db,
+                    newest_order,
+                    user,
+                )
+                if link_result.ok:
+                    links = link_result.value
+                    db.commit()
+                    send_text(
+                        wa_id,
+                        "Fresh download links (valid briefly):\n"
+                        f"PDF: {links['FINAL_PDF']}\n"
+                        f"Editable DOCX: {links['FINAL_DOCX']}",
+                    )
+                else:
+                    db.rollback()
+                    send_text(
+                        wa_id,
+                        "The final files are no longer available. Contact "
+                        "NyaySetu support with the document reference.",
+                    )
             return jsonify({"status": "ok"}), 200
 
         if interactive_id == DOCUMENT_STUDIO_IDS["help"]:
             if not document_studio_available(user):
                 send_text(wa_id, t(user, "document_studio_unavailable"))
                 return jsonify({"status": "document_studio_unavailable"}), 200
-            send_text(wa_id, t(user, "document_uat_help_text"))
+            send_text(
+                wa_id,
+                "Document Studio collects only the facts needed for the "
+                "selected draft. Do not send Aadhaar, PAN, bank details, "
+                "signatures or identity documents. You review a watermarked "
+                "preview before payment. Final PDF and DOCX are released "
+                "only when the exact legal template, payment and private "
+                "storage checks pass. Stamping, signing and registration "
+                "remain external steps.",
+            )
             return jsonify({"status": "ok"}), 200
 
         if user.flow_state in {
             DOCUMENT_STUDIO_QUESTION,
             DOCUMENT_STUDIO_REVIEW,
         } and interactive_id in set(HOME_BUTTON_IDS.values()):
-            # Home selections always win over an unfinished UAT draft. The
-            # draft remains available through Continue Test.
+            # Home selections always win over an unfinished document draft. The
+            # draft remains available through Continue Draft.
             user.flow_state = NORMAL
             db.commit()
 
@@ -2692,7 +2805,17 @@ def webhook():
                 send_text(wa_id, t(user, "document_uat_cancelled"))
                 send_home(wa_id, user)
                 return jsonify({"status": "ok"}), 200
-            if interactive_id:
+            parsed_answer = parse_document_answer_id(interactive_id)
+            if parsed_answer:
+                answer_key, raw_answer = parsed_answer
+                question = current_document_question(order)
+                if answer_key != question["key"]:
+                    send_text(wa_id, t(user, "document_uat_answer_invalid"))
+                    send_document_question(wa_id, user, order)
+                    return jsonify({"status": "ok"}), 200
+                text_body = raw_answer
+                interactive_id = None
+            elif interactive_id:
                 send_text(wa_id, t(user, "document_uat_answer_invalid"))
                 send_document_question(wa_id, user, order)
                 return jsonify({"status": "ok"}), 200
@@ -2702,7 +2825,28 @@ def webhook():
                 send_text(wa_id, t(user, "document_uat_answer_invalid"))
                 send_document_question(wa_id, user, order)
                 return jsonify({"status": "ok"}), 200
-            review_ready = save_document_answer(order, answer)
+            review_ready = save_document_answer(order, answer, db=db)
+            if document_order_routed_out(order):
+                reference = order.public_ref
+                reason = order.exception_code
+                user.flow_state = NORMAL
+                db.commit()
+                send_text(
+                    wa_id,
+                    "This matter falls outside the safe self-service scope, "
+                    "so no document or payment has been created. An advocate "
+                    f"can review it through Book Consultation. Reference: {reference}",
+                )
+                record_event(
+                    "document_studio_routed_out",
+                    {
+                        "product_code": order.product_code,
+                        "reason_code": reason,
+                    },
+                    user_id=user.id,
+                )
+                send_home(wa_id, user)
+                return jsonify({"status": "document_studio_routed_out"}), 200
             user.flow_state = (
                 DOCUMENT_STUDIO_REVIEW
                 if review_ready
@@ -2730,16 +2874,88 @@ def webhook():
                 send_home(wa_id, user)
                 return jsonify({"status": "ok"}), 200
             if interactive_id == DOCUMENT_STUDIO_IDS["confirm"]:
-                confirm_document_answers(db, order)
+                try:
+                    confirm_document_answers(db, order)
+                except DocumentStudioCapacityExhausted:
+                    # A pre-capacity-migration draft can reach confirmation
+                    # without a reservation. Keep it resumable and fail closed
+                    # if today's global allocation is already full.
+                    db.rollback()
+                    user.flow_state = NORMAL
+                    db.commit()
+                    send_text(
+                        wa_id,
+                        t(user, "document_studio_capacity_reached"),
+                    )
+                    record_event(
+                        "document_studio_capacity_exhausted",
+                        user_id=user.id,
+                    )
+                    send_document_studio_home(wa_id, user)
+                    return jsonify(
+                        {"status": "document_studio_capacity_reached"}
+                    ), 200
                 user.flow_state = NORMAL
                 reference = order.public_ref
+                try:
+                    preview_result = build_document_preview(db, order)
+                    if preview_result.ok:
+                        link_result = document_preview_link_for_user(
+                            db, order, user
+                        )
+                        payment_result = request_document_payment(
+                            db, order, user
+                        )
+                    else:
+                        link_result = None
+                        payment_result = None
+                except Exception:
+                    logger.exception(
+                        "Document preview preparation failed | order_id=%s",
+                        order.id,
+                    )
+                    order.state = "NEEDS_ATTENTION"
+                    order.exception_code = "PREVIEW_PREPARATION_FAILED"
+                    preview_result = None
+                    link_result = None
+                    payment_result = None
                 db.commit()
-                send_text(
-                    wa_id,
-                    t(user, "document_uat_completed", reference=reference),
-                )
+                if preview_result and preview_result.ok:
+                    send_text(
+                        wa_id,
+                        "Your confirmed watermarked preview is ready for a "
+                        "short time:\n"
+                        f"{link_result.value if link_result and link_result.ok else 'Preview link unavailable'}",
+                    )
+                    if payment_result and payment_result.ok:
+                        send_text(
+                            wa_id,
+                            "After reviewing every fact, use this exact-amount "
+                            "payment link for the final PDF and DOCX:\n"
+                            f"{payment_result.value}",
+                        )
+                    else:
+                        send_text(
+                            wa_id,
+                            "Payment is not available because a release check "
+                            "did not pass. You have not been charged.",
+                        )
+                else:
+                    reason_code = (
+                        preview_result.reason_code
+                        if preview_result is not None
+                        else order.exception_code
+                    )
+                    send_text(
+                        wa_id,
+                        "Your answers are saved and confirmed, but preview "
+                        "and payment are blocked until the exact advocate "
+                        "approval and private-storage checks pass. You have "
+                        f"not been charged. Reference: {reference}. "
+                        f"Operational code: {reason_code}",
+                    )
                 record_event(
-                    "document_studio_uat_answers_confirmed",
+                    "document_studio_answers_confirmed",
                     {"product_code": order.product_code},
                     user_id=user.id,
                 )
@@ -4712,6 +4928,201 @@ def payment_webhook():
                 payment_link_status,
             )
             return "Not finalized", 409
+
+        document_order = (
+            db.query(DocumentOrder)
+            .filter(
+                DocumentOrder.razorpay_payment_link_id
+                == payment_link_id
+            )
+            .with_for_update()
+            .one_or_none()
+        )
+        if document_order is not None:
+            if document_order.payment_processed:
+                if (
+                    document_order.razorpay_payment_id == payment_id
+                    and document_order.state == "FINAL_AVAILABLE"
+                ):
+                    if not existing_event:
+                        existing_event = WebhookEvent(
+                            provider="razorpay",
+                            event_id=event_id,
+                            event_type=event_type,
+                            payload_hash=payload_hash,
+                            status="DONE",
+                            attempts=1,
+                            processed_at=now,
+                            expires_at=now
+                            + timedelta(days=WEBHOOK_EVENT_TTL_DAYS),
+                        )
+                        db.add(existing_event)
+                        try:
+                            db.commit()
+                        except IntegrityError:
+                            db.rollback()
+                    return "OK", 200
+                document_order.state = "NEEDS_ATTENTION"
+                document_order.exception_code = "DOCUMENT_PAYMENT_CONFLICT"
+                db.commit()
+                return "Accepted for review", 202
+
+            try:
+                current_link, current_payment = (
+                    fetch_current_razorpay_capture(
+                        payment_link_id,
+                        payment_id,
+                    )
+                )
+            except Exception:
+                logger.exception(
+                    "Current Razorpay document payment lookup failed | "
+                    "order_ref=%s",
+                    document_order.public_ref,
+                )
+                return "Provider verification unavailable", 503
+
+            document_payment_error = validate_current_document_capture(
+                document_order,
+                payment_id,
+                current_link,
+                current_payment,
+            )
+            if (
+                document_payment_error is None
+                and (
+                    isinstance(paid_amount, bool)
+                    or not isinstance(paid_amount, int)
+                    or paid_amount != document_order.price_minor
+                    or paid_currency != document_order.currency
+                )
+            ):
+                document_payment_error = "DOCUMENT_WEBHOOK_AMOUNT_MISMATCH"
+
+            existing_event = (
+                db.query(WebhookEvent)
+                .filter(
+                    WebhookEvent.provider == "razorpay",
+                    WebhookEvent.event_id == event_id,
+                )
+                .with_for_update()
+                .first()
+            )
+            if existing_event and existing_event.status == "DONE":
+                return "OK", 200
+            if existing_event:
+                existing_event.status = "PROCESSING"
+                existing_event.attempts = (
+                    existing_event.attempts or 0
+                ) + 1
+                existing_event.last_error = None
+                existing_event.payload_hash = payload_hash
+            else:
+                existing_event = WebhookEvent(
+                    provider="razorpay",
+                    event_id=event_id,
+                    event_type=event_type,
+                    payload_hash=payload_hash,
+                    status="PROCESSING",
+                    attempts=1,
+                    expires_at=now
+                    + timedelta(days=WEBHOOK_EVENT_TTL_DAYS),
+                )
+                db.add(existing_event)
+                try:
+                    db.flush()
+                except IntegrityError:
+                    db.rollback()
+                    return "Event is being processed", 503
+
+            if document_payment_error:
+                document_order.state = "NEEDS_ATTENTION"
+                document_order.exception_code = document_payment_error
+                existing_event.status = "REVIEW"
+                existing_event.last_error = document_payment_error[:500]
+                existing_event.processed_at = now
+                db.commit()
+                logger.critical(
+                    "Document payment requires review | order_ref=%s | "
+                    "reason=%s",
+                    document_order.public_ref,
+                    document_payment_error,
+                )
+                return "Accepted for review", 202
+
+            document_result = apply_verified_document_payment(
+                db,
+                document_order,
+                payment_id=payment_id,
+                payment_amount=paid_amount,
+                payment_currency=paid_currency,
+            )
+            if not document_result.ok:
+                existing_event.status = "REVIEW"
+                existing_event.last_error = document_result.reason_code[:500]
+                existing_event.processed_at = now
+                db.commit()
+                logger.critical(
+                    "Paid document release requires review | order_ref=%s | "
+                    "reason=%s",
+                    document_order.public_ref,
+                    document_result.reason_code,
+                )
+                return "Accepted for review", 202
+
+            document_user = (
+                db.query(User)
+                .filter(User.id == document_order.user_id)
+                .one()
+            )
+            link_result = document_download_links_for_user(
+                db,
+                document_order,
+                document_user,
+            )
+            existing_event.status = "DONE"
+            existing_event.processed_at = now
+            existing_event.last_error = None
+            existing_event.expires_at = now + timedelta(
+                days=WEBHOOK_EVENT_TTL_DAYS
+            )
+            db.commit()
+
+            try:
+                message = (
+                    "Payment confirmed. Your Document Studio final files "
+                    "are available for 30 days."
+                )
+                if link_result.ok:
+                    links = link_result.value
+                    message += (
+                        "\nPDF: "
+                        f"{links['FINAL_PDF']}"
+                        "\nEditable DOCX: "
+                        f"{links['FINAL_DOCX']}"
+                    )
+                else:
+                    message += (
+                        " Open Document Studio > My documents to obtain "
+                        "fresh download links."
+                    )
+                send_text(document_user.whatsapp_id, message)
+            except Exception:
+                logger.exception(
+                    "Unable to send document delivery message | "
+                    "order_ref=%s",
+                    document_order.public_ref,
+                )
+            record_event(
+                "document_studio_payment_confirmed",
+                {
+                    "product_code": document_order.product_code,
+                    "amount_minor": document_order.price_minor,
+                    "mode": RAZORPAY_MODE,
+                },
+                user_id=document_user.id,
+            )
+            return "OK", 200
 
         booking = (
             db.query(Booking)

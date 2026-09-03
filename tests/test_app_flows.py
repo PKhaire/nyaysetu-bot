@@ -11,6 +11,7 @@ from models import (
     CaseBrief,
     DocumentAnswerRevision,
     DocumentAuditEvent,
+    DocumentCapacityReservation,
     DocumentOrder,
     InboundMessageEvent,
     OutboxJob,
@@ -196,13 +197,15 @@ def test_document_studio_home_uses_four_ordered_list_rows(
     ]
 
 
-def test_document_studio_uat_whatsapp_flow_confirms_answers_without_booking(
+def test_document_studio_whatsapp_flow_starts_for_every_open_user(
     monkeypatch,
     app_module,
     client,
     isolated_app_db,
     transport_spies,
 ):
+    from services import document_catalogue
+
     _secure_whatsapp_route(monkeypatch, app_module)
     user_id = _create_user(
         isolated_app_db,
@@ -213,14 +216,22 @@ def test_document_studio_uat_whatsapp_flow_confirms_answers_without_booking(
         "document_studio_available",
         lambda _user=None: True,
     )
+    monkeypatch.setattr(document_catalogue, "DOCUMENT_STUDIO_ENABLED", True)
+    monkeypatch.setattr(
+        document_catalogue,
+        "DOCUMENT_STUDIO_PRODUCT_ALLOWLIST",
+        frozenset(
+            {"mh_residential_leave_licence_11m_self_service"}
+        ),
+    )
     monkeypatch.setattr(app_module, "is_user_rate_limited", lambda _wa: False)
     monkeypatch.setattr(app_module, "is_global_rate_limited", lambda: False)
 
     selections = (
         "home_documents",
         "doc_create",
-        "doc_product::residential_agreement_mh_uat",
-        "doc_start::residential_agreement_mh_uat",
+        "doc_product::mh_residential_leave_licence_11m_self_service",
+        "doc_start::mh_residential_leave_licence_11m_self_service",
     )
     for index, selection in enumerate(selections, start=1):
         response = _signed_whatsapp_post(
@@ -233,50 +244,156 @@ def test_document_studio_uat_whatsapp_flow_confirms_answers_without_booking(
         assert response.status_code == 200
         assert response.get_json()["status"] == "ok"
 
-    for index, answer in enumerate(
-        (
-            "Synthetic Party A",
-            "Synthetic Party B",
-            "Pune Test City",
-            "11",
-        ),
-        start=1,
-    ):
-        response = _signed_whatsapp_post(
-            client,
-            _whatsapp_payload(
-                message_id=f"wamid.doc.answer.{index}",
-                text=answer,
-            ),
+    db = isolated_app_db()
+    try:
+        user = db.get(User, user_id)
+        order = db.query(DocumentOrder).one()
+        assert user.flow_state == app_module.DOCUMENT_STUDIO_QUESTION
+        assert order.state == "ELIGIBILITY"
+        assert order.product_code == (
+            "mh_residential_leave_licence_11m_self_service"
         )
-        assert response.status_code == 200
-        assert response.get_json()["status"] == "ok"
+        assert order.output_classification == "SELF_SERVICE_DRAFT"
+        assert order.uat_only is False
+        assert db.query(DocumentAnswerRevision).count() == 0
+        assert db.query(DocumentAuditEvent).count() == 1
+        assert db.query(DocumentCapacityReservation).count() == 1
+        assert db.query(Booking).count() == 0
+    finally:
+        db.close()
 
-    confirmed = _signed_whatsapp_post(
+
+def test_document_studio_capacity_exhaustion_creates_no_draft_or_payment(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+):
+    from services import document_capacity_service
+    from services import document_catalogue
+
+    _secure_whatsapp_route(monkeypatch, app_module)
+    user_id = _create_user(
+        isolated_app_db,
+        flow_state=app_module.NORMAL,
+    )
+    monkeypatch.setattr(
+        app_module,
+        "document_studio_available",
+        lambda _user=None: True,
+    )
+    monkeypatch.setattr(document_catalogue, "DOCUMENT_STUDIO_ENABLED", True)
+    monkeypatch.setattr(
+        document_catalogue,
+        "DOCUMENT_STUDIO_PRODUCT_ALLOWLIST",
+        frozenset(
+            {"mh_residential_leave_licence_11m_self_service"}
+        ),
+    )
+    monkeypatch.setattr(
+        document_capacity_service,
+        "DOCUMENT_STUDIO_DAILY_CAPACITY",
+        0,
+    )
+    monkeypatch.setattr(app_module, "is_user_rate_limited", lambda _wa: False)
+    monkeypatch.setattr(app_module, "is_global_rate_limited", lambda: False)
+
+    response = _signed_whatsapp_post(
         client,
         _whatsapp_payload(
-            message_id="wamid.doc.confirm",
-            interactive_id="doc_uat_confirm",
+            message_id="wamid.doc.capacity.exhausted",
+            interactive_id=(
+                "doc_start::"
+                "mh_residential_leave_licence_11m_self_service"
+            ),
         ),
     )
 
-    assert confirmed.status_code == 200
-    assert confirmed.get_json()["status"] == "ok"
+    assert response.status_code == 200
+    assert response.get_json()["status"] == (
+        "document_studio_capacity_reached"
+    )
+    db = isolated_app_db()
+    try:
+        assert db.get(User, user_id).flow_state == app_module.NORMAL
+        assert db.query(DocumentOrder).count() == 0
+        assert db.query(DocumentCapacityReservation).count() == 0
+    finally:
+        db.close()
+
+
+def test_pre_capacity_draft_confirmation_fails_closed_when_day_is_full(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+):
+    from services import document_capacity_service
+
+    _secure_whatsapp_route(monkeypatch, app_module)
+    user_id = _create_user(
+        isolated_app_db,
+        flow_state=app_module.DOCUMENT_STUDIO_REVIEW,
+    )
+    db = isolated_app_db()
+    try:
+        db.add(
+            DocumentOrder(
+                public_ref="DS-PRE-CAPACITY",
+                user_id=user_id,
+                product_code=(
+                    "mh_residential_leave_licence_11m_self_service"
+                ),
+                template_version="mh-ll-11m-self-service-2026-08-v1",
+                state="DRAFTING",
+                current_step="review",
+                draft_answers_json="{}",
+                output_classification="SELF_SERVICE_DRAFT",
+                uat_only=False,
+                release_status="CANDIDATE",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+    monkeypatch.setattr(
+        app_module,
+        "document_studio_available",
+        lambda _user=None: True,
+    )
+    monkeypatch.setattr(
+        document_capacity_service,
+        "DOCUMENT_STUDIO_DAILY_CAPACITY",
+        0,
+    )
+    monkeypatch.setattr(app_module, "is_user_rate_limited", lambda _wa: False)
+    monkeypatch.setattr(app_module, "is_global_rate_limited", lambda: False)
+
+    response = _signed_whatsapp_post(
+        client,
+        _whatsapp_payload(
+            message_id="wamid.doc.capacity.legacy-confirm",
+            interactive_id="doc_confirm",
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["status"] == (
+        "document_studio_capacity_reached"
+    )
     db = isolated_app_db()
     try:
         user = db.get(User, user_id)
         order = db.query(DocumentOrder).one()
         assert user.flow_state == app_module.NORMAL
-        assert order.state == "ANSWERS_CONFIRMED"
-        assert order.output_classification == "UAT_NON_LEGAL"
-        assert db.query(DocumentAnswerRevision).count() == 1
-        assert db.query(DocumentAuditEvent).count() == 2
-        assert db.query(Booking).count() == 0
+        assert order.state == "DRAFTING"
+        assert order.current_step == "review"
+        assert db.query(DocumentCapacityReservation).count() == 0
+        assert db.query(DocumentAnswerRevision).count() == 0
     finally:
         db.close()
-
-    completed_copy = transport_spies["text"].call_args.args[1]
-    assert "no legal document" in completed_copy.lower()
 
 
 def _website_advocate_intake(*, summary="My employer has not paid my salary."):

@@ -27,25 +27,30 @@ Flask Document Studio routes/state machine
     |                                   +--> DOCX (python-docx)
     v
 PostgreSQL ------------------------------> private S3 ap-south-1
-orders/answers/templates/reviews             preview/final artifacts
+orders/capacity/answers/templates/reviews    preview/final artifacts
 payments/artifact metadata/audit             lifecycle deletion
     |
     +--> admin/advocate review queue
     +--> existing outbox/manual WhatsApp delivery
 ```
 
-## Proposed modules
+## Proposed deep modules
 
-| Module | Responsibility |
+| Module | Narrow public interface; hidden complexity |
 | --- | --- |
-| `services/document_catalog_service.py` | Resolve active product/template, eligibility and price snapshot |
-| `services/document_intake_service.py` | Validate typed answers, revisions and customer confirmation |
-| `services/document_render_service.py` | Build canonical render model; generate bounded PDF/DOCX |
-| `services/document_storage_service.py` | Private S3 put/head/delete and short-lived presigned download |
-| `services/document_review_service.py` | Assignment, revision, approval and issuance transitions |
-| `services/document_delivery_service.py` | Authorized delivery record and outbox/manual handoff |
-| `jobs/document_retention.py` | Bounded expiration verification and metadata terminalization |
-| `templates/document_studio/` | UI templates only; legal templates live in a governed package/location |
+| `DocumentCatalogue` | List active products, resolve the one immutable published version and open a product-bound order; hide lifecycle, eligibility metadata, pricing and hash validation |
+| `DocumentOrderWorkflow` | Start, answer, confirm, preview, take verified payment, release and authorize; hide revisions, state transitions, idempotency, entitlement, expiry and audit |
+| `DocumentCapacityService` | Reserve, consume, release and report a global India-business-day limit; hide PostgreSQL transaction advisory locking and reservation accounting |
+| `DeterministicDocumentRenderer` | Render a canonical confirmed snapshot into bounded PDF/DOCX plus manifest; hide clause selection, escaping, typography, formats and parity checks |
+| `DocumentArtifactVault` | Store, authorize, delete, verify and reconcile artifacts; hide S3 keys, encryption, presigning and lifecycle |
+| Provider ports | `PaymentEvidencePort`, `ObjectStorePort`, `MessageDeliveryPort` and `ClockPort` isolate Razorpay, S3, WhatsApp and time from the domain workflow |
+| `jobs/document_retention.py` | Invoke bounded vault/order expiry operations and report overdue or inconsistent deletion without document content |
+| `templates/document_studio/` | UI templates only; legal templates live in an immutable governed package |
+
+Flask routes and WhatsApp handlers adapt transport input/output only. They do
+not own document states, payment entitlement, rendering rules or storage
+authorization. The detailed interface and test contract is in
+[13-implementation-contract.md](13-implementation-contract.md).
 
 Legal templates must not be editable from an unaudited admin text box. A later
 template-management UI requires separate roles, review and publishing controls.
@@ -76,6 +81,14 @@ Immutable confirmed answer snapshots: order, revision, encrypted/sensitive
 structured payload or normalized relational representation, schema version,
 customer confirmation timestamp and SHA-256 hash. The implementation choice
 must support field-level deletion/redaction and avoid indexing sensitive text.
+
+### `document_capacity_reservations`
+
+One auditable allocation per document order, containing the India business
+date, configured-limit snapshot, `RESERVED`/`CONSUMED`/`RELEASED` status and
+bounded release reason. PostgreSQL uses a stable per-date transaction advisory
+lock around count-and-reserve. Resuming the same order is idempotent; confirmed
+drafting work remains consumed even if payment later fails.
 
 ### `document_reviews`
 

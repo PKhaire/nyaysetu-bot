@@ -17,6 +17,7 @@ Operator --------> Flask /admin/* --------------+      idempotency / analytics
                                                 |
                                                 +--> WhatsApp Cloud API
                                                 +--> Razorpay payment links
+                                                +--> private S3 artifacts
                                                 +--> AI router
 
 python -m jobs.process_outbox ----------------------> WhatsApp / Amazon SES v2
@@ -63,6 +64,12 @@ infrastructure and concurrency/load/provider-limit tests pass.
 | `services/payment_reconciliation_service.py` | Exact-evidence Razorpay recovery and ambiguity queue |
 | `services/consultation_reminder_*.py` | Template-gated, bounded, deduplicated 24-hour/2-hour reminder scheduling and send policy |
 | `services/maintenance_service.py` | Bounded retention enforcement and operational-risk reporting |
+| `services/document_catalogue.py` | Immutable product scope, questionnaire schema, template and aggregate hashes |
+| `services/document_studio_rc9_service.py` | Eligibility, resumable answer capture, immutable revisions and review state |
+| `services/document_release_service.py` | Exact append-only advocate approval and golden-render publication gate |
+| `services/document_renderer.py` | Deterministic watermarked preview and final PDF/DOCX generation |
+| `services/document_payment_service.py` | Exact Razorpay order payment validation and final artifact publication |
+| `services/document_artifact_vault.py` | Private encrypted S3 objects and short-lived presigned owner downloads |
 | `jobs/migrate_sqlite_to_postgres.py` | Fail-closed, one-shot frozen SQLite import for an inactive contingency |
 | `services/whatsapp_service.py` | Validated WhatsApp payloads, bounded transport retries, structured delivery results |
 | `services/outbox_service.py` | Durable jobs, step-level idempotency, retry/backoff, lease recovery |
@@ -105,8 +112,40 @@ approval because assignment and confirmation messages are sent manually.
 
 The state machine includes language, AI consent, booking-scope review, identity
 and location collection, category/subcategory, date/slot, booking review,
-payment waiting, paid AI, support, and feedback states. `home`/`menu` is
-persistent and does not erase an in-progress draft.
+payment waiting, paid AI, Document Studio eligibility/questionnaire/review,
+support, and feedback states. `home`/`menu` is persistent and does not erase an
+in-progress consultation or document draft.
+
+## Document Studio lifecycle
+
+Document Studio is a deep module with four distinct boundaries: an immutable
+catalogue, a workflow aggregate, an exact publication gate, and a private
+artifact vault. The WhatsApp adapter selects the global product and delegates
+answer validation and transitions; it does not embed legal clauses or storage
+details.
+
+The current product collects only structured factual answers. Each saved edit
+creates an immutable `document_answer_revisions` row and advances the order's
+active revision. Deterministic rendering binds the product code, template
+version, schema/template aggregate hash, answer-manifest hash and rendered
+content hashes. A watermarked preview and paid final files therefore cannot be
+silently substituted across versions.
+
+The publication gate reads the latest append-only advocate decision for the
+exact aggregate hash. Missing, expired, revoked, rejected,
+changes-required, or golden-hash-mismatched evidence denies preview/payment.
+There is no user-sampling bypass. The product switch is global; when enabled,
+all users see the same catalogue while the exact legal and infrastructure
+gates remain fail-closed.
+
+Payment uses the shared signed Razorpay endpoint but resolves a Document Studio
+order independently of consultation bookings. Only exact authenticated
+current-provider evidence renders final artifacts. Objects are stored private
+with server-side encryption, metadata hashes and random order-based keys.
+Downloads are short-lived presigned URLs issued only to the owning WhatsApp
+user. The daily maintenance process inherits the same S3 identity, deletes
+expired objects, tombstones their rows and appends access events; unpaid draft
+answers are redacted after their configured retention period.
 
 ## Booking and capacity lifecycle
 
@@ -266,14 +305,21 @@ Limitations:
 ## Persistence and schema
 
 Core tables are `users`, `bookings`, `category_analytics`, `conversations`, and
-`advocates`. Operational tables include `inbound_message_events`,
+`advocates`. Document Studio uses `document_orders`, immutable
+`document_answer_revisions`, `document_capacity_reservations`,
+`document_artifacts`, append-only
+`document_access_events`, and append-only `document_template_approvals`.
+Operational tables include `inbound_message_events`,
 `processed_messages` (legacy), `user_consents`, `case_briefs`, `feedback`,
 `support_requests`, `analytics_events`, `webhook_events`, `outbox_jobs`,
 `booking_fulfillments`, `manual_contact_events`, `payment_reconciliations`, availability
 blackouts/overrides, and `admin_audit_events`.
 
-Alembic revision `20260729_01` is the production baseline and `20260818_01` is
-the current production head. On an empty database
+Alembic revision `20260729_01` is the production baseline and `20260903_01` is
+the current production head. Revisions `20260818_01` and `20260819_01` add the
+case-brief and initial Document Studio ledgers; `20260827_01` adds the
+governed RC9 revision, artifact, access-event, and exact release-approval
+controls; `20260903_01` adds global daily-capacity evidence. On an empty database
 it creates the application and reliability/operations schema. It also retains
 compatibility steps for selected legacy columns/constraints and backfills, but
 those paths are not exercised by the current fresh release. Render runs

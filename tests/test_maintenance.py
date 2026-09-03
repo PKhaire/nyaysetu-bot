@@ -18,6 +18,11 @@ from models import (
     BookingStatus,
     CaseBrief,
     Conversation,
+    DocumentAccessEvent,
+    DocumentAnswerRevision,
+    DocumentArtifact,
+    DocumentCapacityReservation,
+    DocumentOrder,
     Feedback,
     InboundMessageEvent,
     OutboxJob,
@@ -28,6 +33,7 @@ from models import (
     WebhookEvent,
 )
 from services import maintenance_service
+from services.document_artifact_vault import MemoryArtifactVault
 
 
 @pytest.fixture
@@ -554,6 +560,161 @@ def test_each_category_is_bounded_and_reports_more_work(maintenance_db):
     )
     assert second["categories"]["analytics_events"]["affected"] == 1
     assert second["categories"]["analytics_events"]["more_remaining"] is False
+
+
+def test_document_studio_retention_redacts_unpaid_drafts_and_deletes_objects(
+    maintenance_db,
+):
+    now = datetime(2026, 8, 27, 12, 0, 0)
+    old = now - timedelta(
+        days=maintenance_service.DOCUMENT_STUDIO_DRAFT_TTL_DAYS + 1
+    )
+    vault = MemoryArtifactVault()
+    content_hash = "a" * 64
+    object_key = (
+        "document-studio/DS-RETENTION01/1/"
+        "final_pdf-aaaaaaaaaaaaaaaa.pdf"
+    )
+    vault.objects[object_key] = b"private final bytes"
+
+    db = maintenance_db()
+    try:
+        user = User(
+            whatsapp_id="919833333333",
+            case_id="NS-DOC-RETENTION",
+        )
+        db.add(user)
+        db.flush()
+        unpaid = DocumentOrder(
+            public_ref="DS-RETENTION00",
+            user_id=user.id,
+            product_code=(
+                "mh_residential_leave_licence_11m_self_service"
+            ),
+            template_version="mh-ll-11m-self-service-2026-08-v1",
+            state="DRAFTING",
+            current_step="licensee_full_name",
+            draft_answers_json='{"private":"must be redacted"}',
+            output_classification="SELF_SERVICE_DRAFT",
+            uat_only=False,
+            payment_processed=False,
+            created_at=old,
+            updated_at=old,
+        )
+        paid = DocumentOrder(
+            public_ref="DS-RETENTION01",
+            user_id=user.id,
+            product_code=(
+                "mh_residential_leave_licence_11m_self_service"
+            ),
+            template_version="mh-ll-11m-self-service-2026-08-v1",
+            state="FINAL_READY",
+            current_step="complete",
+            draft_answers_json='{"paid":"evidence retained"}',
+            output_classification="SELF_SERVICE_DRAFT",
+            uat_only=False,
+            payment_processed=True,
+            created_at=old,
+            updated_at=old,
+        )
+        db.add_all([unpaid, paid])
+        db.flush()
+        reservation = DocumentCapacityReservation(
+            document_order_id=unpaid.id,
+            business_date=old.date(),
+            capacity_limit=10,
+            status="RESERVED",
+            reserved_at=old,
+            updated_at=old,
+        )
+        db.add(reservation)
+        db.add(
+            DocumentAnswerRevision(
+                document_order_id=unpaid.id,
+                revision_number=1,
+                schema_version="questionnaire-2026-08-v1",
+                answers_json='{"private":"must be deleted"}',
+                content_hash="b" * 64,
+                created_at=old,
+            )
+        )
+        artifact = DocumentArtifact(
+            public_ref="DA-RETENTION01",
+            document_order_id=paid.id,
+            revision_number=1,
+            artifact_kind="FINAL_PDF",
+            state="AVAILABLE",
+            storage_provider="S3",
+            bucket=vault.bucket,
+            object_key=object_key,
+            content_type="application/pdf",
+            size_bytes=len(vault.objects[object_key]),
+            content_hash=content_hash,
+            manifest_hash="c" * 64,
+            renderer_version="nyaysetu-renderer-2026-08-v1",
+            expires_at=now - timedelta(seconds=1),
+            created_at=old,
+        )
+        db.add(artifact)
+        db.commit()
+        unpaid_id = unpaid.id
+        paid_id = paid.id
+        artifact_id = artifact.id
+        reservation_id = reservation.id
+    finally:
+        db.close()
+
+    report = maintenance_service.run_maintenance(
+        batch_size=25,
+        now=now,
+        session_factory=maintenance_db,
+        artifact_vault_factory=lambda: vault,
+    )
+
+    assert report["categories"]["document_studio_unpaid_drafts"] == {
+        "action": "expire_and_redact",
+        "retention_source": "DOCUMENT_STUDIO_DRAFT_TTL_DAYS",
+        "eligible_in_batch": 1,
+        "more_remaining": False,
+        "affected": 1,
+        "would_affect": 0,
+        "skipped": False,
+        "skip_reason": None,
+    }
+    assert report["categories"]["document_studio_expired_artifacts"][
+        "affected"
+    ] == 1
+    assert object_key not in vault.objects
+
+    db = maintenance_db()
+    try:
+        expired_order = db.get(DocumentOrder, unpaid_id)
+        assert expired_order.state == "EXPIRED"
+        assert expired_order.draft_answers_json == "{}"
+        assert expired_order.active_revision_number is None
+        released_reservation = db.get(
+            DocumentCapacityReservation,
+            reservation_id,
+        )
+        assert released_reservation.status == "RELEASED"
+        assert released_reservation.release_reason == (
+            "DRAFT_RETENTION_EXPIRED"
+        )
+        assert (
+            db.query(DocumentAnswerRevision)
+            .filter(DocumentAnswerRevision.document_order_id == unpaid_id)
+            .count()
+            == 0
+        )
+        assert db.get(DocumentOrder, paid_id).state == "FINAL_READY"
+        deleted_artifact = db.get(DocumentArtifact, artifact_id)
+        assert deleted_artifact.state == "DELETED"
+        assert deleted_artifact.deleted_at == now
+        access = db.query(DocumentAccessEvent).one()
+        assert access.action == "ARTIFACT_DELETE"
+        assert access.reason_code == "RETENTION_EXPIRED"
+    finally:
+        db.close()
 
 
 def test_failed_commit_rolls_back_all_categories(maintenance_db):

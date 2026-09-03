@@ -58,20 +58,34 @@ services:
         value: "30"
       - key: CASE_BRIEF_UNATTACHED_TTL_DAYS
         value: "7"
-      # Document Studio in this release is a synthetic-data staging harness.
-      # Production health deliberately fails if the feature is enabled.
+      # Global product switch. It never performs per-user/tester sampling.
+      # Release, price and private-storage gates remain fail-closed.
       - key: DOCUMENT_STUDIO_ENABLED
         value: "false"
-      - key: DOCUMENT_STUDIO_UAT_ONLY
-        value: "true"
       - key: DOCUMENT_STUDIO_CONSENT_VERSION
-        value: document-studio-uat-2026-08
+        value: document-studio-self-service-2026-08
       - key: DOCUMENT_STUDIO_PRODUCT_ALLOWLIST
-        value: residential_agreement_mh_uat
-      - key: DOCUMENT_STUDIO_TESTER_WA_IDS
-        sync: false
+        value: mh_residential_leave_licence_11m_self_service
       - key: DOCUMENT_STUDIO_DRAFT_TTL_DAYS
         value: "7"
+      - key: DOCUMENT_STUDIO_DAILY_CAPACITY
+        value: "10"
+      - key: DOCUMENT_STUDIO_PRICE_INR
+        value: "0"
+      - key: DOCUMENT_STUDIO_FINAL_TTL_DAYS
+        value: "30"
+      - key: DOCUMENT_STUDIO_DOWNLOAD_TTL_SECONDS
+        value: "600"
+      - key: DOCUMENT_STUDIO_S3_BUCKET
+        sync: false
+      - key: DOCUMENT_STUDIO_S3_REGION
+        value: ap-south-1
+      - key: DOCUMENT_STUDIO_S3_ACCESS_KEY_ID
+        sync: false
+      - key: DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: DOCUMENT_STUDIO_S3_ENDPOINT_URL
+        value: ""
       - key: PAYMENT_LINK_TTL_MINUTES
         value: "16"
       - key: PAYMENT_RECONCILIATION_LOOKBACK_DAYS
@@ -598,6 +612,39 @@ services:
           type: web
           name: nyaysetu-bot-backend
           envVarKey: CASE_BRIEF_UNATTACHED_TTL_DAYS
+      # The maintenance process expires unpaid drafts and permanently removes
+      # expired private artifacts. It must use the same retention policy and
+      # object-store identity as the web process.
+      - key: DOCUMENT_STUDIO_DRAFT_TTL_DAYS
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: DOCUMENT_STUDIO_DRAFT_TTL_DAYS
+      - key: DOCUMENT_STUDIO_S3_BUCKET
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: DOCUMENT_STUDIO_S3_BUCKET
+      - key: DOCUMENT_STUDIO_S3_REGION
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: DOCUMENT_STUDIO_S3_REGION
+      - key: DOCUMENT_STUDIO_S3_ACCESS_KEY_ID
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: DOCUMENT_STUDIO_S3_ACCESS_KEY_ID
+      - key: DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY
+      - key: DOCUMENT_STUDIO_S3_ENDPOINT_URL
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: DOCUMENT_STUDIO_S3_ENDPOINT_URL
       - key: ANALYTICS_EVENT_TTL_DAYS
         fromService:
           type: web

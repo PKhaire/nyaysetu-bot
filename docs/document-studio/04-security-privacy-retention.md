@@ -87,7 +87,7 @@ retention advice:
 | Unpaid preview | 7 days after payment expiry | Customer recovery and support |
 | Temporary render file | Delete immediately; maximum 24 hours on failure | No operational need after upload |
 | Paid preview/review copies | 30 days after final delivery | Short dispute/review support |
-| Final self-service artifact | 90 days after delivery | Re-download window |
+| Final self-service artifact | 30 days after release | Re-download window approved for the first product |
 | Advocate-reviewed/issued artifact | 180 days after delivery initially proposed | Operational/legal review required |
 | Access/audit metadata | Separate approved period | Accountability without preserving document text |
 | Payment/accounting evidence | Existing finance retention policy | Not deleted by object lifecycle |

@@ -45,6 +45,17 @@ def test_staging_disables_automatic_schema_creation_by_default(monkeypatch):
     assert config["AUTO_CREATE_SCHEMA"] is False
 
 
+def test_document_studio_daily_capacity_must_be_positive(monkeypatch):
+    monkeypatch.setenv("ENV", "test")
+    monkeypatch.setenv("DOCUMENT_STUDIO_DAILY_CAPACITY", "0")
+
+    with pytest.raises(
+        ValueError,
+        match="DOCUMENT_STUDIO_DAILY_CAPACITY must be at least 1",
+    ):
+        runpy.run_path(str(PROJECT_ROOT / "config.py"))
+
+
 def _gunicorn_config(monkeypatch):
     monkeypatch.setenv("PORT", "12345")
     return runpy.run_path(str(PROJECT_ROOT / "gunicorn.conf.py"))
@@ -119,17 +130,18 @@ def test_deployment_commands_and_render_release_controls_exist():
         in blueprint
     )
     assert (
-        '- key: DOCUMENT_STUDIO_UAT_ONLY\n        value: "true"'
-        in blueprint
-    )
-    assert (
         "- key: DOCUMENT_STUDIO_PRODUCT_ALLOWLIST\n"
-        "        value: residential_agreement_mh_uat"
+        "        value: mh_residential_leave_licence_11m_self_service"
         in blueprint
     )
-    assert "- key: DOCUMENT_STUDIO_TESTER_WA_IDS\n        sync: false" in (
-        blueprint
+    assert "DOCUMENT_STUDIO_UAT_ONLY" not in blueprint
+    assert "DOCUMENT_STUDIO_TESTER_WA_IDS" not in blueprint
+    assert "- key: DOCUMENT_STUDIO_PRICE_INR" in blueprint
+    assert (
+        '- key: DOCUMENT_STUDIO_DAILY_CAPACITY\n        value: "10"'
+        in blueprint
     )
+    assert "- key: DOCUMENT_STUDIO_S3_BUCKET" in blueprint
 
 
 def test_render_only_schedules_existing_operational_modules():
@@ -158,6 +170,7 @@ def test_render_pins_operational_policy_for_maintenance():
         "WEBHOOK_EVENT_TTL_DAYS": "30",
         "PROCESSED_MESSAGE_TTL_DAYS": "30",
         "CASE_BRIEF_UNATTACHED_TTL_DAYS": "7",
+        "DOCUMENT_STUDIO_DAILY_CAPACITY": "10",
         "ANALYTICS_EVENT_TTL_DAYS": "90",
         "OUTBOX_COMPLETED_TTL_DAYS": "30",
         "PAYMENT_LINK_TTL_MINUTES": "16",
@@ -170,6 +183,12 @@ def test_render_pins_operational_policy_for_maintenance():
     expected_reference_counts = {
         "PROCESSED_MESSAGE_TTL_DAYS": 1,
         "CASE_BRIEF_UNATTACHED_TTL_DAYS": 1,
+        "DOCUMENT_STUDIO_DRAFT_TTL_DAYS": 1,
+        "DOCUMENT_STUDIO_S3_BUCKET": 1,
+        "DOCUMENT_STUDIO_S3_REGION": 1,
+        "DOCUMENT_STUDIO_S3_ACCESS_KEY_ID": 1,
+        "DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY": 1,
+        "DOCUMENT_STUDIO_S3_ENDPOINT_URL": 1,
         "ANALYTICS_EVENT_TTL_DAYS": 1,
         "OUTBOX_COMPLETED_TTL_DAYS": 1,
         "PAYMENT_LINK_TTL_MINUTES": 1,
@@ -181,6 +200,18 @@ def test_render_pins_operational_policy_for_maintenance():
     }
     for key, count in expected_reference_counts.items():
         assert blueprint.count(f"envVarKey: {key}") == count
+
+    maintenance = _render_service_block(blueprint, "nyaysetu-maintenance")
+    for key in {
+        "DOCUMENT_STUDIO_DRAFT_TTL_DAYS",
+        "DOCUMENT_STUDIO_S3_BUCKET",
+        "DOCUMENT_STUDIO_S3_REGION",
+        "DOCUMENT_STUDIO_S3_ACCESS_KEY_ID",
+        "DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY",
+        "DOCUMENT_STUDIO_S3_ENDPOINT_URL",
+    }:
+        assert f"- key: {key}\n        fromService:" in maintenance
+        assert f"envVarKey: {key}" in maintenance
 
 
 def test_render_propagates_ses_configuration_to_the_email_outbox():
