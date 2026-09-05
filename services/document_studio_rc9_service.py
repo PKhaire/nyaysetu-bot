@@ -419,6 +419,9 @@ def confirm_answers(db, order: DocumentOrder) -> DocumentAnswerRevision:
     order.consent_version = DOCUMENT_STUDIO_CONSENT_VERSION
     order.consented_at = utc_now()
     _audit(db, order, "DOCUMENT_ANSWERS_CONFIRMED", from_state=previous, to_state=order.state, details={"revision_number": revision_number, "content_hash": revision.content_hash})
+    # SessionLocal deliberately disables autoflush. Persist the immutable
+    # revision inside this transaction before the preview workflow queries it.
+    db.flush()
     return revision
 
 

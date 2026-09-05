@@ -272,6 +272,45 @@ def test_latest_advocate_decision_overrides_older_approval(
         db.close()
 
 
+def test_confirmed_revision_is_visible_to_immediate_preview(
+    monkeypatch,
+    studio_db,
+):
+    """The webhook previews immediately with autoflush explicitly disabled."""
+
+    _enable_product(monkeypatch)
+    db = studio_db()
+    vault = MemoryArtifactVault()
+    try:
+        user = User(
+            whatsapp_id="919900004443",
+            case_id="NS-IMMEDIATE-PREVIEW",
+            name="Synthetic Customer",
+        )
+        db.add(user)
+        db.flush()
+        order = create_or_resume_order(db, user.id)
+        for definition in QUESTION_DEFINITIONS:
+            answer = validate_answer(
+                str(definition["key"]),
+                _answer_for(definition),
+            )
+            assert answer is not None
+            save_answer(order, answer)
+
+        record_approval(db, _approval_payload(), recorded_by="test-admin")
+        db.flush()
+        confirm_answers(db, order)
+
+        preview = build_preview(db, order, vault=vault)
+
+        assert preview.ok is True
+        assert preview.reason_code == "PREVIEW_READY"
+        assert db.query(DocumentAnswerRevision).count() == 1
+    finally:
+        db.close()
+
+
 def test_preview_payment_and_final_downloads_are_release_gated(
     monkeypatch,
     studio_db,
