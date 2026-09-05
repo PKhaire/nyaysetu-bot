@@ -39,10 +39,16 @@ class S3ArtifactVault:
         if not self.bucket:
             raise ValueError("document_studio_s3_bucket_required")
         if client is None:
+            s3_options = (
+                {"addressing_style": "virtual"}
+                if not DOCUMENT_STUDIO_S3_ENDPOINT_URL
+                else None
+            )
             kwargs = {
                 "region_name": DOCUMENT_STUDIO_S3_REGION,
                 "config": Config(
                     signature_version="s3v4",
+                    s3=s3_options,
                     retries={"max_attempts": 3, "mode": "standard"},
                     connect_timeout=5,
                     read_timeout=15,

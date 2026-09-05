@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 
 from db import Base
 from models import DocumentAnswerRevision, DocumentOrder, User, utc_now
+from services import document_artifact_vault as artifact_vault
 from services import document_catalogue as catalogue
 from services.document_artifact_vault import MemoryArtifactVault
 from services.document_payment_service import validate_current_document_capture
@@ -57,6 +58,35 @@ def studio_db():
     finally:
         Base.metadata.drop_all(engine)
         engine.dispose()
+
+
+def test_s3_vault_forces_virtual_host_addressing(monkeypatch):
+    captured = {}
+
+    def fake_client(service_name, **kwargs):
+        captured["service_name"] = service_name
+        captured["kwargs"] = kwargs
+        return object()
+
+    monkeypatch.setattr(artifact_vault.boto3, "client", fake_client)
+    monkeypatch.setattr(
+        artifact_vault,
+        "DOCUMENT_STUDIO_S3_BUCKET",
+        "nyaysetu-ds-staging-123456789012-ap-south-1-an",
+    )
+    monkeypatch.setattr(
+        artifact_vault,
+        "DOCUMENT_STUDIO_S3_ENDPOINT_URL",
+        "",
+    )
+
+    artifact_vault.S3ArtifactVault()
+
+    assert captured["service_name"] == "s3"
+    assert captured["kwargs"]["config"].signature_version == "s3v4"
+    assert captured["kwargs"]["config"].s3 == {
+        "addressing_style": "virtual"
+    }
 
 
 def _enable_product(monkeypatch, *, price_inr: int = 299) -> None:
