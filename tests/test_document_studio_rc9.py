@@ -403,7 +403,6 @@ def test_payment_validation_accepts_exact_capture_and_rejects_refund():
     )
     link = {
         "id": "plink_123",
-        "entity": "payment_link",
         "status": "paid",
         "amount": 29900,
         "amount_paid": 29900,
@@ -435,6 +434,12 @@ def test_payment_validation_accepts_exact_capture_and_rejects_refund():
     }
 
     assert validate_current_document_capture(order, "pay_123", link, payment) is None
+    link["entity"] = "order"
+    assert (
+        validate_current_document_capture(order, "pay_123", link, payment)
+        == "DOCUMENT_PAYMENT_LINK_ENTITY_MISMATCH"
+    )
+    link.pop("entity")
     payment["amount_refunded"] = 100
     assert (
         validate_current_document_capture(order, "pay_123", link, payment)

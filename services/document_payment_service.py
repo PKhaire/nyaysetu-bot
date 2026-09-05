@@ -43,7 +43,8 @@ def validate_current_document_capture(
         return "DOCUMENT_PAYMENT_CONFIGURATION_MISSING"
     if payment_link_entity.get("id") != order.razorpay_payment_link_id:
         return "DOCUMENT_PAYMENT_LINK_ID_MISMATCH"
-    if payment_link_entity.get("entity") != "payment_link":
+    payment_link_entity_type = payment_link_entity.get("entity")
+    if payment_link_entity_type not in (None, "payment_link"):
         return "DOCUMENT_PAYMENT_LINK_ENTITY_MISMATCH"
     if str(payment_link_entity.get("status") or "").lower() != "paid":
         return "DOCUMENT_PAYMENT_LINK_NOT_PAID"
