@@ -17,6 +17,10 @@ from config import (
 from models import DocumentOrder, User
 
 
+_RAZORPAY_REFERENCE_ID_MAX_LENGTH = 40
+_PAYMENT_TOKEN_BYTES = 24
+
+
 def _integer(value: object) -> int | None:
     if isinstance(value, bool):
         return None
@@ -130,7 +134,9 @@ def create_document_payment_link(
         raise ValueError("document_payment_configuration_incomplete")
     if order.razorpay_payment_link_id:
         raise ValueError("document_payment_link_already_exists")
-    order.payment_token = order.payment_token or secrets.token_urlsafe(32)
+    current_token = str(order.payment_token or "")
+    if not current_token or len(current_token) > _RAZORPAY_REFERENCE_ID_MAX_LENGTH:
+        order.payment_token = secrets.token_urlsafe(_PAYMENT_TOKEN_BYTES)
     expires_at = datetime.now(timezone.utc) + timedelta(
         minutes=PAYMENT_LINK_TTL_MINUTES
     )

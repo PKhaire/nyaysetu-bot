@@ -15,7 +15,10 @@ from models import DocumentAnswerRevision, DocumentOrder, User, utc_now
 from services import document_artifact_vault as artifact_vault
 from services import document_catalogue as catalogue
 from services.document_artifact_vault import MemoryArtifactVault
-from services.document_payment_service import validate_current_document_capture
+from services.document_payment_service import (
+    create_document_payment_link,
+    validate_current_document_capture,
+)
 from services.document_release_service import (
     record_approval,
     release_gate,
@@ -189,6 +192,29 @@ class _PaymentClient:
         return _Response()
 
 
+def test_payment_link_replaces_legacy_oversized_reference():
+    user = User(whatsapp_id="919900009999", name="Synthetic Customer")
+    order = DocumentOrder(
+        public_ref="DS-LEGACY123456",
+        user_id=1,
+        product_code=catalogue.PRODUCT_CODE,
+        template_version=catalogue.TEMPLATE_VERSION,
+        state="PREVIEW_READY",
+        active_revision_number=1,
+        preview_manifest_hash="a" * 64,
+        price_minor=29_900,
+        currency="INR",
+        payment_token="x" * 43,
+    )
+    client = _PaymentClient()
+
+    create_document_payment_link(order, user, client=client)
+
+    assert client.payload["reference_id"] == order.payment_token
+    assert len(order.payment_token) <= 40
+    assert order.payment_token != "x" * 43
+
+
 def test_visibility_is_global_and_not_tester_sampled(monkeypatch):
     _enable_product(monkeypatch)
 
@@ -342,6 +368,8 @@ def test_preview_payment_and_final_downloads_are_release_gated(
         assert payment.ok is True
         assert order.state == "PAYMENT_PENDING"
         assert client.payload["amount"] == order.price_minor
+        assert client.payload["reference_id"] == order.payment_token
+        assert len(order.payment_token) <= 40
         assert preview_link_for_user(db, order, user, vault=vault).ok
 
         final = apply_verified_payment(
