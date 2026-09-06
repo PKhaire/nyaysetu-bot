@@ -241,22 +241,25 @@ def preview_link_for_user(
     return WorkflowResult(True, "PREVIEW_LINK_READY", url)
 
 
-def apply_verified_payment(
+def _apply_verified_payment(
     db,
     order: DocumentOrder,
     *,
     payment_id: str,
     payment_amount: int,
     payment_currency: str,
+    permitted_states: frozenset[str],
+    actor_type: str,
+    event_type: str,
     vault=None,
 ) -> WorkflowResult:
-    """Idempotently grant final artifacts for provider-verified payment."""
+    """Grant final artifacts after the caller verifies current payment evidence."""
 
     if order.payment_processed:
         if order.razorpay_payment_id == payment_id:
             return WorkflowResult(True, "ALREADY_PROCESSED", order)
         return WorkflowResult(False, "PAYMENT_CONFLICT")
-    if order.state != "PAYMENT_PENDING":
+    if order.state not in permitted_states:
         return WorkflowResult(False, "PAYMENT_ORDER_STATE_INVALID")
     if payment_amount != order.price_minor or payment_currency != order.currency:
         order.state = "NEEDS_ATTENTION"
@@ -289,8 +292,8 @@ def apply_verified_payment(
     _audit(
         db,
         order,
-        "DOCUMENT_FINAL_AVAILABLE",
-        actor_type="PROVIDER",
+        event_type,
+        actor_type=actor_type,
         from_state=previous,
         to_state=order.state,
         details={
@@ -304,6 +307,55 @@ def apply_verified_payment(
     )
     return WorkflowResult(
         True, "FINAL_AVAILABLE", (pdf_artifact, docx_artifact)
+    )
+
+
+def apply_verified_payment(
+    db,
+    order: DocumentOrder,
+    *,
+    payment_id: str,
+    payment_amount: int,
+    payment_currency: str,
+    vault=None,
+) -> WorkflowResult:
+    """Idempotently grant final artifacts for a provider-verified webhook."""
+
+    return _apply_verified_payment(
+        db,
+        order,
+        payment_id=payment_id,
+        payment_amount=payment_amount,
+        payment_currency=payment_currency,
+        permitted_states=frozenset({"PAYMENT_PENDING"}),
+        actor_type="PROVIDER",
+        event_type="DOCUMENT_FINAL_AVAILABLE",
+        vault=vault,
+    )
+
+
+def recover_verified_payment(
+    db,
+    order: DocumentOrder,
+    *,
+    payment_id: str,
+    payment_amount: int,
+    payment_currency: str,
+    actor_type: str = "SYSTEM",
+    vault=None,
+) -> WorkflowResult:
+    """Recover an exact current capture after a missed or reviewed webhook."""
+
+    return _apply_verified_payment(
+        db,
+        order,
+        payment_id=payment_id,
+        payment_amount=payment_amount,
+        payment_currency=payment_currency,
+        permitted_states=frozenset({"PAYMENT_PENDING", "NEEDS_ATTENTION"}),
+        actor_type=actor_type,
+        event_type="DOCUMENT_FINAL_RECOVERED",
+        vault=vault,
     )
 
 

@@ -998,6 +998,19 @@ def test_reconciliation_job_reports_provider_errors_and_closes_session(
         "provider_errors": 1,
     }
     reconcile = MagicMock(return_value=stats)
+    document_stats = {
+        "checked": 1,
+        "recovered": 1,
+        "already_processed": 0,
+        "not_paid": 0,
+        "refund_confirmed": 0,
+        "review_required": 0,
+        "release_failed": 0,
+        "provider_errors": 0,
+        "skipped": 0,
+        "not_found": 0,
+    }
+    reconcile_documents = MagicMock(return_value=document_stats)
     monkeypatch.setattr(
         reconciliation_job,
         "SessionLocal",
@@ -1008,13 +1021,24 @@ def test_reconciliation_job_reports_provider_errors_and_closes_session(
         "reconcile_recent_payment_links",
         reconcile,
     )
+    monkeypatch.setattr(
+        reconciliation_job,
+        "reconcile_recent_document_payments",
+        reconcile_documents,
+    )
 
     result = reconciliation_job.main(["--limit", "25"])
 
     assert result == 2
     reconcile.assert_called_once_with(db, limit=25)
+    reconcile_documents.assert_called_once_with(db, limit=25)
     db.close.assert_called_once_with()
-    assert json.loads(capsys.readouterr().out) == {"ok": False, **stats}
+    assert json.loads(capsys.readouterr().out) == {
+        "consultations": stats,
+        "document_studio": document_stats,
+        "failures": [],
+        "ok": False,
+    }
 
 
 def test_reconciliation_job_rolls_back_and_sanitizes_failures(
@@ -1036,6 +1060,25 @@ def test_reconciliation_job_rolls_back_and_sanitizes_failures(
             )
         ),
     )
+    document_reconcile = MagicMock(
+        return_value={
+            "checked": 0,
+            "recovered": 0,
+            "already_processed": 0,
+            "not_paid": 0,
+            "refund_confirmed": 0,
+            "review_required": 0,
+            "release_failed": 0,
+            "provider_errors": 0,
+            "skipped": 0,
+            "not_found": 0,
+        }
+    )
+    monkeypatch.setattr(
+        reconciliation_job,
+        "reconcile_recent_document_payments",
+        document_reconcile,
+    )
 
     result = reconciliation_job.main([])
 
@@ -1044,4 +1087,11 @@ def test_reconciliation_job_rolls_back_and_sanitizes_failures(
     db.close.assert_called_once_with()
     output = capsys.readouterr().out
     assert "rzp_live_secret" not in output
-    assert json.loads(output) == {"error": "RuntimeError", "ok": False}
+    assert json.loads(output) == {
+        "consultations": None,
+        "document_studio": document_reconcile.return_value,
+        "failures": [
+            {"error": "RuntimeError", "scope": "consultations"}
+        ],
+        "ok": False,
+    }

@@ -36,6 +36,7 @@ from models import (
     BookingFulfillment,
     BookingStatus,
     CaseBrief,
+    DocumentAuditEvent,
     DocumentOrder,
     Feedback,
     InboundMessageEvent,
@@ -54,6 +55,11 @@ from services.payment_reconciliation_service import (
 )
 from services.document_catalogue import resolve_product
 from services.document_capacity_service import capacity_snapshot
+from services.document_operations_service import (
+    queue_final_redelivery,
+    reconcile_document_order,
+    request_refund_review,
+)
 from services.document_release_service import (
     approval_for_product,
     record_approval,
@@ -391,6 +397,14 @@ def metrics():
                 .all()
             )
         }
+        document_order_counts = {
+            str(state): int(count)
+            for state, count in (
+                db.query(DocumentOrder.state, func.count(DocumentOrder.id))
+                .group_by(DocumentOrder.state)
+                .all()
+            )
+        }
         oldest_outbox = (
             db.query(func.min(OutboxJob.created_at))
             .filter(OutboxJob.status.in_(("PENDING", "RUNNING")))
@@ -468,6 +482,7 @@ def metrics():
                     or 0
                 ),
                 "document_studio_capacity": capacity_snapshot(db),
+                "document_orders_by_state": document_order_counts,
             },
         }
         return jsonify(payload)
@@ -533,6 +548,213 @@ def document_orders():
                 ],
             }
         )
+    finally:
+        db.close()
+
+
+@admin_bp.get("/document-orders/<string:public_ref>")
+def document_order_detail(public_ref: str):
+    """Return one privacy-safe order and its recent operational audit."""
+
+    db = SessionLocal()
+    try:
+        order = (
+            db.query(DocumentOrder)
+            .filter(DocumentOrder.public_ref == public_ref)
+            .one_or_none()
+        )
+        if not order:
+            return jsonify({"error": "document_order_not_found"}), 404
+        events = (
+            db.query(DocumentAuditEvent)
+            .filter(DocumentAuditEvent.document_order_id == order.id)
+            .order_by(DocumentAuditEvent.id.desc())
+            .limit(50)
+            .all()
+        )
+        return jsonify(
+            {
+                "reference": order.public_ref,
+                "product_code": order.product_code,
+                "template_version": order.template_version,
+                "state": order.state,
+                "release_status": order.release_status,
+                "exception_code": order.exception_code,
+                "payment_processed": bool(order.payment_processed),
+                "payment_link_present": bool(order.razorpay_payment_link_id),
+                "payment_id_present": bool(order.razorpay_payment_id),
+                "final_available_until": (
+                    order.final_available_until.isoformat() + "Z"
+                    if order.final_available_until
+                    else None
+                ),
+                "events": [
+                    {
+                        "event_type": event.event_type,
+                        "actor_type": event.actor_type,
+                        "from_state": event.from_state,
+                        "to_state": event.to_state,
+                        "details": json.loads(event.details_json or "{}"),
+                        "created_at": event.created_at.isoformat() + "Z",
+                    }
+                    for event in events
+                ],
+            }
+        )
+    finally:
+        db.close()
+
+
+@admin_bp.post("/document-orders/<string:public_ref>/reconcile")
+def reconcile_document_order_endpoint(public_ref: str):
+    """Re-check current Razorpay evidence and recover only an exact capture."""
+
+    db = SessionLocal()
+    try:
+        order_id = (
+            db.query(DocumentOrder.id)
+            .filter(DocumentOrder.public_ref == public_ref)
+            .scalar()
+        )
+        if order_id is None:
+            return jsonify({"error": "document_order_not_found"}), 404
+        result = reconcile_document_order(
+            db,
+            order_id,
+            actor_type="OPERATOR",
+            actor_ref=_operator_id(),
+        )
+        _audit(
+            db,
+            action="document_order.reconcile",
+            target_type="document_order",
+            target_id=public_ref,
+            before={},
+            after={
+                "outcome": result.outcome,
+                "reason_code": result.reason_code,
+                "delivery_job_id": result.job_id,
+            },
+        )
+        db.commit()
+        status = 200
+        if result.outcome == "provider_error":
+            status = 503
+        elif result.outcome == "review_required":
+            status = 409
+        elif result.outcome in {"skipped", "release_failed"}:
+            status = 409
+        return jsonify(
+            {
+                "ok": result.ok,
+                "reference": result.order_ref,
+                "outcome": result.outcome,
+                "reason_code": result.reason_code,
+                "delivery_job_id": result.job_id,
+            }
+        ), status
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+@admin_bp.post("/document-orders/<string:public_ref>/refund-review")
+def document_order_refund_review(public_ref: str):
+    """Record a complete-or-refund decision without claiming provider success."""
+
+    reason = str(_json_body().get("reason") or "").strip()
+    db = SessionLocal()
+    try:
+        order = (
+            db.query(DocumentOrder)
+            .filter(DocumentOrder.public_ref == public_ref)
+            .with_for_update()
+            .one_or_none()
+        )
+        if not order:
+            return jsonify({"error": "document_order_not_found"}), 404
+        before = {"state": order.state, "exception_code": order.exception_code}
+        result = request_refund_review(
+            db,
+            order,
+            actor_ref=_operator_id(),
+            reason=reason,
+        )
+        if not result.ok:
+            db.rollback()
+            return jsonify({"error": result.reason_code.lower()}), 409
+        _audit(
+            db,
+            action="document_order.refund_review",
+            target_type="document_order",
+            target_id=public_ref,
+            before=before,
+            after={"state": order.state, "reason": reason},
+        )
+        db.commit()
+        return jsonify(
+            {
+                "ok": True,
+                "reference": public_ref,
+                "outcome": result.outcome,
+                "reason_code": result.reason_code,
+            }
+        )
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+@admin_bp.post("/document-orders/<string:public_ref>/redeliver")
+def redeliver_document_order(public_ref: str):
+    """Queue retry-safe fresh-link delivery for an entitled customer."""
+
+    body = _json_body()
+    reason = str(body.get("reason") or "").strip()
+    idempotency_key = str(body.get("idempotency_key") or "").strip()
+    db = SessionLocal()
+    try:
+        order = (
+            db.query(DocumentOrder)
+            .filter(DocumentOrder.public_ref == public_ref)
+            .with_for_update()
+            .one_or_none()
+        )
+        if not order:
+            return jsonify({"error": "document_order_not_found"}), 404
+        result = queue_final_redelivery(
+            db,
+            order,
+            actor_ref=_operator_id(),
+            reason=reason,
+            idempotency_key=idempotency_key,
+        )
+        if not result.ok:
+            db.rollback()
+            return jsonify({"error": result.reason_code.lower()}), 409
+        _audit(
+            db,
+            action="document_order.redeliver",
+            target_type="document_order",
+            target_id=public_ref,
+            before={},
+            after={"delivery_job_id": result.job_id, "reason": reason},
+        )
+        db.commit()
+        return jsonify(
+            {
+                "ok": True,
+                "reference": public_ref,
+                "delivery_job_id": result.job_id,
+            }
+        ), 202
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 

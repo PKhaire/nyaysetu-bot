@@ -404,6 +404,7 @@ def test_payment_validation_accepts_exact_capture_and_rejects_refund():
     link = {
         "id": "plink_123",
         "status": "paid",
+        "accept_partial": False,
         "amount": 29900,
         "amount_paid": 29900,
         "currency": "INR",

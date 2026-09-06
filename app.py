@@ -187,6 +187,7 @@ from services.document_catalogue import PRODUCT_CODE as DOCUMENT_PRODUCT_CODE
 from services.document_capacity_service import DocumentStudioCapacityExhausted
 from services.document_release_service import release_gate as document_release_gate
 from services.document_payment_service import validate_current_document_capture
+from services.document_operations_service import enqueue_final_delivery
 from services.document_workflow import (
     apply_verified_payment as apply_verified_document_payment,
     build_preview as build_document_preview,
@@ -5075,10 +5076,12 @@ def payment_webhook():
                 .filter(User.id == document_order.user_id)
                 .one()
             )
-            link_result = document_download_links_for_user(
+            delivery_job = enqueue_final_delivery(
                 db,
                 document_order,
-                document_user,
+                dedupe_key=(
+                    f"document-payment:{payment_id}:final-delivery"
+                ),
             )
             existing_event.status = "DONE"
             existing_event.processed_at = now
@@ -5087,32 +5090,7 @@ def payment_webhook():
                 days=WEBHOOK_EVENT_TTL_DAYS
             )
             db.commit()
-
-            try:
-                message = (
-                    "Payment confirmed. Your Document Studio final files "
-                    "are available for 30 days."
-                )
-                if link_result.ok:
-                    links = link_result.value
-                    message += (
-                        "\nPDF: "
-                        f"{links['FINAL_PDF']}"
-                        "\nEditable DOCX: "
-                        f"{links['FINAL_DOCX']}"
-                    )
-                else:
-                    message += (
-                        " Open Document Studio > My documents to obtain "
-                        "fresh download links."
-                    )
-                send_text(document_user.whatsapp_id, message)
-            except Exception:
-                logger.exception(
-                    "Unable to send document delivery message | "
-                    "order_ref=%s",
-                    document_order.public_ref,
-                )
+            submit_outbox_job(delivery_job.id)
             record_event(
                 "document_studio_payment_confirmed",
                 {

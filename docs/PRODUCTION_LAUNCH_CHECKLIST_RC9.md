@@ -131,6 +131,9 @@ Evidence: multilingual matrix, redacted samples, access and idempotency results.
 
 ## G. Razorpay and financial operations
 
+- [x] Implement bounded Document Studio reconciliation using current Payment
+  Link and Payment evidence, exact recovery, mismatch quarantine, and exact
+  full-refund confirmation.
 - [ ] Complete Razorpay ReKYC and confirm settlements are unrestricted.
 - [ ] Keep staging on newly rotated `rzp_test_*` credentials.
 - [ ] Test successful, failed, cancelled, delayed, duplicated, and tampered test
@@ -187,6 +190,8 @@ Evidence: approved URLs, versions, test report, and consent record.
 
 ## J. Admin security and operations
 
+- [x] Implement privacy-safe Document Studio detail, one-order reconciliation,
+  audited refund-review, and idempotent final-link redelivery APIs.
 - [ ] Protect admin routes with MFA or an equivalent identity/access layer; a
   shared password alone is insufficient for production sensitive data.
 - [ ] Restrict access to named operators using least privilege.
@@ -205,6 +210,8 @@ registry review.
 
 ## K. Jobs, monitoring, backup, and recovery
 
+- [x] Put Document Studio final-link delivery in the durable outbox; create
+  short-lived URLs only during sending and scrub the order ID after acceptance.
 - [ ] Deploy web and every cron/worker from the same Git SHA.
 - [ ] Verify outbox, reconciliation, reminders (if enabled), and maintenance/
   retention jobs individually.

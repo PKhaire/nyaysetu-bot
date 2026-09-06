@@ -27,12 +27,15 @@ from models import (
     Booking,
     BookingFulfillment,
     BookingStatus,
+    DocumentAuditEvent,
+    DocumentOrder,
     OutboxJob,
     PaymentReconciliation,
     SupportRequest,
     User,
     utc_now,
 )
+from services.document_workflow import download_links_for_user
 from services.consultation_reminder_policy import (
     REMINDER_ELIGIBLE_FULFILLMENT_STATUSES,
     REMINDER_HORIZONS,
@@ -68,6 +71,8 @@ COMPLETED = "COMPLETED"
 DEAD = "DEAD"
 CONVERSATION_DELIVERY_KIND = "whatsapp_conversation_delivery"
 _CONVERSATION_DELIVERY_STEP = "whatsapp_conversation_delivery"
+DOCUMENT_FINAL_DELIVERY_KIND = "document_final_delivery"
+_DOCUMENT_FINAL_DELIVERY_STEP = "document_final_delivery"
 
 # A process can die after claiming a job. Reclaiming expired leases prevents
 # those jobs from remaining RUNNING forever.
@@ -91,6 +96,12 @@ _PERMANENT_ERROR_CODES = frozenset(
         "invalid_conversation_delivery_payload",
         "conversation_delivery_ambiguous",
         "conversation_delivery_rejected",
+        "invalid_document_final_delivery_payload",
+        "document_final_delivery_order_not_found",
+        "document_final_delivery_user_not_found",
+        "document_final_delivery_not_available",
+        "document_final_delivery_ambiguous",
+        "document_final_delivery_rejected",
     }
 )
 
@@ -501,6 +512,67 @@ def _handle_whatsapp_conversation_delivery(
     db.commit()
 
 
+def _handle_document_final_delivery(
+    db,
+    payload: dict[str, Any],
+    job: OutboxJob,
+) -> None:
+    """Issue fresh private links only while performing the delivery attempt."""
+
+    if _step_completed(payload, _DOCUMENT_FINAL_DELIVERY_STEP):
+        return
+    try:
+        document_order_id = int(payload["document_order_id"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise DeliveryFailure(
+            "invalid_document_final_delivery_payload"
+        ) from exc
+
+    order = db.get(DocumentOrder, document_order_id)
+    if not order:
+        raise DeliveryFailure("document_final_delivery_order_not_found")
+    if order.state != "FINAL_AVAILABLE" or not order.payment_processed:
+        raise DeliveryFailure("document_final_delivery_not_available")
+    user = db.get(User, order.user_id)
+    if not user:
+        raise DeliveryFailure("document_final_delivery_user_not_found")
+
+    links_result = download_links_for_user(db, order, user)
+    if not links_result.ok:
+        if links_result.reason_code == "FINAL_NOT_AVAILABLE":
+            raise DeliveryFailure("document_final_delivery_not_available")
+        raise DeliveryFailure("document_final_links_unavailable")
+    links = links_result.value
+    message = (
+        "Payment confirmed. Your Document Studio final files are available "
+        "for 30 days.\n"
+        f"PDF: {links['FINAL_PDF']}\n"
+        f"Editable DOCX: {links['FINAL_DOCX']}"
+    )
+    result = send_text(user.whatsapp_id, message)
+    if is_ambiguous_delivery_failure(result):
+        raise DeliveryFailure("document_final_delivery_ambiguous")
+    if not isinstance(result, dict) or result.get("ok") is not True:
+        if is_retryable_delivery_failure(result):
+            raise DeliveryFailure("document_final_delivery_not_sent")
+        raise DeliveryFailure("document_final_delivery_rejected")
+
+    db.add(
+        DocumentAuditEvent(
+            document_order_id=order.id,
+            actor_type="SYSTEM",
+            event_type="DOCUMENT_FINAL_DELIVERY_ACCEPTED",
+            from_state=order.state,
+            to_state=order.state,
+            details_json=_dump_payload({"delivery_job_id": job.id}),
+        )
+    )
+    # Remove the order identity as soon as Meta accepts the message. URLs and
+    # message text existed only in memory and were never part of the job row.
+    payload.clear()
+    _mark_step_completed(db, job, payload, _DOCUMENT_FINAL_DELIVERY_STEP)
+
+
 _HANDLERS = {
     "payment_success_message": _handle_payment_success_message,
     "booking_notification": _handle_booking_notification,
@@ -510,6 +582,7 @@ _HANDLERS = {
     "payment_reconciliation_alert": _handle_payment_reconciliation_alert,
     "consultation_reminder": _handle_consultation_reminder,
     CONVERSATION_DELIVERY_KIND: _handle_whatsapp_conversation_delivery,
+    DOCUMENT_FINAL_DELIVERY_KIND: _handle_document_final_delivery,
 }
 
 

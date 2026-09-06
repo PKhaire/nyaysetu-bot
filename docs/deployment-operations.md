@@ -663,13 +663,15 @@ Controlled run:
 python -m jobs.reconcile_payments --limit 100
 ```
 
-The job examines at most 200 recent-first unprocessed `PENDING`/`EXPIRED` links
-inside `PAYMENT_RECONCILIATION_LOOKBACK_DAYS`. For a possible capture it fetches
-both the Payment Link summary and current Payment resource. It automatically
-recovers only one exact captured, non-refunded INR payment whose provider link,
-reference/notes, amount, payment identity/status, and capture/refund state match
-the booking. Every ambiguous observation is preserved in
-`payment_reconciliations`; it never guesses from a screenshot, partial/refunded
+The job runs two isolated bounded scans and reports their results separately as
+`consultations` and `document_studio`. The consultation scan examines at most
+200 recent-first unprocessed `PENDING`/`EXPIRED` links. The Document Studio scan
+examines `PAYMENT_PENDING`, `NEEDS_ATTENTION`, and `REFUND_REVIEW` orders updated
+inside `PAYMENT_RECONCILIATION_LOOKBACK_DAYS`. For a possible capture each scan
+fetches both the Payment Link summary and current Payment resource. It
+automatically recovers only one exact captured, non-refunded INR payment whose
+provider link, reference/notes, amount, identity/status and capture/refund state
+match the stored purchase. It never guesses from a screenshot, partial/refunded
 capture, malformed response, or user text.
 
 Manual `RESOLVED`, `REFUND_INITIATED`, `REFUNDED`, and `IGNORED` dispositions
@@ -678,9 +680,10 @@ reopens them.
 
 The command prints privacy-minimised JSON. Exit `0` means all provider lookups
 completed, including when human review is required. Exit `2` means a
-configuration/provider error occurred. Review open items through
-`GET /admin/payment-reconciliations`; disposition mutations require
-`X-Operator-ID` and a resolution note.
+configuration/provider/final-release error occurred. Review consultation items
+through `GET /admin/payment-reconciliations`. Review Document Studio exceptions
+through `GET /admin/document-orders` and the per-reference detail route. Every
+mutation requires `X-Operator-ID` and a bounded reason where applicable.
 
 `render.yaml` schedules one bounded run every five minutes with the web
 database and scoped Razorpay API credentials. Alert on command exit `2`, stale
@@ -811,6 +814,11 @@ Core queues and actions:
 - Payment review: inspect captured-payment exceptions and record an explicit
   resolution/refund/ignore disposition with notes. This endpoint records a
   decision; it does not execute a Razorpay refund.
+- Document Studio: inspect privacy-safe order/audit state; reconcile one order
+  only from current Razorpay evidence; place an unreleasable paid order in
+  `REFUND_REVIEW`; and queue fresh final links with a reason plus idempotency
+  key. Execute refunds in Razorpay, then require the reconciler to observe an
+  exact full refund before the order becomes `REFUNDED`.
 - Availability: create/deactivate date-wide or slot blackouts and capacity
   overrides. Capacity `0` closes that scope. Verify the user-facing date/slot
   list immediately after every change.
@@ -900,31 +908,37 @@ At minimum:
 12. A forced notification-provider failure leaves a retryable outbox job.
 13. Cron delivery completes the recovered job, including when the 32-task web
     fast path is saturated.
-14. A missed exact provider capture is recovered once by
-    `python -m jobs.reconcile_payments --limit 100`; ambiguous evidence remains
-    unpaid and enters the review queue.
-15. Create, assign, and resolve a support ticket and fulfilment item; verify
+14. A missed exact consultation or Document Studio capture is recovered once by
+    `python -m jobs.reconcile_payments --limit 100`; ambiguous evidence grants
+    no entitlement and enters the applicable review queue.
+15. For a paid document, fail immediate WhatsApp delivery and verify one
+    retryable `document_final_delivery` job. Require fresh URLs to be created
+    only at send time, successful retry to scrub the order ID, and manual
+    redelivery with an idempotency key to remain auditable.
+16. Put an unreleasable paid document into `REFUND_REVIEW`, execute a full test
+    refund in Razorpay, and require current evidence to change it to `REFUNDED`.
+17. Create, assign, and resolve a support ticket and fulfilment item; verify
     audit entries and invalid transitions. Reject direct paid cancellation;
     verify the reviewed refund transition retains payment evidence and clears
     paid user state only when no other `PAID` booking remains.
-16. Apply/deactivate a blackout and capacity override; verify live availability.
-17. Run maintenance dry-run and `--fail-on-risk`; verify no protected evidence
+18. Apply/deactivate a blackout and capacity override; verify live availability.
+19. Run maintenance dry-run and `--fail-on-risk`; verify no protected evidence
     is selected for deletion.
-18. With templates empty, verify reminder scheduling is a no-op. If enabling
+20. With templates empty, verify reminder scheduling is a no-op. If enabling
     approved staging templates, verify deduplicated 24-hour/2-hour delivery and
     suppression after reschedule/refund-review/template removal.
-19. Support and feedback records are visible only to authorised operators.
-20. Logs contain request/event references but no raw phone, question, or legal
+21. Support and feedback records are visible only to authorised operators.
+22. Logs contain request/event references but no raw phone, question, or legal
     intake content.
-21. Per-user/global limits reject menu, support, media, and paid-flow requests
+23. Per-user/global limits reject menu, support, media, and paid-flow requests
     before branch work and emit no more than one limit notice per user/window.
-22. After a committed user-flow transition, inject a known-safe WhatsApp
+24. After a committed user-flow transition, inject a known-safe WhatsApp
     connection/config/transient failure. Require `delivery_queued`, one
     deduplicated conversation-delivery job, ignored Meta replay, successful
     outbox delivery, and terminal payload scrubbing.
-23. Inject an ambiguous WhatsApp read/protocol failure. Require
+25. Inject an ambiguous WhatsApp read/protocol failure. Require
     `delivery_not_retried`, a terminal inbound event, and no automatic send job.
-24. Against production-like PostgreSQL with two sessions, rehearse the
+26. Against production-like PostgreSQL with two sessions, rehearse the
     webhook/operator race on the same `OPEN` payment review. Operator-first
     `REFUND_INITIATED`/`REFUNDED` must prevent paid entitlement. Webhook-first,
     paused after provider validation and booking/review locking, must serialize
@@ -1175,8 +1189,12 @@ captured; enabling staging does not authorize production publication.
   controls remain process-local.
 - Maintenance deliberately covers only a narrow approved retention scope; it
   is not a legal-hold, privacy-request, or universal deletion system.
-- Payment reconciliation is scheduled, but it is a bounded safety net rather
-  than settlement/refund accounting and still requires staffed review.
+- Consultation and Document Studio payment reconciliation is scheduled, but it
+  is a bounded safety net rather than settlement/refund accounting and still
+  requires staffed review. Document final delivery is durable, while Meta can
+  still reject a free-form message outside the customer-service window; the
+  operator can direct the customer to **My documents** or use approved manual
+  contact.
 - Admin mutations are audited and the browser console adds signed sessions,
   CSRF protection and login throttling, but access still uses a shared password
   rather than individually verified application credentials/RBAC/MFA.

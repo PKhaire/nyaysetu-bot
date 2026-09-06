@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from sqlalchemy import create_engine
@@ -16,12 +16,16 @@ from models import (
     BookingFulfillment,
     BookingStatus,
     CaseBrief,
+    DocumentAuditEvent,
     DocumentOrder,
     ManualContactEvent,
+    OutboxJob,
     PaymentReconciliation,
     SupportRequest,
     User,
+    utc_now,
 )
+from services.document_operations_service import DocumentOperationResult
 from services.engagement_service import booking_status_message
 
 
@@ -825,3 +829,185 @@ def test_document_studio_ledger_excludes_answers_and_contact_data(
     assert "Do Not Expose This Answer" not in serialized
     assert "919900009999" not in serialized
     assert "Private Synthetic User" not in serialized
+
+
+def _seed_document_operation(session_factory, *, state="FINAL_AVAILABLE"):
+    db = session_factory()
+    try:
+        user = User(
+            whatsapp_id="919911112222",
+            case_id="NS-DOC-OPS-ADMIN",
+            name="Private Document Customer",
+        )
+        db.add(user)
+        db.flush()
+        order = DocumentOrder(
+            public_ref="DS-ADMINOPS01",
+            user_id=user.id,
+            product_code="mh_residential_leave_licence_11m_self_service",
+            template_version="mh-ll-en-2026-08-candidate-1",
+            state=state,
+            current_step="review",
+            draft_answers_json='{"private":"never expose"}',
+            output_classification="SELF_SERVICE_DRAFT",
+            payment_token="admin-document-payment-token",
+            razorpay_payment_link_id="plink_admin_document_1",
+            razorpay_payment_id=(
+                "pay_admin_document_1" if state == "FINAL_AVAILABLE" else None
+            ),
+            payment_processed=state == "FINAL_AVAILABLE",
+            final_available_until=(
+                utc_now() + timedelta(days=30)
+                if state == "FINAL_AVAILABLE"
+                else None
+            ),
+        )
+        db.add(order)
+        db.flush()
+        db.add(
+            DocumentAuditEvent(
+                document_order_id=order.id,
+                actor_type="SYSTEM",
+                event_type="DOCUMENT_TEST_EVENT",
+                from_state="PAYMENT_PENDING",
+                to_state=state,
+                details_json='{"reason_code":"TEST_ONLY"}',
+            )
+        )
+        db.commit()
+        return order.id
+    finally:
+        db.close()
+
+
+def test_document_order_detail_is_privacy_safe(client, admin_db):
+    _seed_document_operation(admin_db)
+
+    response = client.get(
+        "/admin/document-orders/DS-ADMINOPS01",
+        headers=_headers(),
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["state"] == "FINAL_AVAILABLE"
+    assert payload["payment_link_present"] is True
+    assert payload["payment_id_present"] is True
+    assert payload["events"][0]["event_type"] == "DOCUMENT_TEST_EVENT"
+    serialized = response.get_data(as_text=True)
+    assert "never expose" not in serialized
+    assert "919911112222" not in serialized
+    assert "Private Document Customer" not in serialized
+    assert "plink_admin_document_1" not in serialized
+    assert "pay_admin_document_1" not in serialized
+
+
+def test_admin_can_trigger_audited_document_reconciliation(
+    monkeypatch,
+    client,
+    admin_db,
+):
+    order_id = _seed_document_operation(admin_db, state="NEEDS_ATTENTION")
+    result = DocumentOperationResult(
+        True,
+        "recovered",
+        "DOCUMENT_FINAL_RECOVERED",
+        "DS-ADMINOPS01",
+        42,
+    )
+    monkeypatch.setattr(admin, "reconcile_document_order", lambda *_a, **_k: result)
+
+    response = client.post(
+        "/admin/document-orders/DS-ADMINOPS01/reconcile",
+        headers=_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["outcome"] == "recovered"
+    db = admin_db()
+    try:
+        audit = (
+            db.query(AdminAuditEvent)
+            .filter(AdminAuditEvent.action == "document_order.reconcile")
+            .one()
+        )
+        assert audit.target_id == "DS-ADMINOPS01"
+        assert audit.operator_id == "ops.user@example.com"
+        assert db.get(DocumentOrder, order_id) is not None
+    finally:
+        db.close()
+
+
+def test_admin_refund_review_and_redelivery_are_audited(
+    client,
+    admin_db,
+):
+    order_id = _seed_document_operation(admin_db)
+
+    refund = client.post(
+        "/admin/document-orders/DS-ADMINOPS01/refund-review",
+        headers=_headers(),
+        json={"reason": "Manual full refund approved after customer request."},
+    )
+    assert refund.status_code == 200
+
+    db = admin_db()
+    try:
+        order = db.get(DocumentOrder, order_id)
+        assert order.state == "REFUND_REVIEW"
+        # Restore entitlement to exercise the separate redelivery operation.
+        order.state = "FINAL_AVAILABLE"
+        db.commit()
+    finally:
+        db.close()
+
+    redelivery = client.post(
+        "/admin/document-orders/DS-ADMINOPS01/redeliver",
+        headers=_headers(),
+        json={
+            "reason": "Customer requested a fresh pair of download links.",
+            "idempotency_key": "support-ticket-1234",
+        },
+    )
+    assert redelivery.status_code == 202
+    replay = client.post(
+        "/admin/document-orders/DS-ADMINOPS01/redeliver",
+        headers=_headers(),
+        json={
+            "reason": "Customer repeated the same support request.",
+            "idempotency_key": "support-ticket-1234",
+        },
+    )
+    assert replay.status_code == 202
+    assert (
+        replay.get_json()["delivery_job_id"]
+        == redelivery.get_json()["delivery_job_id"]
+    )
+
+    db = admin_db()
+    try:
+        assert (
+            db.query(OutboxJob)
+            .filter(OutboxJob.kind == "document_final_delivery")
+            .count()
+            == 1
+        )
+        actions = {
+            row[0]
+            for row in db.query(AdminAuditEvent.action)
+            .filter(
+                AdminAuditEvent.action.in_(
+                    (
+                        "document_order.refund_review",
+                        "document_order.redeliver",
+                    )
+                )
+            )
+            .all()
+        }
+        assert actions == {
+            "document_order.refund_review",
+            "document_order.redeliver",
+        }
+    finally:
+        db.close()

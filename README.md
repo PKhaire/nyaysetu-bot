@@ -195,6 +195,10 @@ remain necessary.
 | `GET/POST/DELETE /admin/availability[...]` | Blackouts and capacity overrides |
 | `GET/POST /admin/outbox[...]` | Outbox inspection and controlled retry |
 | `GET /admin/audit` | Audited operator mutation history |
+| `GET /admin/document-orders[...]` | Privacy-safe Document Studio queue and audit detail |
+| `POST /admin/document-orders/<ref>/reconcile` | Exact-evidence payment recovery |
+| `POST /admin/document-orders/<ref>/refund-review` | Audited manual refund-review decision |
+| `POST /admin/document-orders/<ref>/redeliver` | Idempotent fresh-link delivery queueing |
 
 Machine clients use `Authorization: Bearer <ADMIN_TOKEN>` or
 `X-Admin-Token: <ADMIN_TOKEN>` and send `X-Operator-ID` on mutations. Human
@@ -259,9 +263,12 @@ manual web redeploy because automatic deploys are off. The optional
 smoke test and remove it immediately afterward.
 
 The payment reconciler runs every five minutes with web-service database and
-Razorpay API credentials. It checks both Payment Link and current Payment
-resources and auto-recovers only exact, captured, non-refunded evidence. Alert
-on exit code `2` and review every ambiguous item through the protected queue.
+Razorpay API credentials. It checks both consultation and Document Studio
+Payment Link/current Payment resources and auto-recovers only exact, captured,
+non-refunded evidence. Document recovery renders the final artifacts and queues
+a durable WhatsApp job whose private download URLs exist only during delivery.
+Alert on exit code `2` and review every ambiguous item through the protected
+queue.
 The payment webhook independently performs the same current dual-resource
 verification before granting entitlement; a provider lookup failure remains
 retryable, while invalid current evidence enters review without paying the

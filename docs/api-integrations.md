@@ -114,7 +114,9 @@ The current implementation:
     completes the webhook event, creates the fulfilment work item, and inserts
     separate outbox jobs. For a document order, atomically records payment,
     renders and stores the exact final PDF/DOCX artifacts, completes the event,
-    and sends only short-lived owner download links.
+    and inserts a durable final-delivery job. That job creates short-lived owner
+    links only in memory immediately before WhatsApp delivery; URLs and message
+    text are never stored in the outbox.
 
 Duplicate completed events return `200` and do not repeat payment mutation or
 outbox insertion. A signed but non-final event returns `409`; payment conflicts
@@ -163,6 +165,10 @@ before/after values and the operator ID in `admin_audit_events`.
 | `POST/DELETE /admin/availability/capacity[...]` | Activate/deactivate date or slot capacity overrides |
 | `GET /admin/audit` | Recent operator mutation audit |
 | `GET /admin/document-orders` | Privacy-minimised Document Studio order/artifact/release ledger plus current global daily-capacity snapshot |
+| `GET /admin/document-orders/<reference>` | Privacy-safe order state and recent document audit; excludes answers, contacts and provider IDs |
+| `POST /admin/document-orders/<reference>/reconcile` | Fetch current Razorpay evidence and recover only one exact captured, non-refunded payment |
+| `POST /admin/document-orders/<reference>/refund-review` | Stop release and record an audited complete-or-refund operating decision; does not call Razorpay |
+| `POST /admin/document-orders/<reference>/redeliver` | Queue fresh final links with a reason and caller-supplied idempotency key |
 | `GET/POST /admin/document-template-release` | Read the exact manifest or append an authenticated decision for its exact hashes |
 | `POST /admin/document-template-release/revoke` | Append an audited revocation of the current exact release approval |
 
@@ -186,6 +192,15 @@ For an accepted payment, the reconciliation endpoint permits
 `REFUND_INITIATED` only after fulfilment is in `REFUND_REVIEW`, and permits
 `REFUNDED` only after fulfilment is `REFUNDED` and the booking is `CANCELLED`.
 This prevents financial refund status from coexisting with paid entitlement.
+
+Document Studio recovery uses the same five-minute reconciliation command as
+consultations. `PAYMENT_PENDING`, `NEEDS_ATTENTION`, and `REFUND_REVIEW` orders
+are checked from current Payment Link and Payment resources. An exact capture
+can recover a missed/previously reviewed final release; an unpaid link is a
+no-op; ambiguous, partial, mismatched or non-final evidence stays quarantined.
+An exact full refund changes a refund-review order to `REFUNDED`. The refund
+review endpoint records an operating decision only: staff must execute the
+refund in Razorpay and let current provider evidence confirm it.
 
 ## Outbound WhatsApp Cloud API
 

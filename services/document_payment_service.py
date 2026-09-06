@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import secrets
+import re
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -19,6 +21,17 @@ from models import DocumentOrder, User
 
 _RAZORPAY_REFERENCE_ID_MAX_LENGTH = 40
 _PAYMENT_TOKEN_BYTES = 24
+_PAYMENT_LINK_ID_PATTERN = re.compile(r"plink_[A-Za-z0-9_-]{1,249}")
+_PAYMENT_ID_PATTERN = re.compile(r"pay_[A-Za-z0-9_-]{1,251}")
+
+
+@dataclass(frozen=True)
+class DocumentPaymentEvidence:
+    """Current provider evidence without any customer or secret fields."""
+
+    payment_link: dict[str, Any]
+    payment_id: str | None
+    payment: dict[str, Any] | None
 
 
 def _integer(value: object) -> int | None:
@@ -48,6 +61,8 @@ def validate_current_document_capture(
         return "DOCUMENT_PAYMENT_LINK_ENTITY_MISMATCH"
     if str(payment_link_entity.get("status") or "").lower() != "paid":
         return "DOCUMENT_PAYMENT_LINK_NOT_PAID"
+    if payment_link_entity.get("accept_partial") is not False:
+        return "DOCUMENT_PARTIAL_PAYMENT_CONFIGURATION"
     if _integer(payment_link_entity.get("amount")) != expected_amount:
         return "DOCUMENT_PAYMENT_LINK_AMOUNT_MISMATCH"
     if _integer(payment_link_entity.get("amount_paid")) != expected_amount:
@@ -104,7 +119,42 @@ def validate_current_document_capture(
     return None
 
 
-def _client() -> httpx.Client:
+def is_full_document_refund(
+    order: DocumentOrder,
+    payment_id: str,
+    payment_link_entity: dict[str, Any],
+    payment_entity: dict[str, Any],
+) -> bool:
+    """Return true only for exact order evidence and a complete refund."""
+
+    validation_error = validate_current_document_capture(
+        order,
+        payment_id,
+        payment_link_entity,
+        payment_entity,
+    )
+    if validation_error not in {
+        "DOCUMENT_PAYMENT_ALREADY_REFUNDED",
+        "DOCUMENT_PAYMENT_NOT_CAPTURED",
+    }:
+        return False
+    return bool(
+        payment_entity.get("id") == payment_id
+        and payment_entity.get("entity") == "payment"
+        and _integer(payment_entity.get("amount")) == order.price_minor
+        and str(payment_entity.get("currency") or "").upper()
+        == order.currency
+        and _integer(payment_entity.get("amount_refunded"))
+        == order.price_minor
+        and str(payment_entity.get("refund_status") or "").lower() == "full"
+    )
+
+
+def build_document_payment_client() -> httpx.Client:
+    """Build the authenticated Razorpay adapter used by document operations."""
+
+    if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
+        raise RuntimeError("Razorpay credentials are not configured")
     return httpx.Client(
         base_url="https://api.razorpay.com",
         auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET),
@@ -119,6 +169,54 @@ def _client() -> httpx.Client:
             connect=min(RAZORPAY_API_TIMEOUT_SECONDS, 5.0),
         ),
     )
+
+
+def _provider_entity(response, error_code: str) -> dict[str, Any]:
+    response.raise_for_status()
+    entity = response.json()
+    if not isinstance(entity, dict):
+        raise ValueError(error_code)
+    return entity
+
+
+def _captured_payment_id(payment_link: dict[str, Any]) -> str | None:
+    payments = payment_link.get("payments")
+    if not isinstance(payments, list) or len(payments) != 1:
+        return None
+    payment = payments[0]
+    if not isinstance(payment, dict):
+        return None
+    payment_id = str(payment.get("payment_id") or payment.get("id") or "").strip()
+    return payment_id if _PAYMENT_ID_PATTERN.fullmatch(payment_id) else None
+
+
+def fetch_current_document_payment_evidence(
+    payment_link_id: str,
+    *,
+    client: httpx.Client | None = None,
+) -> DocumentPaymentEvidence:
+    """Fetch current link and capture evidence for one Document Studio order."""
+
+    if not _PAYMENT_LINK_ID_PATTERN.fullmatch(str(payment_link_id or "")):
+        raise ValueError("invalid_document_payment_link_id")
+    owns_client = client is None
+    active_client = client or build_document_payment_client()
+    try:
+        payment_link = _provider_entity(
+            active_client.get(f"/v1/payment_links/{payment_link_id}"),
+            "invalid_document_payment_link_response",
+        )
+        payment_id = _captured_payment_id(payment_link)
+        payment = None
+        if payment_id:
+            payment = _provider_entity(
+                active_client.get(f"/v1/payments/{payment_id}"),
+                "invalid_document_payment_response",
+            )
+        return DocumentPaymentEvidence(payment_link, payment_id, payment)
+    finally:
+        if owns_client:
+            active_client.close()
 
 
 def create_document_payment_link(
@@ -161,7 +259,7 @@ def create_document_payment_link(
         },
     }
     owns_client = client is None
-    client = client or _client()
+    client = client or build_document_payment_client()
     try:
         response = client.post("/v1/payment_links", json=payload)
         response.raise_for_status()

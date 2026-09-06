@@ -8,6 +8,9 @@ from external rollout work and future product ideas.
 
 Start with:
 
+- [RC10 operations-hardening release notes](RELEASE_NOTES_2026-09-06_RC10.md)
+  - Document Studio reconciliation, audited refund review, durable final-link
+    delivery and idempotent operator redelivery.
 - [Integrated RC9 production launch checklist](PRODUCTION_LAUNCH_CHECKLIST_RC9.md)
   - mandatory go/no-go gates for launching NyaySetu Bot and Document Studio
   together as one production release.
@@ -112,6 +115,10 @@ emergency response, or guarantee legal advice/outcome.
 | `GET/POST /admin/outbox[...]` | Queue inspection and retry |
 | `GET /admin/audit` | Operator mutation audit |
 | `GET /admin/document-orders` | Privacy-minimised Document Studio operations ledger |
+| `GET /admin/document-orders/<ref>` | Privacy-safe Document Studio audit detail |
+| `POST /admin/document-orders/<ref>/reconcile` | Exact current-evidence recovery |
+| `POST /admin/document-orders/<ref>/refund-review` | Audited refund-review decision |
+| `POST /admin/document-orders/<ref>/redeliver` | Idempotent fresh-link delivery |
 | `POST /admin/document-template-release` | Authenticated append-only template release decision |
 
 Operational entry points are:

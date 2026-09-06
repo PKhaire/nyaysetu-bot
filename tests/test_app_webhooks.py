@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 from sqlalchemy.dialects import postgresql
@@ -13,11 +13,14 @@ from sqlalchemy.orm import Query
 from models import (
     Booking,
     BookingStatus,
+    DocumentOrder,
     OutboxJob,
     PaymentReconciliation,
     User,
     WebhookEvent,
+    utc_now,
 )
+from services.document_workflow import WorkflowResult
 
 
 RAZORPAY_SECRET = "test-razorpay-secret"
@@ -100,6 +103,41 @@ def _create_pending_booking(
         db.add_all([user, booking])
         db.commit()
         return booking.id
+    finally:
+        db.close()
+
+
+def _create_pending_document_order(session_factory):
+    db = session_factory()
+    try:
+        user = User(
+            whatsapp_id="919900008888",
+            case_id="NS-DOC-WEBHOOK",
+            language="en",
+            name="Synthetic Document Customer",
+        )
+        db.add(user)
+        db.flush()
+        order = DocumentOrder(
+            public_ref="DS-WEBHOOK1234",
+            user_id=user.id,
+            product_code="mh_residential_leave_licence_11m_self_service",
+            template_version="mh-ll-en-2026-08-candidate-1",
+            state="PAYMENT_PENDING",
+            current_step="review",
+            draft_answers_json="{}",
+            output_classification="SELF_SERVICE_DRAFT",
+            active_revision_number=1,
+            preview_manifest_hash="a" * 64,
+            price_minor=29_900,
+            currency="INR",
+            payment_token="document-webhook-token",
+            razorpay_payment_link_id="plink_DocumentOps1",
+            payment_processed=False,
+        )
+        db.add(order)
+        db.commit()
+        return order.id
     finally:
         db.close()
 
@@ -309,6 +347,100 @@ def test_payment_webhook_accepts_booking_stored_price_not_current_global_price(
             == 1
         )
         assert db.query(OutboxJob).count() == 1
+    finally:
+        db.close()
+
+
+def test_document_payment_webhook_commits_durable_delivery_before_fast_path(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+    deferred_threads,
+):
+    _configure_payment_route(monkeypatch, app_module)
+    order_id = _create_pending_document_order(isolated_app_db)
+    payment_id = "pay_DocumentOps1"
+    payment_link_id = "plink_DocumentOps1"
+    current_link = {
+        "id": payment_link_id,
+        "entity": "payment_link",
+        "status": "paid",
+        "accept_partial": False,
+        "amount": 29_900,
+        "amount_paid": 29_900,
+        "currency": "INR",
+        "reference_id": "document-webhook-token",
+        "notes": {
+            "document_order_ref": "DS-WEBHOOK1234",
+            "revision_number": "1",
+            "preview_manifest_hash": "a" * 64,
+            "product_code": (
+                "mh_residential_leave_licence_11m_self_service"
+            ),
+        },
+        "payments": [
+            {
+                "payment_id": payment_id,
+                "status": "captured",
+                "amount": 29_900,
+            }
+        ],
+    }
+    current_payment = {
+        "id": payment_id,
+        "entity": "payment",
+        "status": "captured",
+        "captured": True,
+        "amount": 29_900,
+        "currency": "INR",
+        "amount_refunded": 0,
+        "refund_status": None,
+    }
+    monkeypatch.setattr(
+        app_module,
+        "fetch_current_razorpay_capture",
+        lambda *_args: (current_link, current_payment),
+    )
+
+    def release_document(_db, order, **kwargs):
+        order.state = "FINAL_AVAILABLE"
+        order.payment_processed = True
+        order.razorpay_payment_id = kwargs["payment_id"]
+        order.paid_at = utc_now()
+        order.final_available_until = utc_now() + timedelta(days=30)
+        return WorkflowResult(True, "FINAL_AVAILABLE", order)
+
+    monkeypatch.setattr(
+        app_module,
+        "apply_verified_document_payment",
+        release_document,
+    )
+
+    response = _signed_payment_post(
+        client,
+        _payment_payload(
+            payment_id=payment_id,
+            payment_link_id=payment_link_id,
+            amount=29_900,
+        ),
+    )
+
+    assert response.status_code == 200
+    assert len(deferred_threads) == 1
+    transport_spies["text"].assert_not_called()
+    db = isolated_app_db()
+    try:
+        order = db.get(DocumentOrder, order_id)
+        job = db.query(OutboxJob).one()
+        event = db.query(WebhookEvent).one()
+        assert order.state == "FINAL_AVAILABLE"
+        assert order.payment_processed is True
+        assert job.kind == "document_final_delivery"
+        assert json.loads(job.payload_json) == {"document_order_id": order.id}
+        assert deferred_threads == [job.id]
+        assert event.status == "DONE"
     finally:
         db.close()
 
