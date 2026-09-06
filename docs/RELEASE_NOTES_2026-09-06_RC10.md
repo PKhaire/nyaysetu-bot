@@ -45,7 +45,9 @@ do not make the cron fail.
 
 ## Deployment impact
 
-- No new environment variable.
+- No new environment-variable values. The outbox and payment-reconciliation
+  cron services must inherit the existing Document Studio S3 settings; the
+  reconciler must also inherit the existing price/final-retention settings.
 - No Alembic migration; schema remains `20260903_01`.
 - The existing five-minute reconciliation cron command is unchanged.
 - The existing outbox cron processes the new `document_final_delivery` kind.

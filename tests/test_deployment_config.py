@@ -184,11 +184,14 @@ def test_render_pins_operational_policy_for_maintenance():
         "PROCESSED_MESSAGE_TTL_DAYS": 1,
         "CASE_BRIEF_UNATTACHED_TTL_DAYS": 1,
         "DOCUMENT_STUDIO_DRAFT_TTL_DAYS": 1,
-        "DOCUMENT_STUDIO_S3_BUCKET": 1,
-        "DOCUMENT_STUDIO_S3_REGION": 1,
-        "DOCUMENT_STUDIO_S3_ACCESS_KEY_ID": 1,
-        "DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY": 1,
-        "DOCUMENT_STUDIO_S3_ENDPOINT_URL": 1,
+        "DOCUMENT_STUDIO_DOWNLOAD_TTL_SECONDS": 2,
+        "DOCUMENT_STUDIO_FINAL_TTL_DAYS": 1,
+        "DOCUMENT_STUDIO_PRICE_INR": 1,
+        "DOCUMENT_STUDIO_S3_BUCKET": 3,
+        "DOCUMENT_STUDIO_S3_REGION": 3,
+        "DOCUMENT_STUDIO_S3_ACCESS_KEY_ID": 3,
+        "DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY": 3,
+        "DOCUMENT_STUDIO_S3_ENDPOINT_URL": 3,
         "ANALYTICS_EVENT_TTL_DAYS": 1,
         "OUTBOX_COMPLETED_TTL_DAYS": 1,
         "PAYMENT_LINK_TTL_MINUTES": 1,
@@ -200,6 +203,34 @@ def test_render_pins_operational_policy_for_maintenance():
     }
     for key, count in expected_reference_counts.items():
         assert blueprint.count(f"envVarKey: {key}") == count
+
+    outbox = _render_service_block(blueprint, "nyaysetu-outbox")
+    for key in {
+        "DOCUMENT_STUDIO_DOWNLOAD_TTL_SECONDS",
+        "DOCUMENT_STUDIO_S3_BUCKET",
+        "DOCUMENT_STUDIO_S3_REGION",
+        "DOCUMENT_STUDIO_S3_ACCESS_KEY_ID",
+        "DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY",
+        "DOCUMENT_STUDIO_S3_ENDPOINT_URL",
+    }:
+        assert f"- key: {key}\n        fromService:" in outbox
+        assert f"envVarKey: {key}" in outbox
+
+    reconciliation = _render_service_block(
+        blueprint, "nyaysetu-payment-reconciliation"
+    )
+    for key in {
+        "DOCUMENT_STUDIO_PRICE_INR",
+        "DOCUMENT_STUDIO_FINAL_TTL_DAYS",
+        "DOCUMENT_STUDIO_DOWNLOAD_TTL_SECONDS",
+        "DOCUMENT_STUDIO_S3_BUCKET",
+        "DOCUMENT_STUDIO_S3_REGION",
+        "DOCUMENT_STUDIO_S3_ACCESS_KEY_ID",
+        "DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY",
+        "DOCUMENT_STUDIO_S3_ENDPOINT_URL",
+    }:
+        assert f"- key: {key}\n        fromService:" in reconciliation
+        assert f"envVarKey: {key}" in reconciliation
 
     maintenance = _render_service_block(blueprint, "nyaysetu-maintenance")
     for key in {

@@ -255,6 +255,36 @@ services:
           type: web
           name: nyaysetu-bot-backend
           envVarKey: DATABASE_URL
+      - key: DOCUMENT_STUDIO_DOWNLOAD_TTL_SECONDS
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: DOCUMENT_STUDIO_DOWNLOAD_TTL_SECONDS
+      - key: DOCUMENT_STUDIO_S3_BUCKET
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: DOCUMENT_STUDIO_S3_BUCKET
+      - key: DOCUMENT_STUDIO_S3_REGION
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: DOCUMENT_STUDIO_S3_REGION
+      - key: DOCUMENT_STUDIO_S3_ACCESS_KEY_ID
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: DOCUMENT_STUDIO_S3_ACCESS_KEY_ID
+      - key: DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY
+      - key: DOCUMENT_STUDIO_S3_ENDPOINT_URL
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: DOCUMENT_STUDIO_S3_ENDPOINT_URL
       - key: WHATSAPP_TOKEN
         fromService:
           type: web
@@ -422,6 +452,46 @@ services:
           type: web
           name: nyaysetu-bot-backend
           envVarKey: DATABASE_URL
+      - key: DOCUMENT_STUDIO_PRICE_INR
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: DOCUMENT_STUDIO_PRICE_INR
+      - key: DOCUMENT_STUDIO_FINAL_TTL_DAYS
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: DOCUMENT_STUDIO_FINAL_TTL_DAYS
+      - key: DOCUMENT_STUDIO_DOWNLOAD_TTL_SECONDS
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: DOCUMENT_STUDIO_DOWNLOAD_TTL_SECONDS
+      - key: DOCUMENT_STUDIO_S3_BUCKET
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: DOCUMENT_STUDIO_S3_BUCKET
+      - key: DOCUMENT_STUDIO_S3_REGION
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: DOCUMENT_STUDIO_S3_REGION
+      - key: DOCUMENT_STUDIO_S3_ACCESS_KEY_ID
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: DOCUMENT_STUDIO_S3_ACCESS_KEY_ID
+      - key: DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY
+      - key: DOCUMENT_STUDIO_S3_ENDPOINT_URL
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: DOCUMENT_STUDIO_S3_ENDPOINT_URL
       - key: RAZORPAY_MODE
         fromService:
           type: web
