@@ -255,6 +255,16 @@ approved contingency migration and reconciliation plan.
 
 ## Amazon SES
 
+Amazon SES is optional. The first production release sets
+`EMAIL_NOTIFICATIONS_ENABLED=false` and uses authenticated operator queues plus
+the manual-contact runbook. In this mode no email-only job is enqueued or sent,
+old email-only backlog is safely changed to `CANCELLED`, and SES/AWS credentials
+are not required for readiness. The durable outbox still sends WhatsApp,
+reminders, receipts when separately enabled, and Document Studio final links.
+
+The remainder of this section is the contract for a future release that sets
+`EMAIL_NOTIFICATIONS_ENABLED=true`.
+
 `services/email_service.py` sends:
 
 - Confirmed-booking notifications.
@@ -272,7 +282,7 @@ when the deduplicated list exceeds Amazon SES's 50-destination limit.
 
 `services/email_service.py` uses the boto3 SES v2 client over HTTPS in
 `SES_REGION`. It uses `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, plus
-optional `AWS_SESSION_TOKEN`. Staging and production require
+optional `AWS_SESSION_TOKEN`. Email-enabled staging and production require
 `SES_CONFIGURATION_SET` so provider events can be monitored. Connect and read
 timeouts are bounded by
 `SES_CONNECT_TIMEOUT_SECONDS` (default `5`) and
@@ -307,16 +317,20 @@ Production prerequisites:
 
 ## Durable outbox
 
-Payment confirmation creates independent jobs for WhatsApp success,
-booking-notification email, and, when `AUTO_SEND_RECEIPTS=true`, a receipt.
-Support email uses a support-notification job. The outbox runner:
+Payment confirmation always creates a WhatsApp success job. It creates a
+booking-notification email job only when `EMAIL_NOTIFICATIONS_ENABLED=true`,
+and creates a receipt job when `AUTO_SEND_RECEIPTS=true`. Support and
+payment-review email jobs use the same email switch. The outbox runner:
 
 ```text
 python -m jobs.process_outbox
 ```
 
 claims a bounded batch, retries with exponential backoff, recovers expired
-running leases, and marks exhausted jobs `DEAD`. The web request may start a
+running leases, and marks exhausted jobs `DEAD`. When email is disabled, it
+cancels only email-only `PENDING`, `FAILED`, or `DEAD` jobs, redacts their
+payloads, and reports `outbox_cancelled`; non-email failures remain visible and
+critical. The web request may start a
 best-effort fast-path task, but that executor admits no more than 32
 queued/in-flight tasks and skips the optional kick when saturated. The
 committed database row and one-minute cron remain the recovery source.
@@ -436,11 +450,11 @@ The authoritative defaults and validation rules are in `config.py` and
 - Razorpay: `RAZORPAY_*`, current/previous webhook secret,
   `PAYMENT_LINK_TTL_MINUTES`, and reconciliation lookback.
 - Booking: price, cutoff, horizon, daily capacity, and per-slot capacity.
-- Delivery: Amazon SES region/sender/AWS credentials, configuration set
-  (required in staging/production), bounded connect/read timeouts, notification
-  recipients, outbox retry
-  settings, `AUTO_SEND_RECEIPTS`, and exact per-language 24-hour/2-hour Meta
-  reminder template pairs plus catch-up/batch bounds.
+- Delivery: `EMAIL_NOTIFICATIONS_ENABLED`; optional Amazon SES sender,
+  credentials, configuration set, timeouts, and internal recipients when that
+  switch is true; outbox retry settings; `AUTO_SEND_RECEIPTS`; and exact
+  per-language 24-hour/2-hour Meta reminder template pairs plus catch-up/batch
+  bounds.
 - Product trust: support SLA, privacy/terms/refund/cancellation URLs, consent
   versions, admin token, and AI safety settings.
 - Document Studio: global enable switch, allowlisted product, reviewed

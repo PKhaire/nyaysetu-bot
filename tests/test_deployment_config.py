@@ -45,6 +45,15 @@ def test_staging_disables_automatic_schema_creation_by_default(monkeypatch):
     assert config["AUTO_CREATE_SCHEMA"] is False
 
 
+def test_email_notifications_are_disabled_by_default(monkeypatch):
+    monkeypatch.setenv("ENV", "test")
+    monkeypatch.delenv("EMAIL_NOTIFICATIONS_ENABLED", raising=False)
+
+    config = runpy.run_path(str(PROJECT_ROOT / "config.py"))
+
+    assert config["EMAIL_NOTIFICATIONS_ENABLED"] is False
+
+
 def test_document_studio_daily_capacity_must_be_positive(monkeypatch):
     monkeypatch.setenv("ENV", "test")
     monkeypatch.setenv("DOCUMENT_STUDIO_DAILY_CAPACITY", "0")
@@ -197,8 +206,7 @@ def test_render_pins_operational_policy_for_maintenance():
         "PAYMENT_LINK_TTL_MINUTES": 1,
         "PAYMENT_RECONCILIATION_LOOKBACK_DAYS": 2,
         "SUPPORT_SLA_HOURS": 1,
-        "SUPPORT_NOTIFICATION_EMAILS": 1,
-        "PAYMENT_RECONCILIATION_EMAILS": 2,
+        "EMAIL_NOTIFICATIONS_ENABLED": 2,
         "CONSULTATION_REMINDER_CATCHUP_MINUTES": 2,
     }
     for key, count in expected_reference_counts.items():
@@ -245,24 +253,23 @@ def test_render_pins_operational_policy_for_maintenance():
         assert f"envVarKey: {key}" in maintenance
 
 
-def test_render_propagates_ses_configuration_to_the_email_outbox():
+def test_render_formally_disables_email_without_ses_credentials():
     blueprint = (PROJECT_ROOT / "render.yaml").read_text(encoding="utf-8")
     web = _render_service_block(blueprint, "nyaysetu-bot-backend")
     outbox = _render_service_block(blueprint, "nyaysetu-outbox")
+    reconciliation = _render_service_block(
+        blueprint, "nyaysetu-payment-reconciliation"
+    )
 
     assert "SENDGRID" not in blueprint
     assert "    name: nyaysetu-bot-backend\n" in web
     assert "    domains:\n      - api.nyaysetu.in\n" in web
-    assert "- key: SES_REGION\n        value: ap-south-1" in web
-    assert '- key: SES_CONNECT_TIMEOUT_SECONDS\n        value: "5"' in web
-    assert '- key: SES_READ_TIMEOUT_SECONDS\n        value: "15"' in web
+    assert (
+        '- key: EMAIL_NOTIFICATIONS_ENABLED\n        value: "false"'
+        in web
+    )
 
     operator_supplied = {
-        "SES_FROM_EMAIL",
-        "SES_CONFIGURATION_SET",
-        "AWS_ACCESS_KEY_ID",
-        "AWS_SECRET_ACCESS_KEY",
-        "AWS_SESSION_TOKEN",
         "BOOKING_PRICE",
         "WHATSAPP_APP_SECRET_PREVIOUS",
         "RAZORPAY_WEBHOOK_SECRET_PREVIOUS",
@@ -270,7 +277,14 @@ def test_render_propagates_ses_configuration_to_the_email_outbox():
     for key in operator_supplied:
         assert f"- key: {key}\n        sync: false" in web
 
-    inherited = {
+    for service in (outbox, reconciliation):
+        assert (
+            "- key: EMAIL_NOTIFICATIONS_ENABLED\n        fromService:"
+            in service
+        )
+        assert "envVarKey: EMAIL_NOTIFICATIONS_ENABLED" in service
+
+    disabled_email_variables = {
         "SES_REGION",
         "SES_FROM_EMAIL",
         "SES_CONFIGURATION_SET",
@@ -283,6 +297,6 @@ def test_render_propagates_ses_configuration_to_the_email_outbox():
         "PAYMENT_RECONCILIATION_EMAILS",
         "SUPPORT_NOTIFICATION_EMAILS",
     }
-    for key in inherited:
-        assert f"- key: {key}\n        fromService:" in outbox
-        assert f"envVarKey: {key}" in outbox
+    for key in disabled_email_variables:
+        assert f"- key: {key}" not in blueprint
+        assert f"envVarKey: {key}" not in blueprint

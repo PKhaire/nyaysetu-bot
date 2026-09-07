@@ -8,6 +8,9 @@ from external rollout work and future product ideas.
 
 Start with:
 
+- [RC11 email-disabled operations release notes](RELEASE_NOTES_2026-09-07_RC11.md)
+  - formally disables internal email for V1, preserves mandatory WhatsApp and
+    Document Studio delivery, and safely closes legacy email-only backlog.
 - [RC10 operations-hardening release notes](RELEASE_NOTES_2026-09-06_RC10.md)
   - Document Studio reconciliation, audited refund review, durable final-link
     delivery and idempotent operator redelivery.
@@ -160,7 +163,7 @@ Implemented in the repository:
 - Signed, retryable, idempotent Meta and Razorpay webhook handling.
 - Atomic payment/outbox transaction and retryable external delivery.
 - Durable lease-based inbound-message claims recoverable after a process crash.
-- Safe temporary receipts, configurable email recipients, AI consent/PII
+- Safe temporary receipts, optional configurable email, AI consent/PII
   controls, versioned consent, support, feedback, and audited operator APIs.
 - Payment-link reconciliation that automatically recovers only exact provider
   evidence and queues ambiguity for human review.
@@ -183,8 +186,8 @@ Still required before production cutover:
   changes.
 - Deploy the one-worker web service plus outbox, reconciliation, reminder, and
   maintenance crons with correctly scoped shared settings.
-- Pass signed Meta/Razorpay/Amazon SES staging, duplicate/failure, and PostgreSQL
-  concurrency tests.
+- Pass signed Meta/Razorpay, email-disabled/manual-operations,
+  duplicate/failure, and PostgreSQL concurrency tests.
 - Staff consultation fulfilment/support and approve price, capacity, refund,
   cancellation, privacy, AI, retention, and incident policies.
 - Activate monitoring for webhook failures, unmatched payments, readiness,

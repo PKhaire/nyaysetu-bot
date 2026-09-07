@@ -561,7 +561,7 @@ def run_maintenance(
         outbox_query = (
             db.query(OutboxJob)
             .filter(
-                OutboxJob.status == "COMPLETED",
+                OutboxJob.status.in_(("COMPLETED", "CANCELLED")),
                 OutboxJob.updated_at <= outbox_cutoff,
             )
             .order_by(OutboxJob.updated_at.asc(), OutboxJob.id.asc())
@@ -577,7 +577,7 @@ def run_maintenance(
                 db.query(OutboxJob)
                 .filter(
                     OutboxJob.id.in_(outbox_ids),
-                    OutboxJob.status == "COMPLETED",
+                    OutboxJob.status.in_(("COMPLETED", "CANCELLED")),
                     OutboxJob.updated_at <= outbox_cutoff,
                 )
                 .delete(synchronize_session=False)

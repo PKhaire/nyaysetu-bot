@@ -17,6 +17,7 @@ from typing import Any
 from config import (
     AUTO_SEND_RECEIPTS,
     CONSULTATION_REMINDER_CATCHUP_MINUTES,
+    EMAIL_NOTIFICATIONS_ENABLED,
     OUTBOX_MAX_ATTEMPTS,
     OUTBOX_RETRY_BASE_SECONDS,
     OUTBOX_RETRY_MAX_SECONDS,
@@ -69,6 +70,14 @@ PENDING = "PENDING"
 RUNNING = "RUNNING"
 COMPLETED = "COMPLETED"
 DEAD = "DEAD"
+CANCELLED = "CANCELLED"
+EMAIL_NOTIFICATION_JOB_KINDS = frozenset(
+    {
+        "booking_notification",
+        "support_notification",
+        "payment_reconciliation_alert",
+    }
+)
 CONVERSATION_DELIVERY_KIND = "whatsapp_conversation_delivery"
 _CONVERSATION_DELIVERY_STEP = "whatsapp_conversation_delivery"
 DOCUMENT_FINAL_DELIVERY_KIND = "document_final_delivery"
@@ -203,6 +212,64 @@ def enqueue_job(
     return job
 
 
+def cancel_disabled_email_jobs(limit: int = 100) -> int:
+    """Cancel queued email-only work when the release excludes email."""
+
+    if EMAIL_NOTIFICATIONS_ENABLED:
+        return 0
+
+    bounded_limit = max(1, min(int(limit), 100))
+    cancellable_statuses = (PENDING, DEAD, "FAILED")
+    db = SessionLocal()
+    try:
+        job_ids = [
+            row[0]
+            for row in (
+                db.query(OutboxJob.id)
+                .filter(
+                    OutboxJob.kind.in_(EMAIL_NOTIFICATION_JOB_KINDS),
+                    OutboxJob.status.in_(cancellable_statuses),
+                )
+                .order_by(OutboxJob.id.asc())
+                .limit(bounded_limit)
+                .all()
+            )
+        ]
+        if not job_ids:
+            return 0
+        affected = (
+            db.query(OutboxJob)
+            .filter(
+                OutboxJob.id.in_(job_ids),
+                OutboxJob.kind.in_(EMAIL_NOTIFICATION_JOB_KINDS),
+                OutboxJob.status.in_(cancellable_statuses),
+            )
+            .update(
+                {
+                    OutboxJob.status: CANCELLED,
+                    OutboxJob.payload_json: _dump_payload(
+                        {
+                            "cancelled_reason": (
+                                "email_notifications_disabled"
+                            ),
+                            "redacted": True,
+                        }
+                    ),
+                    OutboxJob.last_error: "email_notifications_disabled",
+                    OutboxJob.updated_at: _utc_now(),
+                },
+                synchronize_session=False,
+            )
+        )
+        db.commit()
+        return int(affected)
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 def _handle_payment_success_message(
     db,
     payload: dict[str, Any],
@@ -289,7 +356,8 @@ def _handle_payment_followup(
     """Backward-compatible composite with durable per-step progress."""
 
     _handle_payment_success_message(db, payload, job)
-    _handle_booking_notification(db, payload, job)
+    if EMAIL_NOTIFICATIONS_ENABLED:
+        _handle_booking_notification(db, payload, job)
     _handle_payment_receipt(db, payload, job)
 
 
@@ -621,6 +689,22 @@ def process_job(job_id: int) -> bool:
         job = db.get(OutboxJob, job_id)
         if not job:
             return False
+
+        if (
+            not EMAIL_NOTIFICATIONS_ENABLED
+            and job.kind in EMAIL_NOTIFICATION_JOB_KINDS
+        ):
+            job.status = CANCELLED
+            job.payload_json = _dump_payload(
+                {
+                    "cancelled_reason": "email_notifications_disabled",
+                    "redacted": True,
+                }
+            )
+            job.last_error = "email_notifications_disabled"
+            job.updated_at = _utc_now()
+            db.commit()
+            return True
 
         try:
             handler = _HANDLERS.get(job.kind)

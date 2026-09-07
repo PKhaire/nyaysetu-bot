@@ -210,12 +210,16 @@ Razorpay uses the payment ID as `event_id`. Full provider bodies are not stored.
 ### `outbox_jobs`
 
 Stores job kind, JSON payload, status, attempts, next availability, safe error,
-and timestamps. Current states are `PENDING`, `RUNNING`, `COMPLETED`, and
-`DEAD`.
+and timestamps. Current states are `PENDING`, `RUNNING`, `COMPLETED`, `DEAD`,
+and `CANCELLED`. The last state records email-only work intentionally
+terminalized by the formal email-disable switch; it is not used to hide
+WhatsApp, document, reminder, or receipt failures.
 
 Payloads use internal record IDs and step markers. They must still be treated
-as restricted application data. Old `COMPLETED` jobs are eligible for bounded
-maintenance deletion; pending/running/dead evidence is preserved.
+as restricted application data. Cancelled email payloads are immediately
+replaced with a minimal reason marker. Old `COMPLETED` and `CANCELLED` jobs are
+eligible for bounded maintenance deletion; pending/running/dead evidence is
+preserved.
 
 ### `booking_fulfillments`
 

@@ -20,6 +20,7 @@ from sqlalchemy import or_
 from config import (
     AUTO_SEND_RECEIPTS,
     BOOKING_NOTIFICATION_EMAILS,
+    EMAIL_NOTIFICATIONS_ENABLED,
     PAYMENT_RECONCILIATION_EMAILS,
     PAYMENT_RECONCILIATION_LOOKBACK_DAYS,
     RAZORPAY_API_TIMEOUT_SECONDS,
@@ -393,7 +394,11 @@ def _upsert_review(
         item.resolved_by = None
         item.resolution_note = None
     db.flush()
-    if status == "OPEN" and PAYMENT_RECONCILIATION_EMAILS:
+    if (
+        status == "OPEN"
+        and EMAIL_NOTIFICATIONS_ENABLED
+        and PAYMENT_RECONCILIATION_EMAILS
+    ):
         enqueue_job(
             db,
             "payment_reconciliation_alert",
@@ -413,7 +418,7 @@ def _enqueue_payment_followups(db, booking: Booking, payment_id: str) -> None:
         {"booking_id": booking.id},
         dedupe_key=f"payment:{payment_id}:success-message",
     )
-    if BOOKING_NOTIFICATION_EMAILS:
+    if EMAIL_NOTIFICATIONS_ENABLED and BOOKING_NOTIFICATION_EMAILS:
         enqueue_job(
             db,
             "booking_notification",

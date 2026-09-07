@@ -221,17 +221,7 @@ database access.
 ### Additional production-readiness and operational settings
 
 ```text
-SES_REGION=ap-south-1
-SES_FROM_EMAIL=...
-SES_CONFIGURATION_SET=...
-SES_CONNECT_TIMEOUT_SECONDS=5
-SES_READ_TIMEOUT_SECONDS=15
-AWS_ACCESS_KEY_ID=...
-AWS_SECRET_ACCESS_KEY=...
-AWS_SESSION_TOKEN=
-BOOKING_NOTIFICATION_EMAILS=...
-SUPPORT_NOTIFICATION_EMAILS=...
-PAYMENT_RECONCILIATION_EMAILS=...
+EMAIL_NOTIFICATIONS_ENABLED=false
 SUPPORT_PHONE=...
 SUPPORT_EMAIL=...
 PRIVACY_EMAIL=...
@@ -259,19 +249,55 @@ Production `/health/ready` requires both groups. It also validates live
 Razorpay mode and an `rzp_live_...` key ID of at least 16 characters; minimum
 lengths of 32 for the WhatsApp app secret/token, admin token, browser-session
 signing secret and AI secret, 16 for the admin password, WhatsApp verify token,
-and Razorpay API/webhook secrets; valid SES
-region/from-address, an AWS access-key ID of at least 16 characters, an AWS
-secret access key of at least 32 characters, and an optional session token of at
-least 16 characters; a numeric WhatsApp phone ID; valid email addresses; HTTPS
-policy URLs; current Alembic revision; disabled automatic schema creation; and a
-legal-content reviewed version exactly matching the configured content version
-with a valid non-future review date. A nonempty
+and Razorpay API/webhook secrets; a numeric WhatsApp phone ID; valid public
+support/privacy email addresses; HTTPS policy URLs; current Alembic revision;
+disabled automatic schema creation; and a legal-content reviewed version
+exactly matching the configured content version with a valid non-future review
+date. When `EMAIL_NOTIFICATIONS_ENABLED=true`, readiness additionally requires
+valid SES region/sender/configuration-set values, AWS credentials, and all three
+internal recipient lists. A nonempty
 `WHATSAPP_APP_SECRET_PREVIOUS` must be at least 32 characters and a nonempty
 `RAZORPAY_WEBHOOK_SECRET_PREVIOUS` at least 16. This is configuration
 validation, not evidence that counsel approved the content or that any provider
-is reachable.
+is reachable. Readiness reports email mode as either `amazon_ses` or
+`manual_operations`.
 
-### Amazon SES production setup
+### V1 manual internal-notification procedure
+
+The first production release formally sets
+`EMAIL_NOTIFICATIONS_ENABLED=false`. Amazon SES credentials and internal
+recipient lists are not launch dependencies. This does not disable the durable
+outbox, WhatsApp payment confirmations, consultation messages, Document Studio
+final-link delivery, reconciliation, or operator queues.
+
+During published service hours, the assigned operator must:
+
+1. Open the authenticated appointment, support, payment-reconciliation,
+   Document Studio, and outbox queues at shift start and at least every 15
+   minutes while paid transactions are accepted.
+2. Assign each paid consultation before its displayed SLA deadline, contact the
+   advocate through the approved WhatsApp or phone channel, and record the
+   audience, channel, outcome, notes, and follow-up due time as a contact event.
+3. Confirm the appointment with the client through WhatsApp; use the protected
+   time-limited contact reveal only with an operational reason. Fall back to a
+   phone call if WhatsApp delivery fails and record that outcome.
+4. Respond to support work within `SUPPORT_SLA_HOURS` and keep status/notes in
+   the authenticated support queue, not in personal email.
+5. Review every open payment-reconciliation record and non-email `DEAD` outbox
+   job immediately. For Document Studio, use the protected redelivery action
+   when final-link delivery needs a new short-lived URL.
+
+At deployment, run the outbox once. Email-only `PENDING`, `FAILED`, and `DEAD`
+jobs are changed to `CANCELLED`, their payloads are redacted, and they no longer
+make the cron critical. `DEAD` WhatsApp, receipt, reminder, or document-delivery
+jobs remain critical and must not be ignored. Retention removes old
+`COMPLETED` and `CANCELLED` outbox rows after
+`OUTBOX_COMPLETED_TTL_DAYS`.
+
+### Optional future Amazon SES setup
+
+Do not perform this section for the email-disabled V1 release. Complete it in a
+separately tested release before changing `EMAIL_NOTIFICATIONS_ENABLED=true`.
 
 The application calls Amazon SES API v2 over HTTPS through boto3; it does not
 require an SMTP username/password or a locally installed mail server.
@@ -290,7 +316,8 @@ require an SMTP username/password or a locally installed mail server.
    `AWS_SESSION_TOKEN` only in Render's secret environment.
 5. Create `SES_CONFIGURATION_SET` with approved event destinations and alert on
    bounces, complaints, rejects, delays, and sustained delivery failures.
-   NyaySetu requires this value in staging and production.
+   NyaySetu requires this value whenever email notifications are enabled in
+   staging or production.
 6. Send only to approved operational mailboxes. The service deduplicates
    recipients, places them in BCC, and rejects more than 50 destinations before
    calling SES.
@@ -309,21 +336,22 @@ event/status only. Do not record recipient addresses, subject/body content,
 credentials, raw provider responses, or outbox payloads.
 
 The web and outbox cron must share the exact same `DATABASE_URL`,
-`WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, WhatsApp API version, Amazon SES values,
-AWS credentials, notification recipients, and `AI_SAFETY_IDENTIFIER_SECRET`. The Blueprint
+`WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, WhatsApp API version,
+`EMAIL_NOTIFICATIONS_ENABLED`, and `AI_SAFETY_IDENTIFIER_SECRET`. The Blueprint
 inherits them from the web service. They let the outbox finish durable
-payment-success messages, email, optional receipt delivery, and stable
-pseudonymous log correlation. Razorpay API and webhook secrets are not required
-by the outbox and should remain scoped to the web service. Keep
+payment-success messages, Document Studio delivery, reminders, optional
+receipts, and stable pseudonymous log correlation. SES values are needed only
+in a later email-enabled release. Razorpay API and webhook secrets are not
+required by the outbox and should remain scoped to the web service. Keep
 `AUTO_SEND_RECEIPTS=false` until document delivery and temporary-file deletion
 pass staging.
 
 The maintenance cron shares the database and receives the same retention,
 support-SLA, payment-lookback, and payment-link-expiry policy values as the web
 service. The payment-reconciliation cron additionally receives
-`RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, mode, timeout, lookback, and
-notification settings; keep the API credentials out of the outbox, reminder,
-and maintenance services. The reminder scheduler and outbox share catch-up and
+`RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, mode, timeout, lookback, and the email
+enable switch; keep the API credentials out of the outbox, reminder, and
+maintenance services. The reminder scheduler and outbox share catch-up and
 exact per-language template pairs so a cleared template disables scheduling
 and sending.
 

@@ -431,6 +431,12 @@ def test_website_advocate_intake_is_recorded_and_acknowledged(
     )
     monkeypatch.setattr(
         app_module,
+        "EMAIL_NOTIFICATIONS_ENABLED",
+        True,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        app_module,
         "SUPPORT_NOTIFICATION_EMAILS",
         ("support@example.com",),
     )
@@ -468,6 +474,47 @@ def test_website_advocate_intake_is_recorded_and_acknowledged(
     assert "NSH-000001" in acknowledgement
     assert "not a confirmed booking" in acknowledgement
     transport_spies["home"].assert_called_once()
+
+
+def test_email_disabled_records_advocate_intake_without_email_job(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+    deferred_threads,
+):
+    _secure_whatsapp_route(monkeypatch, app_module)
+    _create_user(isolated_app_db, flow_state=app_module.NORMAL)
+    monkeypatch.setattr(
+        app_module,
+        "EMAIL_NOTIFICATIONS_ENABLED",
+        False,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        app_module,
+        "SUPPORT_NOTIFICATION_EMAILS",
+        ("support@example.com",),
+    )
+
+    response = _signed_whatsapp_post(
+        client,
+        _whatsapp_payload(
+            message_id="wamid.email-disabled-advocate-intake",
+            text=_website_advocate_intake(),
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "advocate_intake_recorded"
+    db = isolated_app_db()
+    try:
+        assert db.query(SupportRequest).count() == 1
+        assert db.query(OutboxJob).count() == 0
+    finally:
+        db.close()
+    assert deferred_threads == []
 
 
 def test_website_advocate_intake_duplicate_is_not_recorded_twice(

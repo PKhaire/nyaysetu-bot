@@ -41,6 +41,7 @@ from config import (
     DOCUMENT_STUDIO_S3_ACCESS_KEY_ID,
     DOCUMENT_STUDIO_S3_BUCKET,
     DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY,
+    EMAIL_NOTIFICATIONS_ENABLED,
     BOOKING_PRICE,
     BOOKING_PRICE_CONFIGURED,
     CANCELLATION_POLICY_URL,
@@ -2094,14 +2095,6 @@ def _deployment_configuration_is_valid(
         RAZORPAY_KEY_SECRET,
         RAZORPAY_WEBHOOK_SECRET,
         AI_SAFETY_IDENTIFIER_SECRET,
-        AWS_ACCESS_KEY_ID,
-        AWS_SECRET_ACCESS_KEY,
-        SES_CONFIGURATION_SET,
-        SES_FROM_EMAIL,
-        SES_REGION,
-        BOOKING_NOTIFICATION_EMAILS,
-        PAYMENT_RECONCILIATION_EMAILS,
-        SUPPORT_NOTIFICATION_EMAILS,
         SUPPORT_EMAIL,
         PRIVACY_EMAIL,
         PRIVACY_POLICY_URL,
@@ -2113,13 +2106,51 @@ def _deployment_configuration_is_valid(
         CASE_BRIEF_CONSENT_VERSION,
         LEGAL_CONTENT_VERSION,
     )
-    email_values = (
-        SES_FROM_EMAIL,
+    contact_email_values = (
         SUPPORT_EMAIL,
         PRIVACY_EMAIL,
-        *BOOKING_NOTIFICATION_EMAILS,
-        *PAYMENT_RECONCILIATION_EMAILS,
-        *SUPPORT_NOTIFICATION_EMAILS,
+    )
+    email_configuration_ok = bool(
+        not EMAIL_NOTIFICATIONS_ENABLED
+        or (
+            all(
+                (
+                    AWS_ACCESS_KEY_ID,
+                    AWS_SECRET_ACCESS_KEY,
+                    SES_CONFIGURATION_SET,
+                    SES_FROM_EMAIL,
+                    SES_REGION,
+                    BOOKING_NOTIFICATION_EMAILS,
+                    PAYMENT_RECONCILIATION_EMAILS,
+                    SUPPORT_NOTIFICATION_EMAILS,
+                )
+            )
+            and len(AWS_ACCESS_KEY_ID) >= 16
+            and len(AWS_SECRET_ACCESS_KEY) >= 32
+            and (
+                not AWS_SESSION_TOKEN
+                or len(AWS_SESSION_TOKEN) >= 16
+            )
+            and _valid_ses_region(SES_REGION)
+            and _valid_ses_configuration_set(SES_CONFIGURATION_SET)
+            and all(
+                _valid_email(value)
+                for value in (
+                    SES_FROM_EMAIL,
+                    *BOOKING_NOTIFICATION_EMAILS,
+                    *PAYMENT_RECONCILIATION_EMAILS,
+                    *SUPPORT_NOTIFICATION_EMAILS,
+                )
+            )
+            and all(
+                len(set(recipients)) <= 50
+                for recipients in (
+                    BOOKING_NOTIFICATION_EMAILS,
+                    PAYMENT_RECONCILIATION_EMAILS,
+                    SUPPORT_NOTIFICATION_EMAILS,
+                )
+            )
+        )
     )
     policy_urls = (
         PRIVACY_POLICY_URL,
@@ -2168,24 +2199,9 @@ def _deployment_configuration_is_valid(
             not RAZORPAY_WEBHOOK_SECRET_PREVIOUS
             or len(RAZORPAY_WEBHOOK_SECRET_PREVIOUS) >= 16
         )
-        and len(AWS_ACCESS_KEY_ID) >= 16
-        and len(AWS_SECRET_ACCESS_KEY) >= 32
-        and (
-            not AWS_SESSION_TOKEN
-            or len(AWS_SESSION_TOKEN) >= 16
-        )
-        and _valid_ses_region(SES_REGION)
-        and _valid_ses_configuration_set(SES_CONFIGURATION_SET)
+        and email_configuration_ok
         and WHATSAPP_PHONE_ID.isdigit()
-        and all(_valid_email(value) for value in email_values)
-        and all(
-            len(set(recipients)) <= 50
-            for recipients in (
-                BOOKING_NOTIFICATION_EMAILS,
-                PAYMENT_RECONCILIATION_EMAILS,
-                SUPPORT_NOTIFICATION_EMAILS,
-            )
-        )
+        and all(_valid_email(value) for value in contact_email_values)
         and all(_valid_https_url(value) for value in policy_urls)
         and legal_review_ok
     )
@@ -2316,6 +2332,14 @@ def health_ready():
                     "expected": EXPECTED_SCHEMA_REVISION,
                 },
                 "configuration": "ok" if configuration_ok else "incomplete",
+                "email_notifications": {
+                    "enabled": EMAIL_NOTIFICATIONS_ENABLED,
+                    "mode": (
+                        "amazon_ses"
+                        if EMAIL_NOTIFICATIONS_ENABLED
+                        else "manual_operations"
+                    ),
+                },
                 "document_studio_release": document_release,
             }
         ),
@@ -2529,7 +2553,10 @@ def webhook():
                 )
                 db.add(support_request)
                 db.flush()
-                if SUPPORT_NOTIFICATION_EMAILS:
+                if (
+                    EMAIL_NOTIFICATIONS_ENABLED
+                    and SUPPORT_NOTIFICATION_EMAILS
+                ):
                     job = enqueue_job(
                         db,
                         "support_notification",
@@ -3209,7 +3236,7 @@ def webhook():
             db.add(support_request)
             db.flush()
             job = None
-            if SUPPORT_NOTIFICATION_EMAILS:
+            if EMAIL_NOTIFICATIONS_ENABLED and SUPPORT_NOTIFICATION_EMAILS:
                 job = enqueue_job(
                     db,
                     "support_notification",
@@ -5418,7 +5445,7 @@ def payment_webhook():
                 dedupe_key=f"payment:{payment_id}:success-message",
             ).id
         ]
-        if BOOKING_NOTIFICATION_EMAILS:
+        if EMAIL_NOTIFICATIONS_ENABLED and BOOKING_NOTIFICATION_EMAILS:
             job_ids.append(
                 enqueue_job(
                     db,

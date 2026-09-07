@@ -44,6 +44,10 @@ services:
         value: local
       - key: AUTO_SEND_RECEIPTS
         value: "false"
+      # Internal email is formally outside the first production release.
+      # Operators use the authenticated queues and manual contact runbook.
+      - key: EMAIL_NOTIFICATIONS_ENABLED
+        value: "false"
       - key: WHATSAPP_API_VERSION
         value: v24.0
       - key: WEBHOOK_REPLAY_WINDOW_SECONDS
@@ -137,30 +141,6 @@ services:
       # amount rather than silently accepting the development default.
       - key: BOOKING_PRICE
         sync: false
-      - key: SES_REGION
-        value: ap-south-1
-      - key: SES_FROM_EMAIL
-        sync: false
-      - key: SES_CONFIGURATION_SET
-        sync: false
-      - key: SES_CONNECT_TIMEOUT_SECONDS
-        value: "5"
-      - key: SES_READ_TIMEOUT_SECONDS
-        value: "15"
-      - key: AWS_ACCESS_KEY_ID
-        sync: false
-      - key: AWS_SECRET_ACCESS_KEY
-        sync: false
-      # Leave empty for a normal IAM access key. Populate only when using
-      # temporary AWS credentials, then rotate all three values together.
-      - key: AWS_SESSION_TOKEN
-        sync: false
-      - key: BOOKING_NOTIFICATION_EMAILS
-        sync: false
-      - key: SUPPORT_NOTIFICATION_EMAILS
-        sync: false
-      - key: PAYMENT_RECONCILIATION_EMAILS
-        sync: false
       - key: SUPPORT_PHONE
         sync: false
       - key: SUPPORT_EMAIL
@@ -241,6 +221,11 @@ services:
           type: web
           name: nyaysetu-bot-backend
           envVarKey: AUTO_SEND_RECEIPTS
+      - key: EMAIL_NOTIFICATIONS_ENABLED
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: EMAIL_NOTIFICATIONS_ENABLED
       - key: WHATSAPP_API_VERSION
         fromService:
           type: web
@@ -295,61 +280,6 @@ services:
           type: web
           name: nyaysetu-bot-backend
           envVarKey: WHATSAPP_PHONE_ID
-      - key: SES_REGION
-        fromService:
-          type: web
-          name: nyaysetu-bot-backend
-          envVarKey: SES_REGION
-      - key: SES_FROM_EMAIL
-        fromService:
-          type: web
-          name: nyaysetu-bot-backend
-          envVarKey: SES_FROM_EMAIL
-      - key: SES_CONFIGURATION_SET
-        fromService:
-          type: web
-          name: nyaysetu-bot-backend
-          envVarKey: SES_CONFIGURATION_SET
-      - key: SES_CONNECT_TIMEOUT_SECONDS
-        fromService:
-          type: web
-          name: nyaysetu-bot-backend
-          envVarKey: SES_CONNECT_TIMEOUT_SECONDS
-      - key: SES_READ_TIMEOUT_SECONDS
-        fromService:
-          type: web
-          name: nyaysetu-bot-backend
-          envVarKey: SES_READ_TIMEOUT_SECONDS
-      - key: AWS_ACCESS_KEY_ID
-        fromService:
-          type: web
-          name: nyaysetu-bot-backend
-          envVarKey: AWS_ACCESS_KEY_ID
-      - key: AWS_SECRET_ACCESS_KEY
-        fromService:
-          type: web
-          name: nyaysetu-bot-backend
-          envVarKey: AWS_SECRET_ACCESS_KEY
-      - key: AWS_SESSION_TOKEN
-        fromService:
-          type: web
-          name: nyaysetu-bot-backend
-          envVarKey: AWS_SESSION_TOKEN
-      - key: BOOKING_NOTIFICATION_EMAILS
-        fromService:
-          type: web
-          name: nyaysetu-bot-backend
-          envVarKey: BOOKING_NOTIFICATION_EMAILS
-      - key: SUPPORT_NOTIFICATION_EMAILS
-        fromService:
-          type: web
-          name: nyaysetu-bot-backend
-          envVarKey: SUPPORT_NOTIFICATION_EMAILS
-      - key: PAYMENT_RECONCILIATION_EMAILS
-        fromService:
-          type: web
-          name: nyaysetu-bot-backend
-          envVarKey: PAYMENT_RECONCILIATION_EMAILS
       - key: CONSULTATION_REMINDER_CATCHUP_MINUTES
         fromService:
           type: web
@@ -443,6 +373,11 @@ services:
         value: INFO
       - key: AUTO_CREATE_SCHEMA
         value: "false"
+      - key: EMAIL_NOTIFICATIONS_ENABLED
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: EMAIL_NOTIFICATIONS_ENABLED
       - key: DB_POOL_SIZE
         value: "2"
       - key: DB_MAX_OVERFLOW
@@ -522,16 +457,6 @@ services:
           type: web
           name: nyaysetu-bot-backend
           envVarKey: AUTO_SEND_RECEIPTS
-      - key: BOOKING_NOTIFICATION_EMAILS
-        fromService:
-          type: web
-          name: nyaysetu-bot-backend
-          envVarKey: BOOKING_NOTIFICATION_EMAILS
-      - key: PAYMENT_RECONCILIATION_EMAILS
-        fromService:
-          type: web
-          name: nyaysetu-bot-backend
-          envVarKey: PAYMENT_RECONCILIATION_EMAILS
 
   # Scheduling is harmless while template pairs are empty. The outbox worker
   # rechecks the same live configuration immediately before every send.

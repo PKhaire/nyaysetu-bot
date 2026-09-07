@@ -368,6 +368,12 @@ def test_review_enqueues_one_deduplicated_operations_alert(
         "PAYMENT_RECONCILIATION_EMAILS",
         ["operations@example.test"],
     )
+    monkeypatch.setattr(
+        reconciliation,
+        "EMAIL_NOTIFICATIONS_ENABLED",
+        True,
+        raising=False,
+    )
     entity = _provider_entity(amount=10_000)
 
     for _ in range(2):
@@ -394,6 +400,48 @@ def test_review_enqueues_one_deduplicated_operations_alert(
         assert len(jobs) == 1
         assert jobs[0].dedupe_key == (
             f"payment-review:{item.id}:PROVIDER_AMOUNT_MISMATCH"
+        )
+    finally:
+        db.close()
+
+
+def test_email_disabled_retains_payment_review_without_email_alert(
+    reconciliation_db,
+    monkeypatch,
+):
+    booking_id, _, _ = _pending_booking(reconciliation_db)
+    monkeypatch.setattr(
+        reconciliation,
+        "PAYMENT_RECONCILIATION_EMAILS",
+        ["operations@example.test"],
+    )
+    monkeypatch.setattr(
+        reconciliation,
+        "EMAIL_NOTIFICATIONS_ENABLED",
+        False,
+        raising=False,
+    )
+
+    db = reconciliation_db()
+    try:
+        stats = reconciliation.reconcile_recent_payment_links(
+            db,
+            client=FakeClient(_provider_entity(amount=10_000)),
+            now=datetime(2026, 7, 29, 12, 0),
+        )
+    finally:
+        db.close()
+
+    assert stats["review_required"] == 1
+    db = reconciliation_db()
+    try:
+        assert db.get(Booking, booking_id).payment_processed is False
+        assert db.query(PaymentReconciliation).one().status == "OPEN"
+        assert (
+            db.query(OutboxJob)
+            .filter(OutboxJob.kind == "payment_reconciliation_alert")
+            .count()
+            == 0
         )
     finally:
         db.close()

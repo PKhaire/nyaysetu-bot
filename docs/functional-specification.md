@@ -238,7 +238,8 @@ Razorpay Payment Link and Payment resources and requires all of the following:
 
 Successful processing changes the booking to `PAID`, clears the user's active
 link, creates a fulfilment work item, and commits durable
-WhatsApp/email/optional-receipt work. An unmatched captured payment is retained
+WhatsApp and optional-receipt work. Internal email work is added only when
+`EMAIL_NOTIFICATIONS_ENABLED=true`. An unmatched captured payment is retained
 for review while the endpoint requests provider retry. Provider lookup failure
 also returns `503` without entitlement. Invalid current state, amount/currency
 change, or a conflicting payment is retained for review and acknowledged with
@@ -288,8 +289,9 @@ where the underlying guide remains English.
 ### Support
 
 The user can submit a 5–2,000 character support message. The system stores a
-ticket with an `NSH-######` display ID and, when notification recipients are
-configured, queues an email. Authenticated operators can assign, prioritize,
+ticket with an `NSH-######` display ID and queues an email only when email
+notifications are explicitly enabled and recipients are configured.
+Authenticated operators can assign, prioritize,
 progress, resolve, or close a ticket through the admin API. Closing requires a
 resolution note; every mutation records an operator audit event.
 
@@ -423,7 +425,9 @@ production provisioning gates below are complete:
 - Direct paid cancellation is rejected, while the reviewed refund transition
   preserves payment evidence and revokes access only when no other paid booking
   remains.
-- The outbox cron drains WhatsApp/email jobs and alerts on failures/dead jobs.
+- The outbox cron drains WhatsApp jobs and any explicitly enabled email jobs;
+  disabled email-only backlog becomes redacted `CANCELLED` work while other
+  failures/dead jobs still alert.
 - Maintenance dry-run/risk reporting and the payment-reconciliation command
   are exercised with audited operator follow-up.
 - Reminder scheduling is a no-op with empty templates; any enabled 24-hour/2-hour
@@ -433,8 +437,10 @@ production provisioning gates below are complete:
   retention policies are approved and configured.
 - Every enabled AI provider has privacy/legal approval and multilingual safety
   evaluation.
-- Amazon SES identity/domain, email-authentication records, production access,
-  monitored configuration set, recipients, and any Meta templates are approved.
+- V1 formally sets `EMAIL_NOTIFICATIONS_ENABLED=false` and has an approved
+  manual operator notification procedure. Any future email-enabled release
+  requires approved Amazon SES identity/domain, authentication records,
+  production access, monitored configuration set, and recipients.
 - Document Studio remains disabled until the exact RC9 hashes have a current
   authenticated licensed-Maharashtra-advocate approval, a non-zero reviewed
   price, a private S3 bucket with least-privilege credentials and lifecycle

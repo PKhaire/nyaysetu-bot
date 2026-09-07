@@ -253,6 +253,13 @@ def _seed_retention_matrix(session_factory, now: datetime) -> dict[str, int]:
             created_at=now,
             updated_at=now,
         )
+        old_cancelled_outbox = OutboxJob(
+            kind="booking_notification",
+            payload_json='{"cancelled_reason":"email_notifications_disabled"}',
+            status="CANCELLED",
+            created_at=old_outbox_time,
+            updated_at=old_outbox_time,
+        )
         dead_outbox = OutboxJob(
             kind="payment_success_message",
             payload_json='{"booking_id":3}',
@@ -315,6 +322,7 @@ def _seed_retention_matrix(session_factory, now: datetime) -> dict[str, int]:
                 recent_analytics,
                 old_completed_outbox,
                 recent_completed_outbox,
+                old_cancelled_outbox,
                 dead_outbox,
                 failed_outbox,
                 stale_reconciliation,
@@ -337,6 +345,7 @@ def _seed_retention_matrix(session_factory, now: datetime) -> dict[str, int]:
             "processing_inbound": processing_inbound.id,
             "old_completed_outbox": old_completed_outbox.id,
             "recent_completed_outbox": recent_completed_outbox.id,
+            "old_cancelled_outbox": old_cancelled_outbox.id,
             "dead_outbox": dead_outbox.id,
             "failed_outbox": failed_outbox.id,
             "fulfillment": fulfillment.id,
@@ -367,7 +376,7 @@ def test_dry_run_reports_without_mutation_and_skips_ambiguous_messages(
     assert report["categories"]["webhook_events"]["would_affect"] == 1
     assert report["categories"]["inbound_message_events"]["would_affect"] == 1
     assert report["categories"]["analytics_events"]["would_affect"] == 1
-    assert report["categories"]["completed_outbox_jobs"]["would_affect"] == 1
+    assert report["categories"]["completed_outbox_jobs"]["would_affect"] == 2
 
     processed = report["categories"]["legacy_processed_messages"]
     assert processed["eligible_in_batch"] == 1
@@ -402,6 +411,7 @@ def test_dry_run_reports_without_mutation_and_skips_ambiguous_messages(
         assert db.get(InboundMessageEvent, ids["old_done_inbound"]) is not None
         assert db.query(AnalyticsEvent).count() == 2
         assert db.get(OutboxJob, ids["old_completed_outbox"]) is not None
+        assert db.get(OutboxJob, ids["old_cancelled_outbox"]) is not None
         assert db.query(ProcessedMessage).count() == 2
     finally:
         db.close()
@@ -421,7 +431,7 @@ def test_execution_prunes_only_safe_terminal_records(maintenance_db):
     assert report["categories"]["webhook_events"]["affected"] == 1
     assert report["categories"]["inbound_message_events"]["affected"] == 1
     assert report["categories"]["analytics_events"]["affected"] == 1
-    assert report["categories"]["completed_outbox_jobs"]["affected"] == 1
+    assert report["categories"]["completed_outbox_jobs"]["affected"] == 2
     assert report["categories"]["legacy_processed_messages"]["affected"] == 0
 
     db = maintenance_db()
@@ -442,6 +452,7 @@ def test_execution_prunes_only_safe_terminal_records(maintenance_db):
 
         assert db.query(AnalyticsEvent).count() == 1
         assert db.get(OutboxJob, ids["old_completed_outbox"]) is None
+        assert db.get(OutboxJob, ids["old_cancelled_outbox"]) is None
         assert db.get(OutboxJob, ids["recent_completed_outbox"]) is not None
         assert db.get(OutboxJob, ids["dead_outbox"]) is not None
         assert db.get(OutboxJob, ids["failed_outbox"]) is not None

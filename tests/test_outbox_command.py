@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -28,6 +29,11 @@ def _health(**overrides: int) -> dict[str, int]:
 
 
 def test_command_does_not_fail_for_a_scheduled_retry(monkeypatch, capsys):
+    monkeypatch.setattr(
+        process_outbox,
+        "cancel_disabled_email_jobs",
+        lambda: 0,
+    )
     monkeypatch.setattr(
         process_outbox,
         "process_pending_jobs",
@@ -61,6 +67,11 @@ def test_command_fails_when_operator_attention_is_required(
     capsys,
     health,
 ):
+    monkeypatch.setattr(
+        process_outbox,
+        "cancel_disabled_email_jobs",
+        lambda: 0,
+    )
     monkeypatch.setattr(
         process_outbox,
         "process_pending_jobs",
@@ -124,3 +135,134 @@ def test_render_module_command_runs_from_clean_project_root(tmp_path):
     assert result.returncode == 0, result.stderr
     assert "outbox_status=healthy" in result.stdout
     assert "outbox_backlog=0" in result.stdout
+
+
+def test_command_keeps_dead_non_email_delivery_visible(tmp_path):
+    project_root = Path(__file__).resolve().parents[1]
+    database_path = tmp_path / "non-email-dead-outbox.sqlite3"
+    database_url = f"sqlite:///{database_path.as_posix()}"
+    now = datetime(2026, 9, 7, 8, 0, 0)
+    engine = create_engine(database_url)
+    try:
+        OutboxJob.__table__.create(engine)
+        with engine.begin() as connection:
+            connection.execute(
+                OutboxJob.__table__.insert(),
+                [
+                    {
+                        "kind": "booking_notification",
+                        "payload_json": '{"private_reference":123}',
+                        "status": "DEAD",
+                        "attempts": 12,
+                        "available_at": now,
+                        "created_at": now,
+                        "updated_at": now,
+                    },
+                    {
+                        "kind": "payment_success_message",
+                        "payload_json": '{"booking_id":456}',
+                        "status": "DEAD",
+                        "attempts": 12,
+                        "available_at": now,
+                        "created_at": now,
+                        "updated_at": now,
+                    },
+                ],
+            )
+    finally:
+        engine.dispose()
+
+    environment = os.environ.copy()
+    dependency_paths = [
+        entry
+        for entry in sys.path
+        if entry and Path(entry).resolve() != project_root
+    ]
+    environment["PYTHONPATH"] = os.pathsep.join(dependency_paths)
+    environment.update(
+        {
+            "ENV": "test",
+            "DATABASE_URL": database_url,
+            "EMAIL_NOTIFICATIONS_ENABLED": "false",
+            "LOG_LEVEL": "WARNING",
+        }
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-m", "jobs.process_outbox"],
+        cwd=project_root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+
+    assert result.returncode == process_outbox.CRITICAL_EXIT_CODE
+    assert "outbox_cancelled=1" in result.stdout
+    assert "outbox_dead=1" in result.stdout
+    assert "outbox_status=critical" in result.stdout
+    assert "outbox_backlog=1" in result.stdout
+
+
+def test_command_cancels_email_only_backlog_when_email_is_disabled(tmp_path):
+    project_root = Path(__file__).resolve().parents[1]
+    database_path = tmp_path / "email-disabled-outbox.sqlite3"
+    database_url = f"sqlite:///{database_path.as_posix()}"
+    now = datetime(2026, 9, 7, 8, 0, 0)
+    engine = create_engine(database_url)
+    try:
+        OutboxJob.__table__.create(engine)
+        with engine.begin() as connection:
+            connection.execute(
+                OutboxJob.__table__.insert(),
+                [
+                    {
+                        "kind": kind,
+                        "payload_json": '{"private_reference":123}',
+                        "status": "DEAD",
+                        "attempts": 12,
+                        "available_at": now,
+                        "created_at": now,
+                        "updated_at": now,
+                    }
+                    for kind in (
+                        "booking_notification",
+                        "support_notification",
+                        "payment_reconciliation_alert",
+                    )
+                ],
+            )
+    finally:
+        engine.dispose()
+
+    environment = os.environ.copy()
+    dependency_paths = [
+        entry
+        for entry in sys.path
+        if entry and Path(entry).resolve() != project_root
+    ]
+    environment["PYTHONPATH"] = os.pathsep.join(dependency_paths)
+    environment.update(
+        {
+            "ENV": "test",
+            "DATABASE_URL": database_url,
+            "EMAIL_NOTIFICATIONS_ENABLED": "false",
+            "LOG_LEVEL": "WARNING",
+        }
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-m", "jobs.process_outbox"],
+        cwd=project_root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "outbox_cancelled=3" in result.stdout
+    assert "outbox_dead=0" in result.stdout
+    assert "outbox_status=healthy" in result.stdout

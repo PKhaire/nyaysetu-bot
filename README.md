@@ -58,7 +58,7 @@ Meta Cloud API --> Flask webhook --> SQLAlchemy --> PostgreSQL
                          |
                          +--> local/OpenAI/Claude information provider
                          +--> Razorpay payment links and signed webhook
-                         +--> Amazon SES v2 notifications
+                         +--> optional Amazon SES v2 notifications
                          +--> private S3 generated-artifact vault
 ```
 
@@ -124,7 +124,7 @@ critical:
 | Database | `DATABASE_URL` pointing to managed PostgreSQL |
 | Meta | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`; optional `WHATSAPP_APP_SECRET_PREVIOUS` during rotation |
 | Razorpay | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `RAZORPAY_MODE=live`; optional `RAZORPAY_WEBHOOK_SECRET_PREVIOUS` during rotation |
-| Email | `SES_REGION`, `SES_FROM_EMAIL`, `SES_CONFIGURATION_SET`, AWS credentials, `BOOKING_NOTIFICATION_EMAILS`, `SUPPORT_NOTIFICATION_EMAILS`, `PAYMENT_RECONCILIATION_EMAILS` |
+| Internal email | V1: `EMAIL_NOTIFICATIONS_ENABLED=false`; SES settings are optional and required only for a separately tested email-enabled release |
 | User trust | reviewed `SUPPORT_*`, `PRIVACY_*`, policy URLs, and consent/terms versions |
 | Operations | long random `ADMIN_TOKEN`, `ADMIN_PASSWORD`, `SECRET_KEY`, and `AI_SAFETY_IDENTIFIER_SECRET` values |
 
@@ -162,15 +162,17 @@ live keys plus an exact content-review version/date pair. Current production
 credentials must also meet the enforced format/strength contract: 32 or more
 characters for the WhatsApp app secret/token, admin token, session signing and
 AI secrets, 16 or more for the admin password, WhatsApp verify token and
-Razorpay key/webhook secrets, an
-`rzp_live_...` key ID, a valid SES region/from-address pair, an AWS access-key ID
-of at least 16 characters, an AWS secret access key of at least 32, and an
-optional session token of at least 16. A configured previous Meta app secret
+Razorpay key/webhook secrets, and an `rzp_live_...` key ID. When
+`EMAIL_NOTIFICATIONS_ENABLED=true`, readiness also requires a valid SES
+region/sender/configuration set, internal recipients, an AWS access-key ID of at
+least 16 characters, an AWS secret access key of at least 32, and an optional
+session token of at least 16. A configured previous Meta app secret
 must also be at least 32 characters and a configured previous Razorpay webhook
-secret at least 16; leave them empty outside a bounded rotation. It does not
-prove that policy/counsel approval exists or that SES, Meta, Razorpay, or an AI
-provider is currently reachable; external evidence, smoke tests, and alerts
-remain necessary.
+secret at least 16; leave them empty outside a bounded rotation. The readiness
+response reports `email_notifications.mode=manual_operations` for V1. It does
+not prove that policy/counsel approval exists or that configured providers are
+currently reachable; external evidence, smoke tests, and alerts remain
+necessary.
 
 ## HTTP endpoints
 
@@ -248,11 +250,13 @@ four crons inherit that exact production connection.
 The outbox command processes a bounded batch and exits, which is why it is a
 cron job instead of a long-running worker. Every cron inherits the same
 `DATABASE_URL` and only the additional settings it needs. The outbox receives
-WhatsApp/Amazon SES delivery settings plus the reminder policy it must recheck
-at send time; reconciliation receives Razorpay API credentials and notification
-recipients; reminders receive template/catch-up policy; and maintenance receives
-retention/risk policy. After rotating a shared value, sync the Blueprint,
-redeploy every affected service, and verify resolved values. Keep
+WhatsApp delivery settings, the formal email enable switch, and the reminder
+policy it must recheck at send time; reconciliation receives Razorpay API
+credentials and that same switch; reminders receive template/catch-up policy;
+and maintenance receives retention/risk policy. V1 sets email false,
+cancels/redacts legacy email-only backlog, and keeps non-email delivery failures
+critical. After rotating a shared value, sync the Blueprint, redeploy every
+affected service, and verify resolved values. Keep
 `AUTO_SEND_RECEIPTS=false` until receipt delivery has passed staging. Razorpay's
 webhook signing secret remains web-only.
 
@@ -301,8 +305,8 @@ This release intentionally imports no old-bot data:
    production. Never run staging tests against the production database.
 2. Set `AUTO_CREATE_SCHEMA=false` and run Alembic `upgrade head`, `current`,
    and `check` against staging.
-3. Complete signed Meta, Razorpay test-mode, Amazon SES, failure/retry,
-   maintenance and operator-queue acceptance in staging.
+3. Complete signed Meta, Razorpay test-mode, email-disabled/manual-operations,
+   failure/retry, maintenance and operator-queue acceptance in staging.
 4. Create or re-create an empty production database, apply the same Alembic
    head revision, and verify that no synthetic staging rows exist.
 5. Point the web service and all four cron jobs to that one production
@@ -331,7 +335,8 @@ payment references, and potentially sensitive legal facts. Before public use:
   reviews, support, feedback, conversations, failed evidence, and legacy
   message claims; legal hold, data-subject deletion, and backup retention
   remain external governance work.
-- Restrict database, Render, Meta, Razorpay, AWS/SES, and admin access by role;
+- Restrict database, Render, Meta, Razorpay, AWS/S3, optional SES, and admin
+  access by role;
   enable MFA, audit access, rotate secrets, and test restore procedures.
 - Treat PII scrubbing and model guardrails as defence-in-depth, not a guarantee.
   Do not send identity documents, evidence, privileged communications, or
@@ -379,8 +384,9 @@ A production release still requires:
   duplicate-delivery retry, invalid/refunded-state review, and terminal manual
   disposition preservation;
 - WhatsApp interactive-message rendering in all three languages;
-- Amazon SES identity/domain verification, DKIM/SPF/DMARC, sandbox-exit,
-  configuration-set monitoring, approved-recipient, and outbox-retry testing;
+- email-disabled backlog cancellation plus manual notification evidence; or,
+  for a future email-enabled release, Amazon SES identity/domain verification,
+  DKIM/SPF/DMARC, sandbox exit, monitoring, and outbox-retry testing;
 - database backup/restore evidence;
 - migration-head, dry-run maintenance, and payment-reconciliation evidence;
 - alerting for webhook 5xx responses, dead outbox jobs, payment mismatch,

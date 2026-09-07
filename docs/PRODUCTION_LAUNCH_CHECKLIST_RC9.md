@@ -160,10 +160,10 @@ Evidence: redacted payment IDs, webhook result, reconciliation, and settlement.
 - [ ] Keep menus within WhatsApp limits and show Document Studio to every user
   when the integrated launch is enabled.
 - [ ] Verify signature rejection, replay protection, retries, and idempotency.
-- [ ] Decide production email delivery: obtain SES production access, integrate
-  another provider, or formally disable email-dependent behavior and update
-  readiness/operations.
-- [ ] Document the V1 manual client/advocate notification procedure, SLA,
+- [x] Formally disable internal email for V1 with
+  `EMAIL_NOTIFICATIONS_ENABLED=false`; readiness, enqueueing, outbox cleanup,
+  and Render deployment no longer require SES.
+- [x] Document the V1 manual client/advocate notification procedure, SLA,
   fallback channel, and contact evidence.
 - [ ] Do not message outside Meta's allowed window without an approved template.
 

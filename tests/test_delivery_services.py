@@ -104,10 +104,58 @@ def test_structured_whatsapp_failure_is_retried(monkeypatch, delivery_db):
     assert job.last_error == "payment_success_message_not_sent"
 
 
+def test_email_disabled_cancels_claimed_email_but_delivers_whatsapp(
+    monkeypatch,
+    delivery_db,
+):
+    booking = _paid_booking(delivery_db, "email-disabled")
+    email_job_id = _enqueue(delivery_db, "booking_notification", booking)
+    whatsapp_job_id = _enqueue(
+        delivery_db,
+        "payment_success_message",
+        booking,
+    )
+    email_send = MagicMock(return_value=True)
+    whatsapp_send = MagicMock(return_value={"ok": True})
+    monkeypatch.setattr(
+        outbox_service,
+        "EMAIL_NOTIFICATIONS_ENABLED",
+        False,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        outbox_service,
+        "send_booking_notification_email",
+        email_send,
+    )
+    monkeypatch.setattr(
+        outbox_service,
+        "send_payment_success_message",
+        whatsapp_send,
+    )
+
+    assert outbox_service.process_job(email_job_id) is True
+    assert outbox_service.process_job(whatsapp_job_id) is True
+
+    delivery_db.expire_all()
+    email_job = delivery_db.get(OutboxJob, email_job_id)
+    whatsapp_job = delivery_db.get(OutboxJob, whatsapp_job_id)
+    assert email_job.status == outbox_service.CANCELLED
+    assert email_job.last_error == "email_notifications_disabled"
+    assert json.loads(email_job.payload_json) == {
+        "cancelled_reason": "email_notifications_disabled",
+        "redacted": True,
+    }
+    assert whatsapp_job.status == outbox_service.COMPLETED
+    email_send.assert_not_called()
+    whatsapp_send.assert_called_once()
+
+
 def test_open_payment_review_alert_is_delivered_once(
     monkeypatch,
     delivery_db,
 ):
+    monkeypatch.setattr(outbox_service, "EMAIL_NOTIFICATIONS_ENABLED", True)
     reconciliation = PaymentReconciliation(
         provider="razorpay",
         payment_id="pay_review_delivery",
@@ -140,6 +188,7 @@ def test_resolved_payment_review_alert_completes_without_sending(
     monkeypatch,
     delivery_db,
 ):
+    monkeypatch.setattr(outbox_service, "EMAIL_NOTIFICATIONS_ENABLED", True)
     reconciliation = PaymentReconciliation(
         provider="razorpay",
         payment_id="pay_resolved_delivery",
@@ -186,6 +235,12 @@ def test_composite_retry_does_not_repeat_completed_whatsapp_step(
         "send_booking_notification_email",
         email_send,
     )
+    monkeypatch.setattr(
+        outbox_service,
+        "EMAIL_NOTIFICATIONS_ENABLED",
+        True,
+        raising=False,
+    )
     monkeypatch.setattr(outbox_service, "AUTO_SEND_RECEIPTS", False)
 
     assert outbox_service.process_job(job_id) is False
@@ -201,6 +256,40 @@ def test_composite_retry_does_not_repeat_completed_whatsapp_step(
     assert outbox_service.process_job(job_id) is True
     assert whatsapp_send.call_count == 1
     assert email_send.call_count == 2
+
+
+def test_email_disabled_legacy_followup_delivers_only_whatsapp(
+    monkeypatch,
+    delivery_db,
+):
+    booking = _paid_booking(delivery_db, "legacy-disabled")
+    job_id = _enqueue(delivery_db, "payment_followup", booking)
+    whatsapp_send = MagicMock(return_value={"ok": True})
+    email_send = MagicMock(return_value=True)
+    monkeypatch.setattr(
+        outbox_service,
+        "EMAIL_NOTIFICATIONS_ENABLED",
+        False,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        outbox_service,
+        "send_payment_success_message",
+        whatsapp_send,
+    )
+    monkeypatch.setattr(
+        outbox_service,
+        "send_booking_notification_email",
+        email_send,
+    )
+    monkeypatch.setattr(outbox_service, "AUTO_SEND_RECEIPTS", False)
+
+    assert outbox_service.process_job(job_id) is True
+
+    delivery_db.expire_all()
+    assert delivery_db.get(OutboxJob, job_id).status == outbox_service.COMPLETED
+    whatsapp_send.assert_called_once()
+    email_send.assert_not_called()
 
 
 def test_failed_receipt_delivery_removes_private_file(

@@ -1,16 +1,22 @@
 """Run a bounded batch of durable NyaySetu background jobs."""
 
-from services.outbox_service import get_outbox_health, process_pending_jobs
+from services.outbox_service import (
+    cancel_disabled_email_jobs,
+    get_outbox_health,
+    process_pending_jobs,
+)
 
 
 CRITICAL_EXIT_CODE = 2
 
 
 def main() -> int:
+    cancelled = cancel_disabled_email_jobs()
     completed, attempted_not_completed = process_pending_jobs()
     health = get_outbox_health()
     print(
         f"outbox_completed={completed} "
+        f"outbox_cancelled={cancelled} "
         f"outbox_attempted_not_completed={attempted_not_completed} "
         f"outbox_backlog={health['backlog_count']} "
         f"outbox_ready={health['ready_count']} "

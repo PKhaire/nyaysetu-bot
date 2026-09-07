@@ -20,7 +20,7 @@ Operator --------> Flask /admin/* --------------+      idempotency / analytics
                                                 +--> private S3 artifacts
                                                 +--> AI router
 
-python -m jobs.process_outbox ----------------------> WhatsApp / Amazon SES v2
+python -m jobs.process_outbox ----------------------> WhatsApp / optional SES
 python -m jobs.reconcile_payments -----------------> Razorpay lookup/recovery
 python -m jobs.consultation_reminders -------------> durable reminder jobs
 python -m jobs.maintenance -------------------------> bounded retention/risk report
@@ -42,6 +42,11 @@ outbox batch every minute, payment reconciliation every five minutes,
 consultation-reminder scheduling every ten minutes, and bounded maintenance
 daily; each exits after one batch. Reminder scheduling is a no-op while all
 approved template pairs are empty.
+
+The first production release sets `EMAIL_NOTIFICATIONS_ENABLED=false`.
+Operators use the authenticated queues and manual-contact runbook; SES is not a
+runtime dependency. The outbox remains mandatory for WhatsApp and Document
+Studio delivery and cancels only legacy email-only work.
 
 One web process is a correctness constraint because per-user ordering locks,
 throttles, caches, and provider circuit breakers remain process-local.

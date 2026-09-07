@@ -351,6 +351,35 @@ def test_payment_webhook_accepts_booking_stored_price_not_current_global_price(
         db.close()
 
 
+def test_payment_webhook_skips_booking_email_when_email_is_disabled(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+    deferred_threads,
+):
+    _configure_payment_route(monkeypatch, app_module)
+    monkeypatch.setattr(
+        app_module,
+        "BOOKING_NOTIFICATION_EMAILS",
+        ("operations@example.test",),
+    )
+    monkeypatch.setattr(app_module, "EMAIL_NOTIFICATIONS_ENABLED", False)
+    _create_pending_booking(isolated_app_db)
+
+    response = _signed_payment_post(client, _payment_payload())
+
+    assert response.status_code == 200
+    assert len(deferred_threads) == 1
+    db = isolated_app_db()
+    try:
+        assert db.query(OutboxJob).count() == 1
+        assert db.query(OutboxJob).one().kind == "payment_success_message"
+    finally:
+        db.close()
+
+
 def test_document_payment_webhook_commits_durable_delivery_before_fast_path(
     monkeypatch,
     app_module,
@@ -942,6 +971,7 @@ def test_production_readiness_validates_secret_policy_and_contact_contract(
         "RAZORPAY_WEBHOOK_SECRET_PREVIOUS": "",
         "AI_SAFETY_IDENTIFIER_SECRET": "c" * 32,
         "BOOKING_PRICE_CONFIGURED": True,
+        "EMAIL_NOTIFICATIONS_ENABLED": True,
         "SES_REGION": "ap-south-1",
         "SES_FROM_EMAIL": "notifications@example.test",
         "SES_CONFIGURATION_SET": "nyaysetu-transactional",
@@ -979,6 +1009,45 @@ def test_production_readiness_validates_secret_policy_and_contact_contract(
     ready = client.get("/health/ready")
     assert ready.status_code == 200
     assert ready.get_json()["configuration"] == "ok"
+
+    monkeypatch.setattr(
+        app_module,
+        "EMAIL_NOTIFICATIONS_ENABLED",
+        False,
+        raising=False,
+    )
+    for name, value in {
+        "SES_REGION": "",
+        "SES_FROM_EMAIL": "",
+        "SES_CONFIGURATION_SET": "",
+        "AWS_ACCESS_KEY_ID": "",
+        "AWS_SECRET_ACCESS_KEY": "",
+        "AWS_SESSION_TOKEN": "",
+        "BOOKING_NOTIFICATION_EMAILS": [],
+        "PAYMENT_RECONCILIATION_EMAILS": [],
+        "SUPPORT_NOTIFICATION_EMAILS": [],
+    }.items():
+        monkeypatch.setattr(app_module, name, value)
+
+    email_disabled = client.get("/health/ready")
+    assert email_disabled.status_code == 200
+    assert email_disabled.get_json()["email_notifications"] == {
+        "enabled": False,
+        "mode": "manual_operations",
+    }
+    for name in {
+        "EMAIL_NOTIFICATIONS_ENABLED",
+        "SES_REGION",
+        "SES_FROM_EMAIL",
+        "SES_CONFIGURATION_SET",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "BOOKING_NOTIFICATION_EMAILS",
+        "PAYMENT_RECONCILIATION_EMAILS",
+        "SUPPORT_NOTIFICATION_EMAILS",
+    }:
+        monkeypatch.setattr(app_module, name, production_values[name])
 
     monkeypatch.setattr(
         app_module,
@@ -1081,6 +1150,7 @@ def test_staging_readiness_requires_postgresql_test_keys_and_strict_config(
         "RAZORPAY_WEBHOOK_SECRET_PREVIOUS": "",
         "AI_SAFETY_IDENTIFIER_SECRET": "c" * 32,
         "BOOKING_PRICE_CONFIGURED": True,
+        "EMAIL_NOTIFICATIONS_ENABLED": True,
         "SES_REGION": "ap-south-1",
         "SES_FROM_EMAIL": "notifications@example.test",
         "SES_CONFIGURATION_SET": "nyaysetu-transactional",

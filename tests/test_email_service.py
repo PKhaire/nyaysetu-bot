@@ -16,6 +16,12 @@ def configured_ses(monkeypatch):
     client = MagicMock()
     client.send_email.return_value = {"MessageId": "ses-message-123"}
     monkeypatch.setattr(email_service, "_get_ses_client", lambda: client)
+    monkeypatch.setattr(
+        email_service,
+        "EMAIL_NOTIFICATIONS_ENABLED",
+        True,
+        raising=False,
+    )
     monkeypatch.setattr(email_service, "SES_REGION", "ap-south-1")
     monkeypatch.setattr(
         email_service,
@@ -122,6 +128,25 @@ def test_ses_requires_configuration_set_outside_test_and_development(
 
     assert (
         email_service._send_via_ses(
+            "Operational update",
+            "A bounded background task completed.",
+            ["operations@example.test"],
+        )
+        is False
+    )
+    configured_ses.send_email.assert_not_called()
+
+
+def test_email_disabled_skips_ses_request(configured_ses, monkeypatch):
+    monkeypatch.setattr(
+        email_service,
+        "EMAIL_NOTIFICATIONS_ENABLED",
+        False,
+        raising=False,
+    )
+
+    assert (
+        email_service.send_email(
             "Operational update",
             "A bounded background task completed.",
             ["operations@example.test"],

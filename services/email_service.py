@@ -22,6 +22,7 @@ from config import (
     AWS_SECRET_ACCESS_KEY,
     AWS_SESSION_TOKEN,
     BOOKING_NOTIFICATION_EMAILS,
+    EMAIL_NOTIFICATIONS_ENABLED,
     ENV,
     PAYMENT_RECONCILIATION_EMAILS,
     SES_CONFIGURATION_SET,
@@ -58,7 +59,8 @@ for _sdk_logger_name in ("boto3", "botocore", "urllib3"):
 
 def _configured() -> bool:
     return bool(
-        SES_REGION
+        EMAIL_NOTIFICATIONS_ENABLED
+        and SES_REGION
         and SES_FROM_EMAIL
         and AWS_ACCESS_KEY_ID
         and AWS_SECRET_ACCESS_KEY
