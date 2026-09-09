@@ -80,9 +80,11 @@ def test_fresh_database_upgrade_builds_current_schema(tmp_path):
                 connection.execute(
                     sa.text("SELECT version_num FROM alembic_version")
                 ).scalar_one()
-                == "20260903_01"
+                == "20260908_01"
             )
         assert {
+            "admin_operators",
+            "admin_recovery_codes",
             "document_orders",
             "document_answer_revisions",
             "document_audit_events",

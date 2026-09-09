@@ -71,12 +71,21 @@ manually from an approved immutable commit after CI and staging acceptance.
 Render regions cannot be changed on an existing service, so moving an existing
 service to Singapore requires a separately rehearsed service migration.
 
+RC12 adds a pre-production identity bootstrap contract. Generate and store one
+durable `ADMIN_MFA_ENCRYPTION_KEY`, deploy/migrate `20260908_01` while the
+current service remains `ENV=staging`, then enroll and activate at least two
+named MFA identities including one `ADMIN` from the protected service shell.
+Only after `/health/ready` reports named-MFA production compatibility may the
+recorded cutover switch to `ENV=production`. An empty production-mode database
+fails readiness by design; `ADMIN_PASSWORD` cannot bypass that gate.
+
 The paid web service runs Alembic as its pre-deploy command. A migration failure
 stops the new release before traffic moves to it. Deploy in this order:
 
 1. Back up production and record the current application and migration revision.
 2. Deploy the web service from the approved commit and verify migration output.
-3. Verify `/health/ready`, schema revision, signed webhooks, and payment status.
+3. Verify `/health/ready`, schema revision, named-admin compatibility, signed
+   webhooks, and payment status.
 4. Deploy outbox, payment reconciliation, and reminders from the same commit.
 5. Verify reminder scheduling is a no-op while template pairs are empty, or
    verify every explicitly approved staging template.
@@ -124,7 +133,8 @@ weekly `pip-audit` job against `requirements.lock` remains the time-sensitive
 vulnerability gate.
 
 The current baseline downgrade intentionally preserves additive operational and
-payment evidence. A code rollback does not imply a destructive schema rollback.
+payment evidence. The RC12 downgrade also refuses to discard named identity and
+recovery evidence. A code rollback does not imply a destructive schema rollback.
 If a migration or payment reconciliation fails, keep the last healthy web
 release serving, stop new payment intake if integrity is uncertain, preserve a
 database snapshot, and follow the reviewed database recovery procedure.

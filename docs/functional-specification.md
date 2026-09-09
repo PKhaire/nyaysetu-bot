@@ -254,8 +254,13 @@ An authenticated browser console at `/admin/appointments` presents the
 SLA-ordered paid-consultation fulfilment queue. Operators can search and filter
 records and review the client's consented structured case brief without opening
 separate files. Ordinary queue responses expose only masked contact details.
-A stable operator ID and a stated operational purpose are required to reveal a
-client or advocate number; every reveal is written to the admin audit trail.
+Each human signs in with an individually enrolled operator ID, password, and
+TOTP/recovery code. `VIEWER` is read-only, `OPERATOR` can perform routine queue
+work, and sensitive configuration/release actions require `ADMIN`. The account
+is locked for 15 minutes after five failed identity attempts. A stated
+operational purpose is required to reveal a client or advocate number; every
+reveal is written against the verified session identity in the admin audit
+trail. A request header cannot impersonate another actor in a browser session.
 
 Operators register and select only active, verified advocates, assign the paid
 matter, and manually contact the advocate and client. Each contact attempt is
@@ -411,6 +416,10 @@ production provisioning gates below are complete:
 - Production uses a different, empty managed PostgreSQL database. The current
   Alembic revision and backup/restore procedure are verified before traffic,
   and no staging, test, or legacy rows are present.
+- Production has at least two active named MFA identities including one
+  `ADMIN`; recovery codes are stored separately offline, account lock/disable
+  and session invalidation are exercised, and the staging-only shared-password
+  bootstrap is unavailable.
 - No legacy SQLite users, bookings, or payments are imported or reconciled for
   this release. The SQLite-to-PostgreSQL utility is a non-current contingency
   that requires a separately approved migration plan if the launch decision

@@ -318,14 +318,17 @@ Operational tables include `inbound_message_events`,
 `processed_messages` (legacy), `user_consents`, `case_briefs`, `feedback`,
 `support_requests`, `analytics_events`, `webhook_events`, `outbox_jobs`,
 `booking_fulfillments`, `manual_contact_events`, `payment_reconciliations`, availability
-blackouts/overrides, and `admin_audit_events`.
+blackouts/overrides, `admin_operators`, `admin_recovery_codes`, and
+`admin_audit_events`.
 
-Alembic revision `20260729_01` is the production baseline and `20260903_01` is
+Alembic revision `20260729_01` is the production baseline and `20260908_01` is
 the current production head. Revisions `20260818_01` and `20260819_01` add the
 case-brief and initial Document Studio ledgers; `20260827_01` adds the
 governed RC9 revision, artifact, access-event, and exact release-approval
 controls; `20260903_01` adds global daily-capacity evidence. On an empty database
-it creates the application and reliability/operations schema. It also retains
+it creates the application and reliability/operations schema; `20260908_01`
+adds named administrator identities, one-use recovery-code digests, persistent
+lockout state, and session invalidation counters. The migration chain retains
 compatibility steps for selected legacy columns/constraints and backfills, but
 those paths are not exercised by the current fresh release. Render runs
 `python -m alembic -c alembic.ini upgrade head` before the web release;
@@ -355,10 +358,12 @@ including SQLite backup/restore proof and an isolated rehearsal.
 - `/health/live` proves the process can answer.
 - `/health/ready` checks the database, production database type, expected
   Alembic revision, disabled automatic schema creation, required configuration,
-  credential prefixes, and minimum secret/token lengths.
+  credential prefixes, minimum secret/token lengths, and named-admin readiness.
 - `/admin/metrics` exposes aggregate operational counts.
-- `/admin/*` exposes authenticated queues and audited mutations for support,
-  fulfilment, payment review, outbox recovery, and availability.
+- `/admin/*` exposes password-plus-TOTP named sessions with `ADMIN`, `OPERATOR`,
+  and read-only `VIEWER` authorization, plus a separate bearer-token contract
+  for machine operations. Named-session audit identity comes from the verified
+  database session, not request input.
 - Request IDs are returned to callers.
 - Logs avoid raw WhatsApp bodies, phones, email recipients, database
   credentials, and outbox payloads.
@@ -407,5 +412,6 @@ Future architecture:
   required.
 - Automatic advocate matching/user notification, provider refund execution,
   and CRM integration.
-- Per-operator identity/RBAC/MFA and expanded settlement/chargeback workflows.
+- Tamper-resistant external audit retention, delegated role-management UI,
+  and expanded settlement/chargeback workflows.
 - Reviewed, source-backed legal retrieval and AI quality monitoring.

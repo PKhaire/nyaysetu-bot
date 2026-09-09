@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import base64
 from datetime import date, timedelta
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy import create_engine
@@ -27,6 +29,15 @@ from models import (
 )
 from services.document_operations_service import DocumentOperationResult
 from services.engagement_service import booking_status_message
+from services.admin_identity_service import (
+    begin_operator_enrollment,
+    confirm_operator_enrollment,
+    set_operator_active,
+    totp_code,
+)
+
+
+ADMIN_MFA_KEY = base64.urlsafe_b64encode(b"a" * 32).decode("ascii")
 
 
 @pytest.fixture
@@ -49,6 +60,7 @@ def admin_db(monkeypatch, app_module):
         "ADMIN_PASSWORD",
         "strong-admin-test-password",
     )
+    monkeypatch.setattr(admin, "ADMIN_MFA_ENCRYPTION_KEY", ADMIN_MFA_KEY)
     original_config = {
         key: app_module.app.config.get(key)
         for key in (
@@ -225,6 +237,278 @@ def test_admin_browser_login_dashboard_and_security_headers(client, admin_db):
     assert dashboard.headers["Cache-Control"] == "no-store, max-age=0"
     assert dashboard.headers["X-Frame-Options"] == "DENY"
     assert "default-src 'none'" in dashboard.headers["Content-Security-Policy"]
+
+
+def test_named_admin_browser_login_requires_password_and_authenticator_code(
+    client,
+    admin_db,
+):
+    now = datetime.now(timezone.utc)
+    db = admin_db()
+    try:
+        enrollment = begin_operator_enrollment(
+            db,
+            operator_id="Named.Admin@example.com",
+            display_name="Named Administrator",
+            role="ADMIN",
+            password="named admin password value",
+            encryption_key=ADMIN_MFA_KEY,
+            now=now,
+        )
+        confirm_operator_enrollment(
+            db,
+            operator_id=enrollment.operator_id,
+            verification_code=totp_code(enrollment.secret, timestamp=now),
+            encryption_key=ADMIN_MFA_KEY,
+            now=now,
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    login_page = client.get("/admin/login")
+    assert b"Authenticator code" in login_page.data
+    with client.session_transaction() as browser_session:
+        csrf_token = browser_session["admin_csrf_token"]
+
+    missing_code = client.post(
+        "/admin/login",
+        data={
+            "operator_id": "named.admin@example.com",
+            "password": "named admin password value",
+            "csrf_token": csrf_token,
+        },
+    )
+    assert missing_code.status_code == 200
+
+    authenticated = client.post(
+        "/admin/login",
+        data={
+            "operator_id": "named.admin@example.com",
+            "password": "named admin password value",
+            "verification_code": totp_code(
+                enrollment.secret,
+                timestamp=datetime.now(timezone.utc),
+            ),
+            "csrf_token": csrf_token,
+        },
+    )
+    assert authenticated.status_code == 302
+    assert authenticated.headers["Location"].endswith("/admin/appointments")
+    with client.session_transaction() as browser_session:
+        assert browser_session["operator_id"] == "named.admin@example.com"
+        assert browser_session["admin_role"] == "ADMIN"
+        assert browser_session["admin_mfa_authenticated"] is True
+    db = admin_db()
+    try:
+        login_audit = db.query(AdminAuditEvent).one()
+        assert login_audit.operator_id == "named.admin@example.com"
+        assert login_audit.action == "admin.login"
+        assert "totp" in login_audit.after_json
+    finally:
+        db.close()
+
+
+@pytest.mark.parametrize("role", ("VIEWER", "OPERATOR"))
+def test_named_non_admin_can_read_but_cannot_change_admin_only_data(
+    client,
+    admin_db,
+    role,
+):
+    now = datetime.now(timezone.utc)
+    operator_id = f"{role.lower()}@example.com"
+    db = admin_db()
+    try:
+        enrollment = begin_operator_enrollment(
+            db,
+            operator_id=operator_id,
+            display_name=f"Named {role.title()}",
+            role=role,
+            password="non admin password is long enough",
+            encryption_key=ADMIN_MFA_KEY,
+            now=now,
+        )
+        confirm_operator_enrollment(
+            db,
+            operator_id=enrollment.operator_id,
+            verification_code=totp_code(enrollment.secret, timestamp=now),
+            encryption_key=ADMIN_MFA_KEY,
+            now=now,
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    client.get("/admin/login")
+    with client.session_transaction() as browser_session:
+        csrf_token = browser_session["admin_csrf_token"]
+    login = client.post(
+        "/admin/login",
+        data={
+            "operator_id": enrollment.operator_id,
+            "password": "non admin password is long enough",
+            "verification_code": totp_code(
+                enrollment.secret,
+                timestamp=datetime.now(timezone.utc),
+            ),
+            "csrf_token": csrf_token,
+        },
+    )
+    assert login.status_code == 302
+    assert client.get("/admin/metrics").status_code == 200
+
+    with client.session_transaction() as browser_session:
+        csrf_token = browser_session["admin_csrf_token"]
+    forbidden = client.post(
+        "/admin/availability/blackouts",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"date": "2026-09-15", "reason": "Security role test"},
+    )
+
+    assert forbidden.status_code == 403
+    assert forbidden.get_json()["error"] == "insufficient_role"
+
+
+def test_named_admin_audit_actor_cannot_be_overridden_by_request_header(
+    client,
+    admin_db,
+):
+    now = datetime.now(timezone.utc)
+    db = admin_db()
+    try:
+        enrollment = begin_operator_enrollment(
+            db,
+            operator_id="verified.admin@example.com",
+            display_name="Verified Administrator",
+            role="ADMIN",
+            password="verified password is long enough",
+            encryption_key=ADMIN_MFA_KEY,
+            now=now,
+        )
+        confirm_operator_enrollment(
+            db,
+            operator_id=enrollment.operator_id,
+            verification_code=totp_code(enrollment.secret, timestamp=now),
+            encryption_key=ADMIN_MFA_KEY,
+            now=now,
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    client.get("/admin/login")
+    with client.session_transaction() as browser_session:
+        csrf_token = browser_session["admin_csrf_token"]
+    login = client.post(
+        "/admin/login",
+        data={
+            "operator_id": enrollment.operator_id,
+            "password": "verified password is long enough",
+            "verification_code": totp_code(
+                enrollment.secret,
+                timestamp=datetime.now(timezone.utc),
+            ),
+            "csrf_token": csrf_token,
+        },
+    )
+    assert login.status_code == 302
+
+    with client.session_transaction() as browser_session:
+        csrf_token = browser_session["admin_csrf_token"]
+    changed = client.post(
+        "/admin/availability/blackouts",
+        headers={
+            "X-CSRF-Token": csrf_token,
+            "X-Operator-ID": "spoofed.actor@example.com",
+        },
+        json={"date": "2026-09-15", "reason": "Audit identity test"},
+    )
+    assert changed.status_code == 201
+
+    db = admin_db()
+    try:
+        event = (
+            db.query(AdminAuditEvent)
+            .filter(AdminAuditEvent.action == "availability.blackout.create")
+            .one()
+        )
+        assert event.operator_id == "verified.admin@example.com"
+    finally:
+        db.close()
+
+
+def test_disabling_and_reenabling_named_operator_invalidates_old_session(
+    client,
+    admin_db,
+):
+    now = datetime.now(timezone.utc)
+    db = admin_db()
+    try:
+        enrollments = {}
+        for operator_id in (
+            "session.admin@example.com",
+            "backup.admin@example.com",
+        ):
+            enrollment = begin_operator_enrollment(
+                db,
+                operator_id=operator_id,
+                display_name=operator_id,
+                role="ADMIN",
+                password="session password is long enough",
+                encryption_key=ADMIN_MFA_KEY,
+                now=now,
+            )
+            confirm_operator_enrollment(
+                db,
+                operator_id=operator_id,
+                verification_code=totp_code(
+                    enrollment.secret,
+                    timestamp=now,
+                ),
+                encryption_key=ADMIN_MFA_KEY,
+                now=now,
+            )
+            enrollments[operator_id] = enrollment
+        db.commit()
+    finally:
+        db.close()
+
+    client.get("/admin/login")
+    with client.session_transaction() as browser_session:
+        csrf_token = browser_session["admin_csrf_token"]
+    login = client.post(
+        "/admin/login",
+        data={
+            "operator_id": "session.admin@example.com",
+            "password": "session password is long enough",
+            "verification_code": totp_code(
+                enrollments["session.admin@example.com"].secret,
+                timestamp=datetime.now(timezone.utc),
+            ),
+            "csrf_token": csrf_token,
+        },
+    )
+    assert login.status_code == 302
+
+    db = admin_db()
+    try:
+        set_operator_active(
+            db,
+            operator_id="session.admin@example.com",
+            active=False,
+        )
+        set_operator_active(
+            db,
+            operator_id="session.admin@example.com",
+            active=True,
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    expired = client.get("/admin/appointments")
+    assert expired.status_code == 302
+    assert expired.headers["Location"].endswith("/admin/login")
 
 
 def test_admin_browser_session_requires_csrf_and_audits_operator(

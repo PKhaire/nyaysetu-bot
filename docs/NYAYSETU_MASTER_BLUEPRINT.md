@@ -218,7 +218,8 @@ also checked.
 - It does not itself conduct a call or live consultation.
 - It does not execute Razorpay refunds.
 - Paid rescheduling/cancellation is not self-service.
-- The shared admin token is not individual RBAC/MFA.
+- Human browser administration has individual RBAC/MFA; the machine admin token
+  remains a separately controlled shared automation credential.
 - Full privacy export, deletion, correction and legal-hold workflows are future
   work.
 - Reminder infrastructure exists but must remain disabled until opt-in,
@@ -710,9 +711,11 @@ Before broad growth, implement:
 
 ### 13.3 Admin limitation
 
-The application currently uses a shared admin secret. Platform access controls
-and MFA must protect it during pilot. Individual RBAC/MFA is a priority before
-more operators receive access.
+Human browser administration uses individual passwords, TOTP/recovery MFA,
+named roles, lockout, session invalidation, and verified audit actors. The
+machine token and privileged Render shell remain high-impact controls; provider
+MFA, least privilege, credential rotation, and platform audit review must
+protect them during the pilot.
 
 ---
 
@@ -925,7 +928,7 @@ Alert on:
 - user-visible assigned professional/channel;
 - controlled paid reschedule/cancel/refund request;
 - provider refund execution with approval/idempotency;
-- individual operator RBAC/MFA;
+- delegated identity administration and tamper-resistant audit retention;
 - privacy export/correction/deletion/legal hold;
 - settlement and chargeback reconciliation;
 - stronger operator dashboard.
@@ -1276,7 +1279,7 @@ Principles:
 | Paid user lacks human fulfilment | Critical | Fulfilment queue exists | Staff, qualify, assign and document SLA/channel |
 | Payment/provider failure | High | Signed webhooks, idempotency, reconciliation, outbox | Staging tests, monitoring and staffed review |
 | Sensitive data retained too long | High | Minimised logs/analytics and bounded cleanup | Approve retention, rights, backup and legal holds |
-| Shared admin token compromised | High | Token/audit controls | Platform MFA/access, rotation, later RBAC |
+| Machine admin token or platform shell compromised | High | Named browser RBAC/MFA plus token/audit controls | Provider MFA/access, rotation, shell review and external audit retention |
 | Free/sleeping infrastructure delays users | High | Paid topology recommended | Choose paid web/database for production |
 | Unsupported marketing claim | High | Conservative positioning | Formal claim approval and campaign checklist |
 | Demand exceeds advocate capacity | High | Configurable capacity | Geography/category caps and daily monitoring |
@@ -1334,7 +1337,7 @@ Principles:
 ### Month 6: Scale readiness review
 
 - restore, incident and rollback drill;
-- RBAC/MFA and privacy-lifecycle status;
+- named-admin MFA operations and privacy-lifecycle status;
 - unit economics and customer-acquisition review;
 - capacity and advocate-quality review;
 - decide whether to expand geography, categories or AI.
@@ -1425,6 +1428,8 @@ payment, safety or support indicators breach limits.
 ### Security/privacy
 
 - [ ] No secrets in repository/artifact/logs.
+- [ ] Two named application identities with TOTP/recovery MFA and least
+  privilege are operational.
 - [ ] Platform MFA/access around admin routes.
 - [ ] Least-privilege credentials.
 - [ ] Secret rotation rehearsed.

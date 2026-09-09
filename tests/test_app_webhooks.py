@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
@@ -957,6 +958,9 @@ def test_production_readiness_validates_secret_policy_and_contact_contract(
         "ENV": "production",
         "ADMIN_TOKEN": "a" * 32,
         "ADMIN_PASSWORD": "admin-password-with-entropy",
+        "ADMIN_MFA_ENCRYPTION_KEY": base64.urlsafe_b64encode(
+            b"m" * 32
+        ).decode("ascii"),
         "SECRET_KEY": "k" * 32,
         "AUTO_CREATE_SCHEMA": False,
         "WHATSAPP_APP_SECRET": "b" * 32,
@@ -1004,6 +1008,17 @@ def test_production_readiness_validates_secret_policy_and_contact_contract(
         app_module,
         "get_schema_revision",
         lambda: app_module.EXPECTED_SCHEMA_REVISION,
+    )
+    healthy_admin_access = {
+        "mode": "named_mfa",
+        "active_named_operators": 2,
+        "active_admins": 1,
+        "production_compatible": True,
+    }
+    monkeypatch.setattr(
+        app_module,
+        "admin_identity_readiness",
+        lambda _db: healthy_admin_access,
     )
 
     ready = client.get("/health/ready")
@@ -1074,7 +1089,7 @@ def test_production_readiness_validates_secret_policy_and_contact_contract(
         production_values["PRIVACY_POLICY_URL"],
     )
     weak_secrets = {
-        "ADMIN_PASSWORD": "short",
+        "ADMIN_MFA_ENCRYPTION_KEY": "short",
         "SECRET_KEY": "short",
         "WHATSAPP_APP_SECRET": "short",
         "WHATSAPP_APP_SECRET_PREVIOUS": "short",
@@ -1125,6 +1140,29 @@ def test_production_readiness_validates_secret_policy_and_contact_contract(
     assert rotating.status_code == 200
     assert rotating.get_json()["configuration"] == "ok"
 
+    monkeypatch.setattr(app_module, "ADMIN_PASSWORD", "")
+    without_legacy_password = client.get("/health/ready")
+    assert without_legacy_password.status_code == 200
+    monkeypatch.setattr(
+        app_module,
+        "ADMIN_PASSWORD",
+        production_values["ADMIN_PASSWORD"],
+    )
+
+    missing_named_admin = dict(
+        healthy_admin_access,
+        active_named_operators=1,
+        production_compatible=False,
+    )
+    monkeypatch.setattr(
+        app_module,
+        "admin_identity_readiness",
+        lambda _db: missing_named_admin,
+    )
+    blocked = client.get("/health/ready")
+    assert blocked.status_code == 503
+    assert blocked.get_json()["admin_access"] == missing_named_admin
+
 
 def test_staging_readiness_requires_postgresql_test_keys_and_strict_config(
     monkeypatch,
@@ -1135,6 +1173,9 @@ def test_staging_readiness_requires_postgresql_test_keys_and_strict_config(
         "ENV": "staging",
         "ADMIN_TOKEN": "a" * 32,
         "ADMIN_PASSWORD": "admin-password-with-entropy",
+        "ADMIN_MFA_ENCRYPTION_KEY": base64.urlsafe_b64encode(
+            b"m" * 32
+        ).decode("ascii"),
         "SECRET_KEY": "k" * 32,
         "AUTO_CREATE_SCHEMA": False,
         "ALLOW_INSECURE_WEBHOOKS": False,

@@ -549,10 +549,12 @@ BOOKING_DATE_CHOICES = env_int(
 # Descriptive compatibility alias for new code.
 BOOKING_SLOT_CAPACITY = BOOKING_MAX_PER_SLOT
 
-# Admin. The token protects machine-to-machine operations. The password and
-# Flask signing secret protect the browser-based operations console.
+# Admin. The token protects machine-to-machine operations. ADMIN_PASSWORD is a
+# staging-only bootstrap fallback before named identities exist. The Fernet key
+# protects stored MFA material; the Flask signing secret protects sessions.
 ADMIN_TOKEN = env_str("ADMIN_TOKEN")
 ADMIN_PASSWORD = env_str("ADMIN_PASSWORD", ADMIN_TOKEN)
+ADMIN_MFA_ENCRYPTION_KEY = env_str("ADMIN_MFA_ENCRYPTION_KEY")
 SECRET_KEY = env_str("SECRET_KEY")
 
 # Database.

@@ -129,10 +129,22 @@ operator/webhook race.
 ### Admin console and API
 
 Human operators use `GET/POST /admin/login` and the appointment board at
-`GET /admin/appointments`. Login requires the shared `ADMIN_PASSWORD` plus a
-stable operator ID. Signed browser sessions expire after two hours and unsafe
-requests require the session CSRF token. Five failed logins from one service
-address within 15 minutes temporarily throttle that address.
+`GET /admin/appointments`. Named login requires an enrolled operator ID,
+individual password, and current six-digit TOTP or unused recovery code. Five
+failed identity attempts lock that account for 15 minutes; five failed browser
+attempts from one service address within 15 minutes also throttle that address.
+Signed sessions expire after two hours and unsafe requests require the session
+CSRF token. Disabling the account or resetting its password/MFA invalidates all
+of its existing sessions.
+
+Named roles are `ADMIN`, `OPERATOR`, and `VIEWER`. A viewer is read-only; an
+operator can work ordinary support/fulfilment/document operations; creating
+advocates, changing availability controls, retrying terminal outbox jobs, and
+approving/revoking an exact Document Studio template release require `ADMIN`.
+Browser mutations always audit the verified session identity and ignore a
+caller-supplied actor header. Before any named identity exists, staging only
+may use the legacy shared password as a one-time bootstrap; production never
+permits that fallback.
 
 Machine clients continue to use `Authorization: Bearer <ADMIN_TOKEN>` or
 `X-Admin-Token: <ADMIN_TOKEN>`; unsafe methods additionally require
@@ -173,9 +185,11 @@ before/after values and the operator ID in `admin_audit_events`.
 | `POST /admin/document-template-release/revoke` | Append an audited revocation of the current exact release approval |
 
 These routes expose sensitive operational data. Keep them behind TLS and
-platform access controls. The console records a supplied operator identity but
-still uses a shared password; it does not yet provide individually verified
-credentials, application RBAC, or application MFA.
+platform access controls. Protect Render/AWS/Meta/Razorpay access with separate
+provider MFA and least privilege as application MFA does not protect those
+control planes. `ADMIN_MFA_ENCRYPTION_KEY` encrypts TOTP seeds and keys recovery
+code digests; it is a durable root secret that must not be logged or rotated
+without a controlled per-account MFA replacement plan.
 
 A paid cancellation cannot be recorded directly from `UNASSIGNED`. The
 reviewed refund path records `REFUND_REVIEW` and then `REFUNDED`; that terminal

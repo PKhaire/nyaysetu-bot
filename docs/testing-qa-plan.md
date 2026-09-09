@@ -14,7 +14,9 @@ delivery, transport, and AI-safety modules:
 | `tests/test_ai_safety.py` | PII scrubbing, pseudonymous identifiers, urgent/harmful guardrails, provider short-circuiting, OpenAI privacy/request contract |
 | `tests/test_ai_provider_compatibility.py` | Thread-safe bounded/TTL response cache, provider/model contracts, one-attempt fallback, and compatibility errors |
 | `tests/test_whatsapp_service.py` | Payload limits, structured configuration failures, safe logs/provider errors, bounded retry behavior, stored-price payment confirmation |
-| `tests/test_admin_operations.py` | Operator identity/audit, masked queue data, purpose-bound contact reveal, structured brief review, verified advocate registration/assignment, manual handover evidence, fulfilment, reviewed refund evidence/access effects, reconciliation, outbox, and availability mutations |
+| `tests/test_admin_identity.py` | RFC 6238 vector, encrypted enrollment, TOTP/recovery authentication, replay denial, persistent lockout, lifecycle/session version, and production redundancy readiness |
+| `tests/test_admin_operator_command.py` | Interactive enroll/activate/list/disable/password-reset/MFA-reset commands, recovery output, and accountable-admin requirements |
+| `tests/test_admin_operations.py` | Named browser MFA, role authorization, session invalidation, non-spoofable audit identity, masked queue data, purpose-bound contact reveal, structured brief review, advocate assignment, fulfilment/refund/reconciliation/outbox/availability mutations |
 | `tests/test_payment_reconciliation.py` | Dual-resource exact/non-refunded capture recovery, ambiguity/concurrency preservation, idempotency, and provider failures |
 | `tests/test_consultation_reminders.py` | Empty-config no-op, language/template gating, due windows, deduplication, suppression, delivery ambiguity, and CLI safety |
 | `tests/test_maintenance.py` | Protected booking evidence, unattached case-brief expiry, bounded cleanup/dry-run, risk report, and exit semantics |
@@ -133,7 +135,14 @@ For admin and health:
   from-address or AWS access credentials, non-HTTPS policy URLs, invalid
   contacts, a nonempty weak previous rotation secret, or a future/malformed
   legal-review date.
-- Missing admin configuration hides routes.
+- Missing admin configuration hides routes; invalid Fernet MFA keys fail strict
+  configuration, and production fails until two active named identities include
+  at least one administrator.
+- Named login requires password plus current TOTP or one-use recovery code;
+  repeated failures lock persistently, TOTP replay is rejected, and
+  disable/password/MFA changes invalidate prior sessions.
+- `VIEWER` cannot mutate, `OPERATOR` cannot perform administrator-only changes,
+  and named browser audit identity cannot be overridden by a request header.
 - Invalid/valid bearer and header tokens.
 - Support pagination limits and no-cache headers.
 - Metrics contain no phone, name, message, or provider short URL.
@@ -220,6 +229,9 @@ or production rollout.
     provider validation and booking/review locking while resolving the same
     `OPEN` review. Verify both operator-first and webhook-first orderings,
     entitlement/revocation, no deadlock, and no lost disposition.
+18. Apply `20260908_01`, enroll two named MFA identities, prove role denials,
+    lock/recovery/session invalidation, and confirm production-compatible admin
+    readiness while the shared-password bootstrap is unavailable.
 
 Never run destructive, refund, or load scenarios against real user data.
 
@@ -244,6 +256,9 @@ Never run destructive, refund, or load scenarios against real user data.
   URL, email recipients, database credentials, or outbox payload.
 - Verify TLS and platform access controls.
 - Test token timing/format handling and rotate all staging secrets.
+- Verify Render/provider MFA independently of application MFA; store recovery
+  codes and the durable MFA encryption root separately, and confirm neither is
+  present in logs, evidence, shell history, screenshots, or repository files.
 - Fuzz webhook envelopes and WhatsApp interactive IDs.
 - Test request-size and rate-limit boundaries.
 - Review generated receipt metadata/content and deletion.

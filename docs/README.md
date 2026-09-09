@@ -8,6 +8,9 @@ from external rollout work and future product ideas.
 
 Start with:
 
+- [RC12 named-admin MFA release notes](RELEASE_NOTES_2026-09-08_RC12.md)
+  - individual operations identities, TOTP/recovery authentication, persistent
+    lockout, role enforcement, session invalidation, and verified audit actors.
 - [RC11 email-disabled operations release notes](RELEASE_NOTES_2026-09-07_RC11.md)
   - formally disables internal email for V1, preserves mandatory WhatsApp and
     Document Studio delivery, and safely closes legacy email-only backlog.
@@ -90,7 +93,9 @@ assistant with:
 - Optional Meta-template-gated 24-hour/2-hour reminders, inert by default.
 - Session/token-protected, audited support, fulfilment, case-brief review,
   verified advocate assignment, contact reveal/manual handover,
-  reconciliation, outbox, availability, and metrics operations.
+  reconciliation, outbox, availability, and metrics operations. Human browser
+  access uses named password-plus-TOTP identities with `ADMIN`, `OPERATOR`, and
+  read-only `VIEWER` roles; the machine bearer token remains separate.
 
 Operators can assign an active advocate or named fulfiller and manage the
 fulfilment lifecycle, but the product does not automatically select an
@@ -198,8 +203,9 @@ Still required before production cutover:
   evidence before enabling its production switch.
 
 Future work includes automated advocate matching/user notification, controlled
-Razorpay refund execution, per-operator RBAC/MFA, privacy export/deletion and
-legal holds, source-backed legal content, broader user-status workflows, and
+Razorpay refund execution, delegated identity administration,
+tamper-resistant external audit retention, privacy export/deletion and legal
+holds, source-backed legal content, broader user-status workflows, and
 distributed throttling. The implemented reminder pipeline must remain disabled
 until Meta template, opt-in, localization, and messaging-policy gates pass.
 

@@ -133,6 +133,7 @@ def test_deployment_commands_and_render_release_controls_exist():
         in blueprint
     )
     assert "- key: ADMIN_PASSWORD\n        sync: false" in blueprint
+    assert "- key: ADMIN_MFA_ENCRYPTION_KEY\n        sync: false" in blueprint
     assert "- key: SECRET_KEY\n        generateValue: true" in blueprint
     assert (
         '- key: DOCUMENT_STUDIO_ENABLED\n        value: "false"'

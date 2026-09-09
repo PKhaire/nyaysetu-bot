@@ -136,9 +136,11 @@ These items are “implemented,” not automatically “deployed” or “operat
 
 ### Operator workflows
 
-- Add individually authenticated RBAC/MFA rather than a shared token.
+- Deploy and operationally prove the implemented named password-plus-TOTP MFA,
+  `ADMIN`/`OPERATOR`/`VIEWER` authorization, account lifecycle, and recovery
+  procedure; keep the separate machine token tightly scoped and rotated.
 - Extend implemented support assignment/status/SLA updates with comments and
-  independently authenticated actor identity.
+  tamper-resistant external audit retention.
 - Search bookings using non-sensitive references.
 - Extend implemented payment/refund dispositions and outbox review to provider
   settlement, refund-execution, and chargeback state.
@@ -207,8 +209,9 @@ five-minute bounded payment reconciliation, and rollback readiness.
 ### Milestone 3: Operational maturity
 
 Operationalize the implemented fulfilment/support/reconciliation/maintenance
-foundation, then add provider refund execution, individual RBAC/MFA, legal
-holds/privacy rights, and tamper-resistant audit retention.
+and named-admin MFA foundation, then add provider refund execution,
+legal holds/privacy rights, delegated identity management, and tamper-resistant
+external audit retention.
 
 ### Milestone 4: Evidence-led growth
 

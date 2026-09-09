@@ -189,6 +189,8 @@ services:
         generateValue: true
       - key: ADMIN_PASSWORD
         sync: false
+      - key: ADMIN_MFA_ENCRYPTION_KEY
+        sync: false
       - key: SECRET_KEY
         generateValue: true
       - key: AI_SAFETY_IDENTIFIER_SECRET

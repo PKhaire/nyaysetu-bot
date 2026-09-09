@@ -34,7 +34,7 @@
           required
           autofocus
         >
-        <label for="password">Admin password</label>
+        <label for="password">Password</label>
         <input
           id="password"
           name="password"
@@ -43,6 +43,22 @@
           minlength="16"
           required
         >
+        {% if mfa_required %}
+        <label for="verification_code">Authenticator code</label>
+        <input
+          id="verification_code"
+          name="verification_code"
+          type="text"
+          inputmode="text"
+          autocomplete="one-time-code"
+          autocapitalize="characters"
+          spellcheck="false"
+          minlength="6"
+          maxlength="19"
+          placeholder="6-digit code or recovery code"
+          required
+        >
+        {% endif %}
         <button type="submit" class="button button-primary button-wide">Sign in securely</button>
       </form>
 

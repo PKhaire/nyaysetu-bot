@@ -8,7 +8,7 @@ application. SQLite enables foreign keys, WAL, a busy timeout, and normal
 synchronous mode for local compatibility.
 
 Managed PostgreSQL is the required production target. Revision `20260729_01`
-is the original baseline and `20260903_01` is the current schema head.
+is the original baseline and `20260908_01` is the current schema head.
 Production disables automatic
 `Base.metadata.create_all()` by default. Render applies
 `python -m alembic -c alembic.ini upgrade head` before a web release;
@@ -261,12 +261,32 @@ Active date-wide or slot-specific availability rules. Blackouts suppress
 booking choices; overrides replace effective daily/slot capacity, including
 zero. Operator create/deactivate actions are audited.
 
+### `admin_operators`
+
+Individually attributable human operations identities. Each row stores a
+normalized unique operator ID, display name, immutable role (`ADMIN`,
+`OPERATOR`, or `VIEWER`), a Werkzeug scrypt password hash, encrypted TOTP seed,
+active/enrollment state, persistent failed-attempt lock state, last accepted
+TOTP counter, session version, and lifecycle timestamps. Disabling an account
+or resetting its password/MFA increments `session_version`, invalidating its
+browser sessions. The table never stores a plaintext password or TOTP seed.
+
+### `admin_recovery_codes`
+
+One-use recovery evidence linked to an operator. Only a keyed SHA-256 digest is
+stored; successful use sets `used_at`. Enrollment and MFA replacement each
+issue eight plaintext codes once to the authorized shell operator. The
+plaintext values must be stored offline and cannot be recovered from the
+database.
+
 ### `admin_audit_events`
 
 Append-only application-level history for admin mutations, including operator
-ID, action, target, before/after JSON, request ID, and timestamp. This improves
-traceability but does not replace individually authenticated platform access,
-RBAC, MFA, or provider/database audit logs.
+ID, action, target, before/after JSON, request ID, and timestamp. Named browser
+actions use the verified session identity and cannot be reassigned through an
+actor header. Machine-token calls retain the required explicit
+`X-Operator-ID`. This application evidence complements, but does not replace,
+provider/database/platform audit logs or tamper-resistant external retention.
 
 ## Data lifecycle
 
@@ -419,7 +439,8 @@ rollback, and data-governance plan authorizes an existing SQLite data import:
 Revision `20260819_01` introduced the resumable ledger. Revision
 `20260827_01` extends it into the RC9 controlled drafting, payment, artifact
 and release model; `20260903_01` adds auditable global daily-capacity
-reservations:
+reservations. Revision `20260908_01` adds named administrator identity and MFA
+tables without changing Document Studio order semantics:
 
 - `document_orders` is the aggregate root. It records a random public
   reference; owner; product, questionnaire, template and renderer versions;
@@ -470,7 +491,7 @@ URLs or unnecessary user/contact identity.
   notification.
 - User-requested reschedule/cancellation and controlled provider refund,
   settlement, and chargeback workflows.
-- Support comments and individually authenticated actor identity/RBAC.
+- Support comments and stronger external/tamper-resistant audit retention.
 - Data-subject requests and deletion/anonymisation ledger.
 - Extend reviewed retention to additional categories with legal holds.
 - Strong foreign keys where migration analysis confirms safe relationships.

@@ -1,37 +1,45 @@
 # NyaySetu First Production Launch Checklist - Bot + Document Studio
 
-Prepared: 3 September 2026  
-Release candidate: RC9  
+Prepared: 8 September 2026
+
+Release candidate: RC12 (integrated checklist filename retained for continuity)
+
 Decision rule: NyaySetu Bot and Document Studio launch together. There is no
 base-bot-only production path in this checklist. Any unchecked mandatory gate
 keeps the release at **NO-GO**.
 
 ## Current verdict
 
-**NO-GO for production.** The deployed service is healthy staging, but the
-complete RC9 source is still local and Document Studio has unresolved legal,
-infrastructure, operational, security, and end-to-end evidence gates.
+**NO-GO for production.** RC11 is healthy in staging and the approved Document
+Studio path has passed its controlled staging flow, but RC12 named-admin MFA is
+still local. Production isolation/live-provider configuration, restore proof,
+final regression, staffing/policy evidence, and a recorded GO decision remain
+mandatory.
 
 Verified baseline:
 
 - [x] Public API is reachable and the current staging readiness response is OK.
-- [x] Current deployed schema is `20260819_01`.
-- [x] Local RC9 validation passed: 319 tests, 66.57% coverage, Ruff, compile,
-  dependency check, SBOM generation, and the 60% coverage gate.
-- [x] Local RC9 has a single Alembic head: `20260903_01`.
+- [x] Current deployed staging schema is `20260903_01` and readiness is green.
+- [x] RC11 email-disabled/manual-operations behavior, outbox health, payment
+  reconciliation, maintenance risk-zero report, and Document Studio final
+  PDF/DOCX flow have staging evidence.
+- [ ] Local RC12 final validation passes with a single Alembic head
+  `20260908_01`, updated SBOM, and the configured coverage gate.
 - [x] Document Studio is globally available when enabled, not a test-user or
   cohort feature.
 - [ ] All mandatory gates below are complete and supported by saved evidence.
 
-## A. Freeze and publish the exact RC9 release
+## A. Freeze and publish the exact RC12 release
 
-- [ ] Review the local diff and confirm every intended RC9 file.
+- [ ] Review the local diff and confirm every intended RC10-RC12 file.
 - [ ] Confirm no credentials, access tokens, personal test data, generated
   documents, `.env` file, or private advocate material is in the upload set.
 - [x] Implement and test the global daily Document Studio capacity
   control before freezing RC9. It must be atomic across all users and must not
   behave as a percentage rollout or test-user flag.
 - [x] Rerun the full automated suite after the capacity change.
+- [ ] Rerun the full automated suite after named-admin MFA and audit-identity
+  hardening.
 - [ ] Assign the release a final immutable version/tag and record its Git SHA.
 - [ ] Upload/merge that exact source to GitHub `main`.
 - [ ] Confirm GitHub CI is green for tests, migration validation, static checks,
@@ -50,7 +58,7 @@ Evidence: Git SHA, reviewed manifest, CI URL, test report, and SBOM.
 - [ ] Set `ENV=production`, `FLASK_ENV=production`, and `DEBUG=false` only in
   production.
 - [ ] Confirm `RESET_DB=false` and destructive reset behavior is disabled.
-- [ ] Run Alembic and confirm schema `20260903_01` is applied.
+- [ ] Run Alembic and confirm schema `20260908_01` is applied.
 - [ ] Confirm `/health/live` and `/health/ready` return HTTP 200.
 
 Evidence: sanitized environment inventory, service IDs, migration log, and
@@ -192,12 +200,22 @@ Evidence: approved URLs, versions, test report, and consent record.
 
 - [x] Implement privacy-safe Document Studio detail, one-order reconciliation,
   audited refund-review, and idempotent final-link redelivery APIs.
-- [ ] Protect admin routes with MFA or an equivalent identity/access layer; a
-  shared password alone is insufficient for production sensitive data.
-- [ ] Restrict access to named operators using least privilege.
+- [x] Implement individual password-plus-TOTP/recovery authentication,
+  persistent lockout, named `ADMIN`/`OPERATOR`/`VIEWER` authorization, session
+  invalidation, and verified browser audit identity.
+- [ ] Set and securely back up a unique `ADMIN_MFA_ENCRYPTION_KEY`; never reuse
+  `SECRET_KEY` and never expose setup seeds/recovery codes in evidence.
+- [ ] Apply RC12 and enroll at least two active named MFA identities, including
+  one `ADMIN`; store each set of recovery codes separately offline.
+- [ ] Confirm production readiness reports `admin_access.mode=named_mfa`,
+  `active_named_operators>=2`, `active_admins>=1`, and
+  `production_compatible=true`; confirm shared-password fallback is rejected.
+- [ ] Review roles for least privilege and protect Render shell/provider access
+  with separate MFA; a shell `--actor-id` is accountability, not authentication.
 - [ ] Rotate admin credentials and Flask secret before production.
-- [ ] Verify login throttling, secure cookies, CSRF protection where applicable,
-  session expiry, logout, and audit logging.
+- [ ] Verify account lockout, TOTP replay denial, one-use recovery, disable/reset
+  session invalidation, login throttling, secure cookies, CSRF, session expiry,
+  logout, role denial, and non-spoofable audit identity.
 - [ ] Verify contact reveal is reason-gated, time-limited, and audited.
 - [ ] Train at least two operators for reconciliation, document failures,
   consultation assignment, privacy requests, refunds, and incidents.
@@ -272,7 +290,7 @@ Run only after a recorded GO decision:
 1. Announce the release window and freeze unrelated changes.
 2. Confirm backup, rollback target, support cover, and provider dashboards.
 3. Deploy the approved SHA with maintenance mode enabled.
-4. Apply/verify migration `20260903_01`.
+4. Apply/verify migration `20260908_01`.
 5. Verify production configuration without printing secret values.
 6. Verify `/health/live` and `/health/ready` internally.
 7. Confirm private S3, jobs, alerts, admin identity, Meta webhook, and Razorpay

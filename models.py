@@ -897,6 +897,68 @@ class BookingCapacityOverride(Base):
 
 
 # =========================================================
+# NAMED ADMINISTRATOR IDENTITY AND MFA
+# =========================================================
+
+class AdminOperator(Base):
+    """A verified, individually attributable operations identity."""
+
+    __tablename__ = "admin_operators"
+
+    __table_args__ = (
+        Index("idx_admin_operator_active_role", "active", "role"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    operator_id = Column(String(120), nullable=False, unique=True, index=True)
+    display_name = Column(String(160), nullable=False)
+    role = Column(String(32), nullable=False, default="OPERATOR")
+    password_hash = Column(String(512), nullable=False)
+    totp_secret_ciphertext = Column(Text, nullable=False)
+    active = Column(Boolean, nullable=False, default=False)
+    session_version = Column(Integer, nullable=False, default=0)
+    failed_attempts = Column(Integer, nullable=False, default=0)
+    locked_until = Column(DateTime, nullable=True)
+    last_totp_counter = Column(Integer, nullable=True)
+    mfa_enrolled_at = Column(DateTime, nullable=True)
+    password_changed_at = Column(DateTime, nullable=False, default=utc_now)
+    last_login_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+
+class AdminRecoveryCode(Base):
+    """A one-use MFA recovery credential stored only as a keyed digest."""
+
+    __tablename__ = "admin_recovery_codes"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "operator_id",
+            "code_hash",
+            name="uq_admin_recovery_operator_code",
+        ),
+        Index("idx_admin_recovery_operator_used", "operator_id", "used_at"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    operator_id = Column(
+        Integer,
+        ForeignKey("admin_operators.id"),
+        nullable=False,
+        index=True,
+    )
+    code_hash = Column(String(64), nullable=False)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+# =========================================================
 # ADMIN MUTATION AUDIT TRAIL
 # =========================================================
 

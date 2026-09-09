@@ -135,11 +135,20 @@ Prompts and content require Indian legal counsel and native-language review.
 
 ### Operational authorization
 
-The admin token is a shared secret, not individual authentication, RBAC, or
-MFA. Mutations require a declared operator ID and create an application audit
-trail, but an operator can still assert another valid-looking ID. Admin queues
-include sensitive user/payment matter data. Place them behind TLS, platform
-identity/MFA and access controls, rotate the token, and avoid broad sharing.
+Human browser access uses named identities with scrypt password hashes,
+encrypted TOTP seeds, one-use keyed-digest recovery codes, persistent lockout,
+role authorization, session invalidation, CSRF, and a verified audit identity.
+A browser request cannot replace its actor through `X-Operator-ID`. Production
+readiness requires two active named identities including one administrator.
+
+The machine admin token remains a shared automation secret and its mutations
+still require a declared `X-Operator-ID`. The Render shell can execute identity
+lifecycle commands and `--actor-id` is attribution rather than a second shell
+authentication challenge. Admin queues include sensitive user/payment matter
+data. Protect TLS, Render, database, AWS, Meta, and Razorpay access with
+separate provider identity/MFA and least privilege; restrict and rotate the
+machine token; keep the MFA encryption key durable and separately backed up;
+and review application plus provider audit records.
 
 ### Consultation fulfilment and consumer risk
 
@@ -160,7 +169,8 @@ capabilities until the operating process and policy exist.
 | High | Provider or worker failure delays confirmation | Retryable webhook, durable inbox/outbox, five-minute exact-evidence reconciler | Monitor cron/provider errors and staff every open/recovered review plus 5xx/queue/dead/risk states |
 | High | Sensitive legal/payment/support data is retained too long | Minimized storage and bounded terminal-artifact cleanup | Approve remaining deletion/anonymisation, backup, and legal-hold policy |
 | High | Third-party AI receives sensitive or misleading context | Consent, PII scrub, safety checks, local fallback | Privacy/DPA/legal review and multilingual red-team evaluation |
-| High | Shared admin token is compromised | Constant-time token check and no-cache | Platform access controls, rotation, audit trail, eventual RBAC/MFA |
+| High | Shared machine admin token or privileged platform shell is compromised | Named browser MFA/RBAC, constant-time token check, mutation actor requirement, no-cache, and application audit | Provider MFA/least privilege, token rotation, shell-access review, and tamper-resistant external audit retention |
+| High | Admin MFA encryption key is lost or changed without migration | Readiness validates key form; seeds are encrypted and recovery codes are keyed digests | Back up the durable root secret securely; rehearse per-account MFA replacement and never rotate/delete it ad hoc |
 | Medium | In-memory limits can be bypassed at scale | Single-worker deployment | Add distributed throttling/WAF before horizontal growth |
 | Medium | Static legal guides become stale | Disclaimer and local fallback | Counsel-owned sources, review dates, correction workflow |
 | Medium | Proactive WhatsApp messages breach consent/template rules | Transactional reminder pipeline is inert with empty pairs and revalidates live eligibility | Before populating a pair, obtain opt-in/template approval and test localization, frequency, suppression, and quality |
@@ -212,13 +222,17 @@ counsel for the real business entity, data flows, users, and service model.
 - Restore a production-like backup and reconcile sampled Razorpay payments.
 - Test operator-ID enforcement/audit, allowed fulfilment transitions,
   availability overrides, and maintenance protected-category preservation.
+- Test named login, TOTP replay rejection, recovery-code one-time use,
+  persistent lockout, role denial, session invalidation, and browser audit
+  actor non-impersonation.
 
 ## Future controls
 
 - Freeze each historical Alembic revision and extend retention only under
   approved legal-hold/privacy policy.
 - Privacy request, consent revocation, and deletion/anonymisation workflows.
-- Per-operator RBAC/MFA backed identity and tamper-resistant audit retention.
+- Delegated identity/role administration and tamper-resistant external audit
+  retention beyond the implemented per-operator RBAC/MFA controls.
 - WAF/distributed rate limiting and abuse alerting.
 - Formal payment settlement/refund reconciliation.
 - Source-backed legal content with provenance and review dates.

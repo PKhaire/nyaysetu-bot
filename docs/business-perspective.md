@@ -141,7 +141,8 @@ Implemented foundation:
 - Configurable email recipients; no hard-coded operational mailbox.
 - Self-service support/privacy/status/preparation/feedback.
 - Audited operator support, fulfilment, reconciliation, availability, outbox,
-  and metrics APIs.
+  and metrics APIs, plus named human identities with TOTP/recovery MFA and
+  least-privilege application roles.
 - Alembic releases and bounded maintenance/risk reporting.
 
 Prerequisites before a production cutover:
@@ -169,7 +170,9 @@ High-value next capabilities:
 2. User reschedule/cancellation plus controlled provider refund workflow.
 3. Activate the implemented appointment reminders with approved templates,
    opt-in, localized QA, suppression, and frequency caps.
-4. Individual operator RBAC/MFA and settlement/refund/chargeback reconciliation.
+4. Delegated identity administration, external audit retention, and
+   settlement/refund/chargeback reconciliation on top of implemented
+   individual operator RBAC/MFA.
 5. Source-backed legal content with counsel review.
 6. Privacy export/deletion/legal holds beyond current bounded retention and
    versioned consent.

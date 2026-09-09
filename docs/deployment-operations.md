@@ -236,7 +236,8 @@ LEGAL_CONTENT_VERSION=...
 LEGAL_CONTENT_REVIEWED_VERSION=...
 LEGAL_CONTENT_REVIEWED_ON=YYYY-MM-DD
 ADMIN_TOKEN=...
-ADMIN_PASSWORD=...
+ADMIN_PASSWORD=... # staging bootstrap only; leave empty in production
+ADMIN_MFA_ENCRYPTION_KEY=... # durable Fernet key; never reuse SECRET_KEY
 SECRET_KEY=...
 AI_SAFETY_IDENTIFIER_SECRET=...
 SUPPORT_SLA_HOURS=24
@@ -248,8 +249,9 @@ CASE_BRIEF_UNATTACHED_TTL_DAYS=7
 Production `/health/ready` requires both groups. It also validates live
 Razorpay mode and an `rzp_live_...` key ID of at least 16 characters; minimum
 lengths of 32 for the WhatsApp app secret/token, admin token, browser-session
-signing secret and AI secret, 16 for the admin password, WhatsApp verify token,
-and Razorpay API/webhook secrets; a numeric WhatsApp phone ID; valid public
+signing secret and AI secret; a valid 32-byte URL-safe Fernet admin-MFA key; 16
+for the staging bootstrap password, WhatsApp verify token, and Razorpay
+API/webhook secrets; a numeric WhatsApp phone ID; valid public
 support/privacy email addresses; HTTPS policy URLs; current Alembic revision;
 disabled automatic schema creation; and a legal-content reviewed version
 exactly matching the configured content version with a valid non-future review
@@ -419,7 +421,7 @@ SQLite data:
 ## Legacy SQLite import contingency (not authorised for this launch)
 
 Production uses baseline revision `20260729_01` and current head
-`20260903_01`; automatic `create_all()` is disabled and `/health/ready`
+`20260908_01`; automatic `create_all()` is disabled and `/health/ready`
 requires the expected head. The baseline is additive and contains
 compatibility/backfill logic for pre-Alembic databases.
 The following utility is retained only for a separately approved future
@@ -437,7 +439,7 @@ not a recurring sync:
   retain an untouched restore copy.
 - Prepare a separate working backup at Alembic head, then create the frozen
   import artifact from that working copy with the SQLite backup mechanism.
-  The utility requires the source and target to have revision `20260903_01`
+  The utility requires the source and target to have revision `20260908_01`
   and the full current table/column shape.
 - The source must be a regular non-symlink file with no adjacent `-wal`,
   `-journal`, or `-shm` sidecar. It is opened immutable/read-only and checked
@@ -567,7 +569,7 @@ explicit consistency design.
 Every later schema-changing release must add a frozen, reviewed Alembic
 revision and rehearse upgrade, compatibility rollback, and re-upgrade. Never
 edit any applied revision, including `20260729_01`, `20260818_01`,
-`20260819_01`, `20260827_01`, or `20260903_01`, after it has reached a shared
+`20260819_01`, `20260827_01`, `20260903_01`, or `20260908_01`, after it has reached a shared
 environment.
 
 ## Webhook configuration
@@ -781,12 +783,84 @@ records a failed cron run when the maintenance transaction fails or the
 successful report requires operator attention. Route exit `2` and the JSON
 `alert_required` detail to the fulfilment/support/payment-review owner.
 
+## Named administrator MFA bootstrap and lifecycle
+
+The web console uses individual application identities. `ADMIN` can perform
+all operations and security-sensitive configuration/release mutations;
+`OPERATOR` can work routine support, fulfilment, payment, and Document Studio
+queues; `VIEWER` is read-only. Production readiness requires at least two
+active named identities, including at least one `ADMIN`, so one lost device or
+disabled account does not remove all access.
+
+Before deploying revision `20260908_01`, create one new durable Fernet key by
+using Render's secret generator or a trusted offline terminal and store it as
+`ADMIN_MFA_ENCRYPTION_KEY` on the web service. Never reuse `SECRET_KEY`, paste
+the value into chat/tickets, or change/delete it casually: it encrypts every
+TOTP seed and keys recovery-code digests. If it must rotate, reset each active
+identity's MFA under an approved plan before removing the old key.
+
+After the migration succeeds, use the protected Render web-service shell. The
+commands deliberately prompt for passwords/codes rather than accepting them as
+arguments:
+
+```text
+python -m jobs.manage_admin_operator enroll --operator-id <first-admin-id> --display-name "<name>" --role ADMIN
+python -m jobs.manage_admin_operator activate --operator-id <first-admin-id>
+```
+
+Add the one-time setup key/URI to the operator's authenticator app before
+running `activate`, then enter its current six-digit code. Store the eight
+one-use recovery codes in an approved offline password vault; they cannot be
+read from the database or displayed again. Do not screenshot, copy to logs, or
+share enrollment output.
+
+Once the first administrator is active, every further enrollment/activation
+must name an existing active `ADMIN` as the accountable platform-shell actor:
+
+```text
+python -m jobs.manage_admin_operator enroll --operator-id <second-id> --display-name "<name>" --role OPERATOR --actor-id <first-admin-id>
+python -m jobs.manage_admin_operator activate --operator-id <second-id> --actor-id <first-admin-id>
+python -m jobs.manage_admin_operator list
+```
+
+For production, make the second identity another `ADMIN` unless the approved
+staffing model already provides two active identities and a separate active
+administrator. Confirm `/health/ready` reports `admin_access.mode=named_mfa`,
+`active_named_operators>=2`, `active_admins>=1`, and
+`production_compatible=true` before traffic.
+
+Lifecycle commands require an active `ADMIN` actor and an exact typed
+confirmation where the action is sensitive:
+
+```text
+python -m jobs.manage_admin_operator disable --operator-id <target> --actor-id <admin>
+python -m jobs.manage_admin_operator enable --operator-id <target> --actor-id <admin>
+python -m jobs.manage_admin_operator reset-password --operator-id <target> --actor-id <admin>
+python -m jobs.manage_admin_operator reset-mfa --operator-id <target> --actor-id <admin>
+```
+
+Disable suspected accounts immediately. Disable/re-enable, password reset, and
+MFA reset invalidate existing browser sessions; recovery codes are one-use;
+and the last active `ADMIN` cannot be disabled. `--actor-id` records
+accountability but is not another shell authentication challenge, so restrict
+Render shell access with provider MFA and least privilege and review
+`admin_audit_events`. Roles are not edited in place: disable the old identity
+and enroll a correctly scoped replacement. Identity rows are retained rather
+than deleted so historical audit attribution remains interpretable.
+
+Staging may use `ADMIN_PASSWORD` only while there are zero named identity rows.
+Creating even a pending named identity disables that browser fallback (fail
+closed); production never accepts it. If the very first pending enrollment key
+is lost before activation, enroll and activate a different first administrator
+from the protected shell, then retain the abandoned row inactive for audit.
+
 ## Operator appointment-console procedure
 
-Human operators open `https://api.nyaysetu.in/admin/login`, enter their stable
-operator ID and the separately stored `ADMIN_PASSWORD`, then work the
-responsive appointment queue at `/admin/appointments`. The signed session
-expires after two hours. The console masks contact numbers and never marks an
+Human operators open `https://api.nyaysetu.in/admin/login`, enter their enrolled
+operator ID, individual password, and current authenticator or unused recovery
+code, then work the responsive appointment queue at `/admin/appointments`.
+The signed session expires after two hours. The console masks contact numbers
+and never marks an
 appointment complete merely because its scheduled time passed. A contact
 number is shown only after a stable operator supplies a valid operational
 purpose; the reveal is audited. The console also shows the confirmed case brief
@@ -814,9 +888,10 @@ For every paid booking:
    external Razorpay evidence is checked and the reviewed `REFUNDED` action is
    recorded.
 
-The browser password is shared, so restrict distribution and retain operator
-IDs for audit attribution. Rotate `SECRET_KEY` to invalidate all active browser
-sessions after suspected exposure.
+The verified browser identity is the authoritative audit actor; a supplied
+`X-Operator-ID` cannot override it. Rotate `SECRET_KEY` to invalidate all active
+browser sessions after suspected exposure, without rotating the separate MFA
+encryption key.
 
 ## Operator API procedure
 
@@ -824,8 +899,9 @@ Machine API calls require the shared bearer or `X-Admin-Token`. Every `PATCH`,
 `POST`, or `DELETE` additionally requires a stable, non-secret
 `X-Operator-ID`; successful mutations append `admin_audit_events` with
 before/after state and request ID. Never put the admin token in a URL. Place all
-admin routes behind TLS, platform access control, MFA, and restricted operator
-network/access policy because application credentials remain shared.
+admin routes behind TLS and restricted platform/network access. Application
+MFA protects named browser users; the machine token remains a shared automation
+credential, so restrict, rotate, and monitor it separately.
 
 Core queues and actions:
 
@@ -1186,7 +1262,7 @@ Before enabling the switch:
    blocks preview/payment/final release.
 3. Set the approved price and the matching Razorpay test keys/webhook secret.
 4. Apply Alembic head and require `/health/ready` to report `ok=true`,
-   PostgreSQL and schema `20260903_01`.
+   PostgreSQL and schema `20260908_01`.
 
 The supported first product is a self-service English 11-month Maharashtra
 residential leave-and-licence draft for one adult individual licensor and one
@@ -1211,7 +1287,9 @@ captured; enabling staging does not authorize production publication.
   manual-handover operations, `20260819_01` adds the initial Document Studio
   ledger, and `20260827_01` adds the controlled RC9 payment, approval,
   artifact and access-audit model. Revision `20260903_01` adds global daily
-  capacity reservations. Do not rewrite applied revision files.
+  capacity reservations; `20260908_01` adds named administrator identity,
+  MFA recovery, lockout, and session-invalidation state. Do not rewrite
+  applied revision files.
 - Per-user/global limits cover early menu, support, media, and paid-flow
   branches and deduplicate notices, but their state and some other abuse
   controls remain process-local.
@@ -1223,9 +1301,11 @@ captured; enabling staging does not authorize production publication.
   still reject a free-form message outside the customer-service window; the
   operator can direct the customer to **My documents** or use approved manual
   contact.
-- Admin mutations are audited and the browser console adds signed sessions,
-  CSRF protection and login throttling, but access still uses a shared password
-  rather than individually verified application credentials/RBAC/MFA.
+- Named browser access has individual passwords, TOTP/recovery MFA, persistent
+  lockout, role checks, session invalidation, and verified audit identity. The
+  separate automation token and privileged Render shell remain high-impact
+  shared/platform controls and require least privilege, MFA, rotation, and
+  provider audit monitoring.
 - The app tracks fulfilment, verified advocate records, consented briefs,
   audited contact reveal, and manual handover events, but independent advocate
   eligibility/conflict review, consultation quality, and refund execution

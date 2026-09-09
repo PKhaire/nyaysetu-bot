@@ -126,7 +126,7 @@ critical:
 | Razorpay | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `RAZORPAY_MODE=live`; optional `RAZORPAY_WEBHOOK_SECRET_PREVIOUS` during rotation |
 | Internal email | V1: `EMAIL_NOTIFICATIONS_ENABLED=false`; SES settings are optional and required only for a separately tested email-enabled release |
 | User trust | reviewed `SUPPORT_*`, `PRIVACY_*`, policy URLs, and consent/terms versions |
-| Operations | long random `ADMIN_TOKEN`, `ADMIN_PASSWORD`, `SECRET_KEY`, and `AI_SAFETY_IDENTIFIER_SECRET` values |
+| Operations | long random `ADMIN_TOKEN`, `SECRET_KEY`, and `AI_SAFETY_IDENTIFIER_SECRET`; a durable generated `ADMIN_MFA_ENCRYPTION_KEY`; `ADMIN_PASSWORD` only for the one-time non-production bootstrap |
 
 AI is optional. The Render Blueprint defaults to `AI_PROVIDER=local`. To enable
 a third-party provider, set `AI_PROVIDER=openai`, `claude`, or `auto`, provide
@@ -204,13 +204,20 @@ necessary.
 
 Machine clients use `Authorization: Bearer <ADMIN_TOKEN>` or
 `X-Admin-Token: <ADMIN_TOKEN>` and send `X-Operator-ID` on mutations. Human
-operators sign in at `/admin/login` with a stable operator ID and the separately
-stored `ADMIN_PASSWORD`. Browser sessions expire after two hours, carry secure
-HttpOnly/SameSite cookies, require CSRF tokens on mutations, and every mutation
-writes an audit event. `SECRET_KEY` signs those sessions; rotating it logs out
-all browser operators. Do not put admin credentials in query strings. This
-shared-password console is not a substitute for platform access control, MFA,
-or future individual application RBAC.
+operators sign in at `/admin/login` with an individually enrolled operator ID,
+password, and six-digit authenticator code (or a one-use recovery code). Roles
+are `ADMIN`, `OPERATOR`, and read-only `VIEWER`; authenticated browser audit
+events always use the verified session identity and cannot be overridden by a
+request header. Browser sessions expire after two hours, carry secure
+HttpOnly/SameSite cookies, require CSRF tokens on mutations, and are invalidated
+when an account is disabled or its password/MFA is reset. `SECRET_KEY` signs
+those sessions; rotating it logs out all browser operators. Do not put admin
+credentials, authenticator seeds, or recovery codes in query strings or logs.
+
+Before the first named account exists, staging only permits the existing shared
+`ADMIN_PASSWORD` as a bootstrap login. Creating any named identity disables
+that fallback, and production never permits it. Production readiness requires
+at least two active named identities including one `ADMIN`.
 
 ## Production deployment
 
@@ -293,7 +300,7 @@ untested working tree.
 ## Fresh database release gate
 
 The repository includes production baseline `20260729_01` and current head
-`20260903_01`. Render runs
+`20260908_01`. Render runs
 `python -m alembic -c alembic.ini upgrade head` before the web release, and
 staging and production readiness require the current head. Automatic
 `create_all()` is disabled by default in both environments and remains only a
@@ -336,8 +343,9 @@ payment references, and potentially sensitive legal facts. Before public use:
   message claims; legal hold, data-subject deletion, and backup retention
   remain external governance work.
 - Restrict database, Render, Meta, Razorpay, AWS/S3, optional SES, and admin
-  access by role;
-  enable MFA, audit access, rotate secrets, and test restore procedures.
+  access by role; enroll at least two named application identities with MFA,
+  protect the platform shell with separate MFA, audit access, rotate secrets,
+  and test restore procedures.
 - Treat PII scrubbing and model guardrails as defence-in-depth, not a guarantee.
   Do not send identity documents, evidence, privileged communications, or
   unnecessary case facts to an AI provider.

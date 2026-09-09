@@ -14,6 +14,7 @@ from threading import Lock
 from flask import (
     Blueprint,
     current_app,
+    g,
     jsonify,
     redirect,
     render_template,
@@ -24,10 +25,16 @@ from flask import (
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 
-from config import ADMIN_PASSWORD, ADMIN_TOKEN
+from config import (
+    ADMIN_MFA_ENCRYPTION_KEY,
+    ADMIN_PASSWORD,
+    ADMIN_TOKEN,
+    ENV,
+)
 from db import SessionLocal
 from models import (
     AdminAuditEvent,
+    AdminOperator,
     Advocate,
     AnalyticsEvent,
     Booking,
@@ -60,6 +67,7 @@ from services.document_operations_service import (
     reconcile_document_order,
     request_refund_review,
 )
+from services.admin_identity_service import authenticate_operator
 from services.document_release_service import (
     approval_for_product,
     record_approval,
@@ -70,10 +78,22 @@ from services.document_release_service import (
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 _OPERATOR_PATTERN = re.compile(r"^[A-Za-z0-9._@+-]{2,120}$")
+_NAMED_ROLES = frozenset({"ADMIN", "OPERATOR", "VIEWER"})
 _LOGIN_ATTEMPT_LIMIT = 5
 _LOGIN_ATTEMPT_WINDOW_SECONDS = 15 * 60
 _login_attempts: dict[str, deque[float]] = defaultdict(deque)
 _login_attempts_guard = Lock()
+_ADMIN_ONLY_MUTATIONS = frozenset(
+    {
+        "admin.create_advocate",
+        "admin.create_blackout",
+        "admin.create_capacity_override",
+        "admin.deactivate_blackout",
+        "admin.deactivate_capacity_override",
+        "admin.retry_outbox_job",
+        "admin.revoke_document_template_release",
+    }
+)
 
 
 def _provided_token() -> str:
@@ -93,8 +113,14 @@ def _token_authorized() -> bool:
 
 
 def _session_authorized() -> bool:
+    if session.get("admin_authenticated") is not True:
+        return False
+    if session.get("admin_auth_mode") == "named_mfa":
+        return _session_operator() is not None
     return bool(
-        session.get("admin_authenticated") is True
+        session.get("admin_auth_mode") == "legacy_bootstrap"
+        and ENV != "production"
+        and _named_operator_count() == 0
         and _OPERATOR_PATTERN.fullmatch(
             str(session.get("operator_id") or "")
         )
@@ -106,17 +132,82 @@ def _authorized() -> bool:
 
 
 def _operator_id() -> str:
+    if (
+        not _token_authorized()
+        and session.get("admin_auth_mode") == "named_mfa"
+    ):
+        identity = _session_operator()
+        value = str((identity or {}).get("operator_id") or "").strip()
+        return value if _OPERATOR_PATTERN.fullmatch(value) else ""
+
     value = request.headers.get("X-Operator-ID", "").strip()
     if not value and _session_authorized():
         value = str(session.get("operator_id") or "").strip()
     return value if _OPERATOR_PATTERN.fullmatch(value) else ""
 
 
+def _named_operator_count() -> int:
+    cached = getattr(g, "admin_named_operator_count", None)
+    if cached is not None:
+        return int(cached)
+    db = SessionLocal()
+    try:
+        count = int(db.query(func.count(AdminOperator.id)).scalar() or 0)
+    finally:
+        db.close()
+    g.admin_named_operator_count = count
+    return count
+
+
+def _session_operator() -> dict[str, object] | None:
+    cached = getattr(g, "admin_session_identity", None)
+    if cached is not None:
+        return cached or None
+    if (
+        session.get("admin_auth_mode") != "named_mfa"
+        or session.get("admin_mfa_authenticated") is not True
+    ):
+        g.admin_session_identity = {}
+        return None
+    try:
+        operator_db_id = int(session.get("admin_operator_db_id"))
+    except (TypeError, ValueError):
+        g.admin_session_identity = {}
+        return None
+    db = SessionLocal()
+    try:
+        operator = db.get(AdminOperator, operator_db_id)
+        if (
+            operator is None
+            or not operator.active
+            or not operator.mfa_enrolled_at
+            or operator.role not in _NAMED_ROLES
+            or operator.operator_id != session.get("operator_id")
+            or int(operator.session_version or 0)
+            != session.get("admin_session_version")
+        ):
+            identity = {}
+        else:
+            identity = {
+                "operator_db_id": operator.id,
+                "operator_id": operator.operator_id,
+                "display_name": operator.display_name,
+                "role": operator.role,
+            }
+    finally:
+        db.close()
+    g.admin_session_identity = identity
+    return identity or None
+
+
 def _browser_admin_available() -> bool:
+    if not ADMIN_TOKEN or not current_app.secret_key:
+        return False
+    if _named_operator_count() > 0:
+        return bool(ADMIN_MFA_ENCRYPTION_KEY)
     return bool(
-        ADMIN_TOKEN
+        ENV != "production"
         and ADMIN_PASSWORD
-        and current_app.secret_key
         and len(ADMIN_PASSWORD) >= 16
     )
 
@@ -246,6 +337,17 @@ def protect_admin_routes():
             )
             return jsonify({"error": error}), 400
         if _session_authorized() and not _token_authorized():
+            identity = _session_operator() or {}
+            role = str(identity.get("role") or "")
+            admin_only = bool(
+                request.endpoint in _ADMIN_ONLY_MUTATIONS
+                or (
+                    request.endpoint == "admin.document_template_release"
+                    and request.method == "POST"
+                )
+            )
+            if role == "VIEWER" or (admin_only and role != "ADMIN"):
+                return jsonify({"error": "insufficient_role"}), 403
             if not _csrf_authorized():
                 return jsonify({"error": "invalid_csrf_token"}), 403
     return None
@@ -274,6 +376,7 @@ def login():
 
     error = ""
     csrf_token = _csrf_token()
+    named_authentication = _named_operator_count() > 0
     if request.method == "POST":
         client_key = _login_client_key()
         if _login_rate_limited(client_key):
@@ -282,34 +385,98 @@ def login():
                     "admin_login.html",
                     csrf_token=csrf_token,
                     error="Too many attempts. Please wait 15 minutes.",
+                    mfa_required=named_authentication,
                 ),
                 429,
             )
 
         operator_id = request.form.get("operator_id", "").strip()
         password = request.form.get("password", "")
-        credentials_valid = bool(
-            _OPERATOR_PATTERN.fullmatch(operator_id)
-            and password
-            and hmac.compare_digest(password, ADMIN_PASSWORD)
-            and _csrf_authorized()
-        )
+        authentication = None
+        credentials_valid = False
+        if named_authentication and _csrf_authorized():
+            db = SessionLocal()
+            try:
+                authentication = authenticate_operator(
+                    db,
+                    operator_id=operator_id,
+                    password=password,
+                    second_factor=request.form.get(
+                        "verification_code",
+                        "",
+                    ),
+                    encryption_key=ADMIN_MFA_ENCRYPTION_KEY,
+                )
+                if authentication.authenticated:
+                    db.add(
+                        AdminAuditEvent(
+                            operator_id=authentication.operator_id,
+                            action="admin.login",
+                            target_type="admin_operator",
+                            target_id=str(authentication.operator_db_id),
+                            before_json="{}",
+                            after_json=json.dumps(
+                                {"method": authentication.method},
+                                sort_keys=True,
+                            ),
+                            request_id=request.headers.get(
+                                "X-Request-ID",
+                                "",
+                            )[:128]
+                            or None,
+                        )
+                    )
+                db.commit()
+                credentials_valid = authentication.authenticated
+            except Exception:
+                db.rollback()
+                current_app.logger.exception(
+                    "Named administrator authentication failed safely"
+                )
+            finally:
+                db.close()
+        elif not named_authentication:
+            credentials_valid = bool(
+                ENV != "production"
+                and _OPERATOR_PATTERN.fullmatch(operator_id)
+                and password
+                and hmac.compare_digest(password, ADMIN_PASSWORD)
+                and _csrf_authorized()
+            )
         if credentials_valid:
             _clear_failed_logins(client_key)
             session.clear()
             session.permanent = True
             session["admin_authenticated"] = True
-            session["operator_id"] = operator_id
+            if authentication is not None:
+                session["admin_auth_mode"] = "named_mfa"
+                session["admin_operator_db_id"] = (
+                    authentication.operator_db_id
+                )
+                session["operator_id"] = authentication.operator_id
+                session["admin_role"] = authentication.role
+                session["admin_session_version"] = (
+                    authentication.session_version
+                )
+                session["admin_mfa_authenticated"] = True
+            else:
+                session["admin_auth_mode"] = "legacy_bootstrap"
+                session["operator_id"] = operator_id
             session["admin_csrf_token"] = secrets.token_urlsafe(32)
             return redirect(url_for("admin.appointments"))
 
         _record_failed_login(client_key)
-        error = "Invalid operator ID or password."
+        error = (
+            "Invalid operator ID, password, or verification code."
+            if named_authentication
+            else "Invalid operator ID or password."
+        )
 
     return render_template(
         "admin_login.html",
         csrf_token=csrf_token,
         error=error,
+        mfa_required=named_authentication,
     )
 
 

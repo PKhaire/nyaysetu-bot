@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import atexit
+import base64
 import os
 import json
 import logging
@@ -21,6 +22,7 @@ from flask import Flask, g, jsonify, request
 from config import (
     AI_CONSENT_VERSION,
     ALLOW_INSECURE_WEBHOOKS,
+    ADMIN_MFA_ENCRYPTION_KEY,
     ADMIN_TOKEN,
     ADMIN_PASSWORD,
     AUTO_CREATE_SCHEMA,
@@ -126,6 +128,7 @@ from services.whatsapp_service import (
     send_payment_receipt_pdf as _wa_send_payment_receipt_pdf,
 )
 from services.receipt_service import generate_pdf_receipt
+from services.admin_identity_service import admin_identity_readiness
 from services.ai_router import ai_reply_router
 from services.booking_service import (
     IST,
@@ -2066,6 +2069,18 @@ def _valid_https_url(value: str) -> bool:
     )
 
 
+def _valid_fernet_key(value: str) -> bool:
+    try:
+        decoded = base64.b64decode(
+            str(value or "").strip().encode("ascii"),
+            altchars=b"-_",
+            validate=True,
+        )
+    except (ValueError, TypeError, UnicodeEncodeError):
+        return False
+    return len(decoded) == 32
+
+
 def _valid_legal_review_date(value: str) -> bool:
     normalized = str(value or "").strip()
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", normalized):
@@ -2085,7 +2100,7 @@ def _deployment_configuration_is_valid(
 ) -> bool:
     required_configuration = (
         ADMIN_TOKEN,
-        ADMIN_PASSWORD,
+        ADMIN_MFA_ENCRYPTION_KEY,
         SECRET_KEY,
         WHATSAPP_APP_SECRET,
         WHATSAPP_PHONE_ID,
@@ -2173,6 +2188,10 @@ def _deployment_configuration_is_valid(
             )
             or reviewed_version_is_current
         )
+    bootstrap_password_ok = bool(
+        ENV == "production"
+        or (ADMIN_PASSWORD and len(ADMIN_PASSWORD) >= 16)
+    )
     return bool(
         all(required_configuration)
         and RAZORPAY_MODE == payment_mode
@@ -2183,7 +2202,8 @@ def _deployment_configuration_is_valid(
         and not AUTO_CREATE_SCHEMA
         and not ALLOW_INSECURE_WEBHOOKS
         and len(ADMIN_TOKEN) >= 32
-        and len(ADMIN_PASSWORD) >= 16
+        and bootstrap_password_ok
+        and _valid_fernet_key(ADMIN_MFA_ENCRYPTION_KEY)
         and len(SECRET_KEY) >= 32
         and len(AI_SAFETY_IDENTIFIER_SECRET) >= 32
         and len(WHATSAPP_APP_SECRET) >= 32
@@ -2289,6 +2309,26 @@ def health_ready():
         configuration_ok = _staging_configuration_is_valid()
     else:
         configuration_ok = True
+    admin_access = None
+    if database.get("ok") and schema_ok:
+        admin_db = SessionLocal()
+        try:
+            admin_access = admin_identity_readiness(admin_db)
+        except Exception:
+            logger.exception("Administrator identity readiness check failed")
+            admin_access = {
+                "mode": "unavailable",
+                "active_named_operators": 0,
+                "active_admins": 0,
+                "production_compatible": False,
+            }
+        finally:
+            admin_db.close()
+        if ENV == "production":
+            configuration_ok = bool(
+                configuration_ok
+                and admin_access["production_compatible"]
+            )
     document_release = None
     if (
         DOCUMENT_STUDIO_ENABLED
@@ -2332,6 +2372,7 @@ def health_ready():
                     "expected": EXPECTED_SCHEMA_REVISION,
                 },
                 "configuration": "ok" if configuration_ok else "incomplete",
+                "admin_access": admin_access,
                 "email_notifications": {
                     "enabled": EMAIL_NOTIFICATIONS_ENABLED,
                     "mode": (
