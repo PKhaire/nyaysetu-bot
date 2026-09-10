@@ -76,6 +76,8 @@ services:
         value: "10"
       - key: DOCUMENT_STUDIO_PRICE_INR
         value: "0"
+      - key: DOCUMENT_STUDIO_PRODUCT_PRICES_INR
+        value: ""
       - key: DOCUMENT_STUDIO_FINAL_TTL_DAYS
         value: "30"
       - key: DOCUMENT_STUDIO_DOWNLOAD_TTL_SECONDS
@@ -394,6 +396,11 @@ services:
           type: web
           name: nyaysetu-bot-backend
           envVarKey: DOCUMENT_STUDIO_PRICE_INR
+      - key: DOCUMENT_STUDIO_PRODUCT_PRICES_INR
+        fromService:
+          type: web
+          name: nyaysetu-bot-backend
+          envVarKey: DOCUMENT_STUDIO_PRODUCT_PRICES_INR
       - key: DOCUMENT_STUDIO_FINAL_TTL_DAYS
         fromService:
           type: web

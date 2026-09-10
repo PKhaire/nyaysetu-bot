@@ -1,4 +1,4 @@
-"""Private object-storage adapter for immutable Document Studio artifacts."""
+"""Private object-storage adapter for immutable Draft Studio artifacts."""
 
 from __future__ import annotations
 

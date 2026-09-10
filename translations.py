@@ -310,7 +310,9 @@ TRANSLATIONS = {
         "booking_scope": (
             "A NyaySetu consultation costs *₹{amount}*. The booking connects you with "
             "the legal-support team for the selected date and time; outcomes are never "
-            "guaranteed. We will collect only the details needed to arrange it.\n\n"
+            "guaranteed. Booking normally takes about 3 minutes. Before payment, we "
+            "collect only a short issue summary and urgency details. Detailed advocate "
+            "preparation is optional after payment.\n\n"
             "Would you like to continue?"
         ),
         "continue_booking": "Continue",
@@ -676,7 +678,9 @@ TRANSLATIONS = {
         "booking_scope": (
             "NyaySetu consultation ki fee *₹{amount}* hai. Booking selected date/time "
             "par legal-support team se connect karti hai; outcome ki guarantee kabhi "
-            "nahi hoti. Hum sirf arrangement ke liye zaroori details lenge.\n\n"
+            "nahi hoti. Booking mein lagbhag 3 minutes lagte hain. Payment se pehle "
+            "sirf short issue summary aur urgency lenge. Detailed advocate preparation "
+            "payment ke baad optional hai.\n\n"
             "Kya aap continue karna chahenge?"
         ),
         "continue_booking": "Continue",
@@ -1040,7 +1044,9 @@ TRANSLATIONS = {
         "booking_scope": (
             "न्यायसेतू सल्लामसलतीचे शुल्क *₹{amount}* आहे. बुकिंग निवडलेल्या तारीख/"
             "वेळी कायदेशीर-सपोर्ट टीमशी जोडते; निकालाची हमी कधीही दिली जात नाही. "
-            "व्यवस्थेसाठी आवश्यक तेवढीच माहिती घेतली जाईल.\n\nपुढे जायचे आहे का?"
+            "बुकिंगला साधारण 3 मिनिटे लागतात. पेमेंटपूर्वी फक्त थोडक्यात समस्या आणि "
+            "तातडीची माहिती घेतली जाईल. सविस्तर वकील-तयारी पेमेंटनंतर ऐच्छिक आहे."
+            "\n\nपुढे जायचे आहे का?"
         ),
         "continue_booking": "पुढे चला",
         "back_to_home": "मुख्य मेनू",
@@ -1141,7 +1147,7 @@ TRANSLATIONS["mr"].update(
     }
 )
 
-# Document Studio product copy. Paid release remains fail-closed behind the
+# Draft Studio product copy. Paid release remains fail-closed behind the
 # authenticated template-package gate; visibility is global, never per-user.
 _DOCUMENT_STUDIO_EN = {
     "home_service_header": "NyaySetu Services",
@@ -1149,20 +1155,22 @@ _DOCUMENT_STUDIO_EN = {
     "home_ai_desc": "General legal information",
     "home_book_desc": "Paid advocate consultation",
     "home_more_desc": "Status, guides, support and privacy",
-    "document_studio": "Document Studio",
+    "document_studio": "Draft Studio",
     "document_studio_desc": "Prepare a guided self-service draft",
     "document_studio_unavailable": (
-        "Document Studio is not available in this environment. No document or "
+        "Draft Studio is not available in this environment. No document or "
         "payment has been created."
     ),
     "document_studio_capacity_reached": (
-        "Document Studio has reached today's drafting capacity. Your place was "
+        "Draft Studio has reached today's drafting capacity. Your place was "
         "not reserved and no payment was created. Please try again tomorrow."
     ),
-    "document_landing_header": "Document Studio",
+    "document_landing_header": "Draft Studio",
     "document_landing_body": (
         "Answer a guided questionnaire, review your facts and prepare a "
-        "self-service draft. NyaySetu does not verify identity, title or facts."
+        "self-service draft. The shortest path takes about 5-7 minutes and you "
+        "can save and continue later. NyaySetu does not verify identity, title "
+        "or facts."
     ),
     "document_landing_section": "Document actions",
     "document_create_test": "Create a Document",
@@ -1174,29 +1182,55 @@ _DOCUMENT_STUDIO_EN = {
     "document_help": "How It Works",
     "document_help_desc": "Scope, exclusions, payment and delivery",
     "document_product_header": "Choose a Document",
-    "document_product_body": "Select the self-service draft you need.",
+    "document_product_body": (
+        "Select the draft you need, or reply with its displayed number."
+    ),
     "document_product_section": "Available drafts",
     "document_uat_product": "Residential Leave & Licence",
     "document_uat_product_desc": "Maharashtra, 11-month, English draft",
+    "document_mh_ll_product_desc": (
+        "Self-service | Maharashtra | English | INR {price_inr} | instant"
+    ),
+    "document_products_previous": "Previous drafts",
+    "document_products_previous_desc": "Show the previous catalogue page",
+    "document_products_next": "More drafts",
+    "document_products_next_desc": "Show the next catalogue page",
     "document_uat_overview": (
         "For one adult licensor and one adult licensee, one completed "
         "residential premises in Maharashtra, and an 11-month term. "
         "Unsupported matters are routed to an advocate."
     ),
+    "document_product_start": "Check eligibility",
     "document_start_uat": "Start Questionnaire",
     "document_back_home": "Back to Home",
-    # Legacy key names are retained for compatible in-progress records. The
-    # customer-facing copy reflects the current controlled workflow.
-    "document_uat_party_a_prompt": "Enter Party A's full name (2-120 characters).",
-    "document_uat_party_b_prompt": "Enter Party B's full name (2-120 characters).",
-    "document_uat_city_prompt": "Enter the city or town of the premises.",
-    "document_uat_term_prompt": "Enter the term requested in months.",
     "document_uat_answer_invalid": "That answer is invalid. Please follow the stated format.",
-    "document_uat_review": (
-        "*Document Studio fact review*\n\nReference: {reference}\nParty A: {party_a}\n"
-        "Party B: {party_b}\nCity: {city}\nTerm: {months} months\n\n"
-        "Confirm only if every fact is accurate. Preview and payment remain blocked "
-        "unless all release and private-storage checks pass."
+    "document_section_progress": "Section {number} of {total} · {section}",
+    "document_save_hint": "Choose Save & Exit, or type SAVE, to continue later.",
+    "document_save_exit": "Save & Exit",
+    "document_save_exit_desc": "Keep your answers and return to the home menu",
+    "document_answer_options": "Choose an answer",
+    "document_progress_saved": (
+        "Your draft is saved. Use Draft Studio > Continue Draft whenever "
+        "you are ready."
+    ),
+    "document_section_saved": (
+        "✓ {section} saved. Next section: {next_section}."
+    ),
+    "document_all_sections_saved": (
+        "✓ All five sections are saved. Please review the complete draft facts."
+    ),
+    "document_edit_section_header": "Edit one section",
+    "document_edit_section_body": (
+        "Choose only the section you want to correct. Answers in the other "
+        "sections will remain saved."
+    ),
+    "document_edit_section_title": "Draft sections",
+    "document_edit_section_invalid": "Please choose a section from the list.",
+    "document_editing_section": "Editing: {section}. Other sections remain saved.",
+    "document_review_confirm_prompt": (
+        "Confirm only if every fact shown above is accurate. Preview and "
+        "payment remain blocked unless all release and private-storage "
+        "checks pass. Type SAVE to review it later."
     ),
     "document_uat_confirm": "Confirm Facts",
     "document_uat_edit": "Edit Answers",
@@ -1205,8 +1239,8 @@ _DOCUMENT_STUDIO_EN = {
         "Answers confirmed. Reference: {reference}. Follow the next message for "
         "preview or release status."
     ),
-    "document_uat_cancelled": "Document Studio draft cancelled.",
-    "document_uat_no_draft": "No unfinished Document Studio draft was found.",
+    "document_uat_cancelled": "Draft Studio draft cancelled.",
+    "document_uat_no_draft": "No unfinished Draft Studio draft was found.",
     "document_uat_help_text": (
         "The first product is an English self-service Maharashtra residential "
         "Leave & Licence draft for the supported facts shown in the questionnaire. "
@@ -1225,7 +1259,7 @@ TRANSLATIONS["hi"].update(
         "home_more_desc": "Status, guides, support aur privacy",
         "document_studio_desc": "Guided self-service draft taiyar karein",
         "document_studio_capacity_reached": (
-            "Document Studio ki aaj ki drafting capacity poori ho gayi hai. "
+            "Draft Studio ki aaj ki drafting capacity poori ho gayi hai. "
             "Aapka place reserve nahi hua aur koi payment nahi bana. Kripya "
             "kal phir try karein."
         ),
@@ -1234,7 +1268,6 @@ TRANSLATIONS["hi"].update(
         "document_my_tests": "Mere Documents",
         "document_start_uat": "Questionnaire Shuru Karein",
         "document_back_home": "Home Par Jayein",
-        "document_uat_term_prompt": "Maanga gaya term months mein enter karein.",
         "document_uat_confirm": "Facts Confirm Karein",
         "document_uat_edit": "Answers Edit Karein",
         "document_uat_cancel": "Draft Cancel Karein",
@@ -1248,7 +1281,7 @@ TRANSLATIONS["mr"].update(
         "home_more_desc": "Status, guides, support ani privacy",
         "document_studio_desc": "Guided self-service draft tayar kara",
         "document_studio_capacity_reached": (
-            "Document Studio chi aajchi drafting capacity purna zali aahe. "
+            "Draft Studio chi aajchi drafting capacity purna zali aahe. "
             "Tumchi jaga reserve zali nahi ani payment tayar zalele nahi. "
             "Kripaya udya punha prayatna kara."
         ),
@@ -1257,7 +1290,6 @@ TRANSLATIONS["mr"].update(
         "document_my_tests": "Maze Documents",
         "document_start_uat": "Questionnaire Suru Kara",
         "document_back_home": "Home Var Ja",
-        "document_uat_term_prompt": "Magitlela kalavadhi mahinyanmadhye taka.",
         "document_uat_confirm": "Facts Confirm Kara",
         "document_uat_edit": "Answers Edit Kara",
         "document_uat_cancel": "Draft Cancel Kara",
@@ -1274,6 +1306,11 @@ TRANSLATIONS["en"].update(
             "PAN, passwords, bank details or document images."
         ),
         "brief_summary_retry": "Please enter a 20-700 character issue summary.",
+        "brief_minimum_review": (
+            "BOOKING BRIEF REVIEW\n\nIssue: {summary}\nUrgency: {urgency}\n"
+            "Known deadline: {deadline}\nSafety note: {safety}\n\n"
+            "The detailed advocate-preparation brief is optional after payment."
+        ),
         "brief_stage_header": "Current legal stage",
         "brief_stage_body": "Select the stage that best matches your matter.",
         "brief_stage_section": "Stage",
@@ -1293,10 +1330,22 @@ TRANSLATIONS["en"].update(
             "next hearing. Type None if there is no known date."
         ),
         "brief_dates_retry": "Please enter important dates or type None.",
+        "brief_deadline_prompt": (
+            "Enter the exact known deadline or hearing/notice date. Type Unknown "
+            "if you do not know it."
+        ),
+        "brief_preparation_dates_prompt": (
+            "Give a short chronology with the important dates. Type None if no "
+            "date is known."
+        ),
         "brief_outcome_prompt": (
             "What help or outcome do you want from the advocate? Use 10-500 characters."
         ),
         "brief_outcome_retry": "Please describe the help you want in 10-500 characters.",
+        "brief_preparation_outcome_prompt": (
+            "What result or help do you want? You may also include up to three "
+            "questions for the advocate. Use 10-500 characters."
+        ),
         "brief_urgency_prompt": "How urgent is this matter?",
         "brief_urgency_standard": "Standard",
         "brief_urgency_time_sensitive": "Time-sensitive",
@@ -1335,6 +1384,28 @@ TRANSLATIONS["en"].update(
         "brief_cancel": "Cancel",
         "brief_cancelled": "The draft brief was cancelled and will not be assigned.",
         "brief_confirmed": "Brief confirmed. Now select an appointment date.",
+        "prepare_for_advocate": "Prepare for advocate",
+        "brief_preparation_review_prompt": (
+            "Confirm this advocate-preparation brief, edit it, or save it "
+            "incomplete. Your paid appointment is not affected."
+        ),
+        "brief_preparation_confirm": "Confirm preparation",
+        "brief_preparation_skip": "Save incomplete",
+        "brief_preparation_saved": (
+            "Your answers are saved. The preparation brief remains incomplete, "
+            "but your paid appointment is confirmed."
+        ),
+        "brief_preparation_complete": (
+            "Your advocate-preparation brief is complete and attached to your "
+            "paid appointment."
+        ),
+        "brief_preparation_unavailable": (
+            "We could not find a paid appointment with an attached brief. "
+            "Your payment or appointment status has not been changed."
+        ),
+        "brief_preparation_already_complete": (
+            "Your advocate-preparation brief is already complete."
+        ),
     }
 )
 TRANSLATIONS["hi"].update(
@@ -1345,6 +1416,11 @@ TRANSLATIONS["hi"].update(
             "image na bhejein."
         ),
         "brief_summary_retry": "Kripya 20-700 characters mein issue summary likhein.",
+        "brief_minimum_review": (
+            "BOOKING BRIEF REVIEW\n\nIssue: {summary}\nUrgency: {urgency}\n"
+            "Known deadline: {deadline}\nSafety note: {safety}\n\n"
+            "Detailed advocate-preparation brief payment ke baad optional hai."
+        ),
         "brief_stage_header": "Matter ka current stage",
         "brief_stage_body": "Apne matter se sabse milta stage select karein.",
         "brief_stage_section": "Stage",
@@ -1364,10 +1440,22 @@ TRANSLATIONS["hi"].update(
             "Koi known date nahi ho to None likhein."
         ),
         "brief_dates_retry": "Important dates likhein ya None type karein.",
+        "brief_deadline_prompt": (
+            "Exact known deadline ya hearing/notice date likhein. Pata nahi ho "
+            "to Unknown type karein."
+        ),
+        "brief_preparation_dates_prompt": (
+            "Important dates ke saath short chronology likhein. Koi date known "
+            "nahi ho to None type karein."
+        ),
         "brief_outcome_prompt": (
             "Advocate se kya help ya outcome chahiye? 10-500 characters mein likhein."
         ),
         "brief_outcome_retry": "10-500 characters mein required help batayein.",
+        "brief_preparation_outcome_prompt": (
+            "Aapko kya result ya help chahiye? Advocate ke liye teen tak "
+            "questions bhi likh sakte hain. 10-500 characters use karein."
+        ),
         "brief_urgency_prompt": "Yeh matter kitna urgent hai?",
         "brief_urgency_standard": "Standard",
         "brief_urgency_time_sensitive": "Time-sensitive",
@@ -1406,6 +1494,28 @@ TRANSLATIONS["hi"].update(
         "brief_cancel": "Cancel",
         "brief_cancelled": "Draft brief cancel hua aur assign nahi kiya jayega.",
         "brief_confirmed": "Brief confirm hua. Ab appointment date select karein.",
+        "prepare_for_advocate": "Advocate ke liye prep",
+        "brief_preparation_review_prompt": (
+            "Preparation brief confirm/edit karein ya incomplete save karein. "
+            "Aapki paid appointment par koi asar nahi padega."
+        ),
+        "brief_preparation_confirm": "Preparation confirm",
+        "brief_preparation_skip": "Incomplete save",
+        "brief_preparation_saved": (
+            "Answers save ho gaye. Preparation brief incomplete hai, lekin "
+            "paid appointment confirmed hai."
+        ),
+        "brief_preparation_complete": (
+            "Advocate-preparation brief complete hai aur paid appointment se "
+            "attach ho gaya hai."
+        ),
+        "brief_preparation_unavailable": (
+            "Attached brief wali paid appointment nahi mili. Payment ya "
+            "appointment status change nahi hua."
+        ),
+        "brief_preparation_already_complete": (
+            "Advocate-preparation brief pehle se complete hai."
+        ),
     }
 )
 TRANSLATIONS["mr"].update(
@@ -1416,6 +1526,11 @@ TRANSLATIONS["mr"].update(
             "pathvu naka."
         ),
         "brief_summary_retry": "Kripaya 20-700 aksharant issue summary liha.",
+        "brief_minimum_review": (
+            "BOOKING BRIEF REVIEW\n\nIssue: {summary}\nUrgency: {urgency}\n"
+            "Known deadline: {deadline}\nSafety note: {safety}\n\n"
+            "Detailed advocate-preparation brief payment nantar optional aahe."
+        ),
         "brief_stage_header": "Matter chi sadhyachi stage",
         "brief_stage_body": "Tumchya matter la julnari stage nivda.",
         "brief_stage_section": "Stage",
@@ -1435,10 +1550,22 @@ TRANSLATIONS["mr"].update(
             "Known date nasel tar None liha."
         ),
         "brief_dates_retry": "Mahatvachya dates liha kinva None type kara.",
+        "brief_deadline_prompt": (
+            "Exact known deadline kinva hearing/notice date liha. Mahit nasel "
+            "tar Unknown type kara."
+        ),
+        "brief_preparation_dates_prompt": (
+            "Mahatvachya dates sah short chronology liha. Date mahit nasel "
+            "tar None type kara."
+        ),
         "brief_outcome_prompt": (
             "Advocate kadun konti madat kinva outcome hava? 10-500 aksharant liha."
         ),
         "brief_outcome_retry": "Havi asleli madat 10-500 aksharant liha.",
+        "brief_preparation_outcome_prompt": (
+            "Tumhala konta result kinva madat havi? Advocate sathi teen paryant "
+            "prashna pan lihu shakta. 10-500 akshare vapra."
+        ),
         "brief_urgency_prompt": "Ha matter kiti urgent aahe?",
         "brief_urgency_standard": "Standard",
         "brief_urgency_time_sensitive": "Time-sensitive",
@@ -1477,5 +1604,27 @@ TRANSLATIONS["mr"].update(
         "brief_cancel": "Cancel",
         "brief_cancelled": "Draft brief cancel zala ani assign honar nahi.",
         "brief_confirmed": "Brief confirm zala. Ata appointment date nivda.",
+        "prepare_for_advocate": "Advocate sathi tayari",
+        "brief_preparation_review_prompt": (
+            "Preparation brief confirm/edit kara kinva incomplete save kara. "
+            "Paid appointment var parinam honar nahi."
+        ),
+        "brief_preparation_confirm": "Preparation confirm",
+        "brief_preparation_skip": "Incomplete save",
+        "brief_preparation_saved": (
+            "Answers save zale. Preparation brief incomplete aahe, pan paid "
+            "appointment confirmed aahe."
+        ),
+        "brief_preparation_complete": (
+            "Advocate-preparation brief complete aahe ani paid appointment la "
+            "attach zala aahe."
+        ),
+        "brief_preparation_unavailable": (
+            "Attached brief asleli paid appointment sapadli nahi. Payment kinva "
+            "appointment status badalalela nahi."
+        ),
+        "brief_preparation_already_complete": (
+            "Advocate-preparation brief adhich complete aahe."
+        ),
     }
 )

@@ -660,7 +660,16 @@ def send_payment_success_message(booking):
             slot=SLOT_MAP.get(booking.slot_code, "N/A"),
             amount=booking.amount,
         )
-        return send_text(booking.whatsapp_id, message)
+        return send_buttons(
+            booking.whatsapp_id,
+            message,
+            [
+                {
+                    "id": "prepare_for_advocate",
+                    "title": t(user, "prepare_for_advocate")[:20],
+                }
+            ],
+        )
     finally:
         db.close()
 

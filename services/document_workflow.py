@@ -1,4 +1,4 @@
-"""Document Studio orchestration behind a small stateful module interface."""
+"""Draft Studio orchestration behind a small stateful module interface."""
 
 from __future__ import annotations
 
@@ -21,7 +21,11 @@ from models import (
     utc_now,
 )
 from services.document_artifact_vault import S3ArtifactVault
-from services.document_catalogue import resolve_product
+from services.document_catalogue import (
+    DocumentProduct,
+    product_availability,
+    resolve_product,
+)
 from services.document_payment_service import create_document_payment_link
 from services.document_release_service import release_gate
 from services.document_renderer import render
@@ -32,6 +36,27 @@ class WorkflowResult:
     ok: bool
     reason_code: str
     value: object | None = None
+
+
+def _resolve_order_product(
+    order: DocumentOrder,
+    *,
+    require_current_package: bool = True,
+) -> tuple[DocumentProduct | None, str | None]:
+    """Resolve by immutable order identity and fail closed on package drift."""
+
+    try:
+        product = resolve_product(order.product_code)
+    except KeyError:
+        return None, "UNKNOWN_DOCUMENT_PRODUCT"
+    if require_current_package and not product.matches_package_snapshot(
+        template_version=order.template_version,
+        schema_hash=order.schema_hash,
+        template_hash=order.template_hash,
+        output_classification=order.output_classification,
+    ):
+        return None, "DOCUMENT_PACKAGE_SNAPSHOT_MISMATCH"
+    return product, None
 
 
 def _canonical(value: dict) -> str:
@@ -139,8 +164,17 @@ def build_preview(db, order: DocumentOrder, *, vault=None) -> WorkflowResult:
 
     if order.state not in {"CONFIRMED", "PREVIEW_READY"}:
         return WorkflowResult(False, "DOCUMENT_NOT_CONFIRMED")
-    product = resolve_product()
-    gate = release_gate(db, product)
+    product, product_error = _resolve_order_product(order)
+    if product_error:
+        order.release_status = "BLOCKED"
+        order.exception_code = product_error
+        return WorkflowResult(False, product_error)
+    availability = product_availability(product.code)
+    if not availability.ok:
+        order.release_status = "BLOCKED"
+        order.exception_code = availability.reason_code
+        return WorkflowResult(False, availability.reason_code)
+    gate = release_gate(db, product.code)
     if not gate.allowed:
         order.release_status = "BLOCKED"
         order.exception_code = gate.reason_code
@@ -183,14 +217,27 @@ def request_payment(
 ) -> WorkflowResult:
     """Create a payment entitlement only after release/storage evidence."""
 
-    gate = release_gate(db)
+    product, product_error = _resolve_order_product(order)
+    if product_error:
+        order.release_status = "BLOCKED"
+        order.exception_code = product_error
+        return WorkflowResult(False, product_error)
+    availability = product_availability(product.code)
+    if not availability.ok:
+        order.release_status = "BLOCKED"
+        order.exception_code = availability.reason_code
+        return WorkflowResult(False, availability.reason_code)
+    gate = release_gate(db, product.code)
     if not gate.allowed:
         return WorkflowResult(False, gate.reason_code)
     if _artifact(db, order, "PREVIEW_PDF") is None:
         return WorkflowResult(False, "PREVIEW_ARTIFACT_MISSING")
     try:
         url = create_document_payment_link(
-            order, user, client=payment_client
+            order,
+            user,
+            product=product,
+            client=payment_client,
         )
     except Exception:
         order.state = "NEEDS_ATTENTION"
@@ -222,6 +269,12 @@ def preview_link_for_user(
         "PAYMENT_PENDING",
     }:
         return WorkflowResult(False, "PREVIEW_NOT_AVAILABLE")
+    _, product_error = _resolve_order_product(
+        order,
+        require_current_package=False,
+    )
+    if product_error:
+        return WorkflowResult(False, product_error)
     artifact = _artifact(db, order, "PREVIEW_PDF")
     if artifact is None or artifact.expires_at <= utc_now():
         return WorkflowResult(False, "PREVIEW_NOT_AVAILABLE")
@@ -265,7 +318,12 @@ def _apply_verified_payment(
         order.state = "NEEDS_ATTENTION"
         order.exception_code = "PAYMENT_AMOUNT_MISMATCH"
         return WorkflowResult(False, "PAYMENT_AMOUNT_MISMATCH")
-    gate = release_gate(db)
+    product, product_error = _resolve_order_product(order)
+    if product_error:
+        order.state = "NEEDS_ATTENTION"
+        order.exception_code = product_error
+        return WorkflowResult(False, product_error)
+    gate = release_gate(db, product.code)
     if not gate.allowed:
         order.state = "NEEDS_ATTENTION"
         order.exception_code = gate.reason_code
@@ -274,8 +332,8 @@ def _apply_verified_payment(
     answers = json.loads(revision.answers_json)
     vault = vault or S3ArtifactVault()
     expires_at = utc_now() + timedelta(days=DOCUMENT_STUDIO_FINAL_TTL_DAYS)
-    pdf = render(resolve_product(), answers, "FINAL_PDF")
-    docx = render(resolve_product(), answers, "FINAL_DOCX")
+    pdf = render(product, answers, "FINAL_PDF")
+    docx = render(product, answers, "FINAL_DOCX")
     pdf_artifact = _store_rendered(
         db, order, vault, pdf, expires_at=expires_at
     )
@@ -380,6 +438,12 @@ def download_links_for_user(
             )
         )
         return WorkflowResult(False, "NOT_OWNER")
+    _, product_error = _resolve_order_product(
+        order,
+        require_current_package=False,
+    )
+    if product_error:
+        return WorkflowResult(False, product_error)
     if (
         order.state != "FINAL_AVAILABLE"
         or not order.final_available_until

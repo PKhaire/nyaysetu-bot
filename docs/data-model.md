@@ -169,11 +169,13 @@ still separate future governance work.
 Stores the structured facts a user elects to share for an advocate
 consultation: summary, matter stage, important dates, desired outcome, urgency,
 safety flag, document-availability checklist, opposing party, and optional
-preparation notes. It stores no document files. Brief status is `DRAFT`,
-`CONFIRMED`, or `CANCELLED`, with a consent version/time and an optional unique
-booking link.
+preparation notes. It stores no document files. `CONFIRMED` means the minimum
+pre-payment brief and sharing consent are complete; `PREPARED` means the paid
+customer also confirmed the optional advocate-preparation section. `DRAFT` and
+`CANCELLED` cover unfinished and cancelled pre-payment intake. Consent
+version/time and an optional unique booking link are stored.
 
-Only a confirmed brief can be attached to a booking. An unattached draft,
+Only a confirmed minimum brief can be attached to a booking. An unattached draft,
 confirmed, or cancelled brief older than `CASE_BRIEF_UNATTACHED_TTL_DAYS` is
 eligible for bounded maintenance deletion. A brief attached to a booking is
 preserved with the fulfilment record until a separately approved
@@ -434,13 +436,13 @@ rollback, and data-governance plan authorizes an existing SQLite data import:
 10. Test signed webhooks, operator queues, reminders, reconciliation,
     maintenance dry-run, and rollback before live cutover.
 
-## Document Studio controlled-release tables
+## Draft Studio controlled-release tables
 
 Revision `20260819_01` introduced the resumable ledger. Revision
 `20260827_01` extends it into the RC9 controlled drafting, payment, artifact
 and release model; `20260903_01` adds auditable global daily-capacity
 reservations. Revision `20260908_01` adds named administrator identity and MFA
-tables without changing Document Studio order semantics:
+tables without changing Draft Studio order semantics:
 
 - `document_orders` is the aggregate root. It records a random public
   reference; owner; product, questionnaire, template and renderer versions;

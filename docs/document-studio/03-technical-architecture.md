@@ -2,7 +2,7 @@
 
 ## Context and constraints
 
-Document Studio extends the existing single-worker Flask, PostgreSQL, Razorpay,
+Draft Studio extends the existing single-worker Flask, PostgreSQL, Razorpay,
 WhatsApp, outbox and admin architecture. V1 must remain compatible with the
 one-process correctness constraint and current Render Singapore deployment.
 It does not require a new web service or database at pilot volume.
@@ -19,7 +19,7 @@ fact must be documented rather than described as India-only storage.
 WhatsApp/user
     |
     v
-Flask Document Studio routes/state machine
+Flask Draft Studio routes/state machine
     |              |                 |
     |              |                 +--> Razorpay payment links/current evidence
     |              +--> deterministic template/render service

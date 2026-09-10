@@ -240,18 +240,21 @@ def test_payment_success_message_uses_amount_stored_on_booking(monkeypatch):
     monkeypatch.setattr(whatsapp, "SessionLocal", MagicMock(return_value=db))
 
     translate = MagicMock(return_value="Stored amount: INR 777")
-    send_text = MagicMock(return_value={"ok": True})
+    send_buttons = MagicMock(return_value={"ok": True})
     monkeypatch.setattr(whatsapp, "t", translate)
-    monkeypatch.setattr(whatsapp, "send_text", send_text)
+    monkeypatch.setattr(whatsapp, "send_buttons", send_buttons)
 
     result = whatsapp.send_payment_success_message(booking)
 
     assert result == {"ok": True}
-    translate.assert_called_once()
-    assert translate.call_args.args[1] == "payment_success"
-    assert translate.call_args.kwargs["amount"] == 777
-    send_text.assert_called_once_with(
+    assert translate.call_args_list[0].args[1] == "payment_success"
+    assert translate.call_args_list[0].kwargs["amount"] == 777
+    send_buttons.assert_called_once()
+    assert send_buttons.call_args.args[:2] == (
         booking.whatsapp_id,
         "Stored amount: INR 777",
+    )
+    assert send_buttons.call_args.args[2][0]["id"] == (
+        "prepare_for_advocate"
     )
     db.close.assert_called_once()

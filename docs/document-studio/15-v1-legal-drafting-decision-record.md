@@ -19,7 +19,7 @@ that an AI system is an advocate and it does not activate the product.
    licence, but never promises that a court or authority will accept a label,
    clause, remedy or outcome.
 4. Registration, execution, identity checks, stamp-duty determination and
-   government payment remain outside Document Studio. The instructions state
+   government payment remain outside Draft Studio. The instructions state
    the licensor's section 55 responsibility and require both parties to
    cooperate.
 5. No generated document carries an advocate name, signature, stamp,

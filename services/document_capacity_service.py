@@ -1,4 +1,4 @@
-"""Global, auditable daily capacity for Document Studio.
+"""Global, auditable daily capacity for Draft Studio.
 
 Capacity is shared by every eligible user. PostgreSQL advisory transaction
 locks serialize the count-and-reserve operation for one India business date,

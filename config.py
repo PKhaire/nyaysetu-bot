@@ -8,7 +8,9 @@ at startup instead of silently changing production behaviour.
 from __future__ import annotations
 
 import os
-from typing import Iterable
+import re
+from types import MappingProxyType
+from typing import Iterable, Mapping
 
 
 _TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
@@ -127,6 +129,45 @@ def env_int_set(
     return frozenset(parsed)
 
 
+_CONFIG_PRODUCT_CODE = re.compile(r"^[a-z0-9][a-z0-9_]{2,79}$")
+
+
+def env_inr_price_map(
+    name: str,
+    default: Mapping[str, int],
+) -> Mapping[str, int]:
+    """Parse ``product_code=whole_inr`` pairs into an immutable map.
+
+    Explicit maps are deliberately strict: duplicates, malformed product
+    codes and non-positive prices stop startup. A blank or absent value uses
+    the supplied compatibility default.
+    """
+
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return MappingProxyType(dict(default))
+
+    parsed: dict[str, int] = {}
+    for entry in raw.split(","):
+        product_code, separator, raw_price = entry.strip().partition("=")
+        if not separator or not _CONFIG_PRODUCT_CODE.fullmatch(product_code):
+            raise ValueError(
+                f"{name} must contain product_code=whole_inr pairs"
+            )
+        if product_code in parsed:
+            raise ValueError(f"{name} contains duplicate product codes")
+        try:
+            price_inr = int(raw_price.strip())
+        except ValueError as exc:
+            raise ValueError(f"{name} prices must be whole INR values") from exc
+        if price_inr < 1 or price_inr > 100000:
+            raise ValueError(
+                f"{name} prices must be between 1 and 100000 INR"
+            )
+        parsed[product_code] = price_inr
+    return MappingProxyType(parsed)
+
+
 def normalize_database_url(value: str) -> str:
     """Select psycopg for provider-style PostgreSQL URLs."""
 
@@ -219,6 +260,17 @@ DOCUMENT_STUDIO_PRICE_INR = env_int(
     0,
     minimum=0,
     maximum=100000,
+)
+DOCUMENT_STUDIO_PRODUCT_PRICES_INR_CONFIGURED = bool(
+    os.getenv("DOCUMENT_STUDIO_PRODUCT_PRICES_INR", "").strip()
+)
+DOCUMENT_STUDIO_PRODUCT_PRICES_INR = env_inr_price_map(
+    "DOCUMENT_STUDIO_PRODUCT_PRICES_INR",
+    {
+        "mh_residential_leave_licence_11m_self_service": (
+            DOCUMENT_STUDIO_PRICE_INR
+        )
+    },
 )
 DOCUMENT_STUDIO_FINAL_TTL_DAYS = env_int(
     "DOCUMENT_STUDIO_FINAL_TTL_DAYS",

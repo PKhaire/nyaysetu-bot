@@ -269,13 +269,13 @@ is reachable. Readiness reports email mode as either `amazon_ses` or
 The first production release formally sets
 `EMAIL_NOTIFICATIONS_ENABLED=false`. Amazon SES credentials and internal
 recipient lists are not launch dependencies. This does not disable the durable
-outbox, WhatsApp payment confirmations, consultation messages, Document Studio
+outbox, WhatsApp payment confirmations, consultation messages, Draft Studio
 final-link delivery, reconciliation, or operator queues.
 
 During published service hours, the assigned operator must:
 
 1. Open the authenticated appointment, support, payment-reconciliation,
-   Document Studio, and outbox queues at shift start and at least every 15
+   Draft Studio, and outbox queues at shift start and at least every 15
    minutes while paid transactions are accepted.
 2. Assign each paid consultation before its displayed SLA deadline, contact the
    advocate through the approved WhatsApp or phone channel, and record the
@@ -286,7 +286,7 @@ During published service hours, the assigned operator must:
 4. Respond to support work within `SUPPORT_SLA_HOURS` and keep status/notes in
    the authenticated support queue, not in personal email.
 5. Review every open payment-reconciliation record and non-email `DEAD` outbox
-   job immediately. For Document Studio, use the protected redelivery action
+   job immediately. For Draft Studio, use the protected redelivery action
    when final-link delivery needs a new short-lived URL.
 
 At deployment, run the outbox once. Email-only `PENDING`, `FAILED`, and `DEAD`
@@ -341,7 +341,7 @@ The web and outbox cron must share the exact same `DATABASE_URL`,
 `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, WhatsApp API version,
 `EMAIL_NOTIFICATIONS_ENABLED`, and `AI_SAFETY_IDENTIFIER_SECRET`. The Blueprint
 inherits them from the web service. They let the outbox finish durable
-payment-success messages, Document Studio delivery, reminders, optional
+payment-success messages, Draft Studio delivery, reminders, optional
 receipts, and stable pseudonymous log correlation. SES values are needed only
 in a later email-enabled release. Razorpay API and webhook secrets are not
 required by the outbox and should remain scoped to the web service. Keep
@@ -695,7 +695,7 @@ python -m jobs.reconcile_payments --limit 100
 
 The job runs two isolated bounded scans and reports their results separately as
 `consultations` and `document_studio`. The consultation scan examines at most
-200 recent-first unprocessed `PENDING`/`EXPIRED` links. The Document Studio scan
+200 recent-first unprocessed `PENDING`/`EXPIRED` links. The Draft Studio scan
 examines `PAYMENT_PENDING`, `NEEDS_ATTENTION`, and `REFUND_REVIEW` orders updated
 inside `PAYMENT_RECONCILIATION_LOOKBACK_DAYS`. For a possible capture each scan
 fetches both the Payment Link summary and current Payment resource. It
@@ -711,7 +711,7 @@ reopens them.
 The command prints privacy-minimised JSON. Exit `0` means all provider lookups
 completed, including when human review is required. Exit `2` means a
 configuration/provider/final-release error occurred. Review consultation items
-through `GET /admin/payment-reconciliations`. Review Document Studio exceptions
+through `GET /admin/payment-reconciliations`. Review Draft Studio exceptions
 through `GET /admin/document-orders` and the per-reference detail route. Every
 mutation requires `X-Operator-ID` and a bounded reason where applicable.
 
@@ -787,7 +787,7 @@ successful report requires operator attention. Route exit `2` and the JSON
 
 The web console uses individual application identities. `ADMIN` can perform
 all operations and security-sensitive configuration/release mutations;
-`OPERATOR` can work routine support, fulfilment, payment, and Document Studio
+`OPERATOR` can work routine support, fulfilment, payment, and Draft Studio
 queues; `VIEWER` is read-only. Production readiness requires at least two
 active named identities, including at least one `ADMIN`, so one lost device or
 disabled account does not remove all access.
@@ -918,7 +918,7 @@ Core queues and actions:
 - Payment review: inspect captured-payment exceptions and record an explicit
   resolution/refund/ignore disposition with notes. This endpoint records a
   decision; it does not execute a Razorpay refund.
-- Document Studio: inspect privacy-safe order/audit state; reconcile one order
+- Draft Studio: inspect privacy-safe order/audit state; reconcile one order
   only from current Razorpay evidence; place an unreleasable paid order in
   `REFUND_REVIEW`; and queue fresh final links with a reason plus idempotency
   key. Execute refunds in Razorpay, then require the reconciler to observe an
@@ -1012,7 +1012,7 @@ At minimum:
 12. A forced notification-provider failure leaves a retryable outbox job.
 13. Cron delivery completes the recovered job, including when the 32-task web
     fast path is saturated.
-14. A missed exact consultation or Document Studio capture is recovered once by
+14. A missed exact consultation or Draft Studio capture is recovered once by
     `python -m jobs.reconcile_payments --limit 100`; ambiguous evidence grants
     no entitlement and enters the applicable review queue.
 15. For a paid document, fail immediate WhatsApp delivery and verify one
@@ -1225,7 +1225,7 @@ and provider intake as the incident/cutover procedure requires.
 - After rotating `AI_SAFETY_IDENTIFIER_SECRET`, expect provider safety
   identifiers to change; document the privacy/abuse-monitoring impact.
 
-## Document Studio RC9 controlled staging release
+## Draft Studio RC9 controlled staging release
 
 The Blueprint deliberately keeps `DOCUMENT_STUDIO_ENABLED=false`. Enabling it
 publishes the menu entry to every WhatsApp user; there is no tester-number
@@ -1241,6 +1241,9 @@ DOCUMENT_STUDIO_DRAFT_TTL_DAYS=7
 DOCUMENT_STUDIO_DAILY_CAPACITY=10
 DOCUMENT_STUDIO_FINAL_TTL_DAYS=30
 DOCUMENT_STUDIO_DOWNLOAD_TTL_SECONDS=600
+# Preferred Phase B setting. The older single-price setting remains a
+# compatibility fallback only while this value is blank or absent.
+DOCUMENT_STUDIO_PRODUCT_PRICES_INR=mh_residential_leave_licence_11m_self_service=<approved positive test amount>
 DOCUMENT_STUDIO_PRICE_INR=<approved positive test amount>
 DOCUMENT_STUDIO_S3_BUCKET=<private staging bucket>
 DOCUMENT_STUDIO_S3_REGION=ap-south-1
@@ -1253,7 +1256,7 @@ Before enabling the switch:
 
 1. Create a staging-only S3 bucket with Block Public Access, default
    encryption, versioning/lifecycle appropriate to the approved retention,
-   and an IAM identity limited to the Document Studio object prefix. Do not
+   and an IAM identity limited to the Draft Studio object prefix. Do not
    reuse the SES sender credential.
 2. Record an authenticated licensed-Maharashtra-advocate decision for the
    exact questionnaire, template aggregate, renderer, golden PDF and golden
@@ -1263,6 +1266,30 @@ Before enabling the switch:
 3. Set the approved price and the matching Razorpay test keys/webhook secret.
 4. Apply Alembic head and require `/health/ready` to report `ok=true`,
    PostgreSQL and schema `20260908_01`.
+
+The per-product release section must identify every allowlisted product. For
+the current single-product staging deployment the expected shape is:
+
+```json
+{
+  "document_studio_release": {
+    "ok": true,
+    "reason_code": "APPROVED",
+    "products": {
+      "mh_residential_leave_licence_11m_self_service": {
+        "ok": true,
+        "reason_code": "APPROVED"
+      }
+    }
+  }
+}
+```
+
+An unknown allowlist entry, missing/extra product price or failed release gate
+makes staging and production readiness fail. Inspect the non-secret catalogue
+at `GET /admin/document-products`; filter document operations with
+`?product_code=<registered-code>` on `/admin/document-orders`, `/admin/metrics`
+and `/admin/audit`.
 
 The supported first product is a self-service English 11-month Maharashtra
 residential leave-and-licence draft for one adult individual licensor and one
@@ -1284,7 +1311,7 @@ captured; enabling staging does not authorize production publication.
   but real live-data backup/restore, working-copy upgrade, import/reconciliation,
   and rollback results remain external release evidence. Revision
   `20260729_01` registers the baseline, `20260818_01` adds case-brief and
-  manual-handover operations, `20260819_01` adds the initial Document Studio
+  manual-handover operations, `20260819_01` adds the initial Draft Studio
   ledger, and `20260827_01` adds the controlled RC9 payment, approval,
   artifact and access-audit model. Revision `20260903_01` adds global daily
   capacity reservations; `20260908_01` adds named administrator identity,
@@ -1295,7 +1322,7 @@ captured; enabling staging does not authorize production publication.
   controls remain process-local.
 - Maintenance deliberately covers only a narrow approved retention scope; it
   is not a legal-hold, privacy-request, or universal deletion system.
-- Consultation and Document Studio payment reconciliation is scheduled, but it
+- Consultation and Draft Studio payment reconciliation is scheduled, but it
   is a bounded safety net rather than settlement/refund accounting and still
   requires staffed review. Document final delivery is durable, while Meta can
   still reject a free-form message outside the customer-service window; the

@@ -1,4 +1,4 @@
-# ADR 0001: Document Studio publication and artifact contract
+# ADR 0001: Draft Studio publication and artifact contract
 
 **Status:** Accepted
 

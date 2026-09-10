@@ -8,32 +8,45 @@ from external rollout work and future product ideas.
 
 Start with:
 
+- [RC16 multi-product catalogue notes](RELEASE_NOTES_2026-09-10_RC16.md)
+  - strict global catalogue/pricing validation, per-product readiness and
+    product-filtered operations with only the agreement registered at runtime.
+- [RC15 multi-product foundation notes](RELEASE_NOTES_2026-09-10_RC15.md)
+  - discovery-only cheque-notice governance and an order-bound product
+    catalogue seam with no second runtime product or database change.
+- [RC13 simplified-intake candidate notes](RELEASE_NOTES_2026-09-09_RC13.md)
+- [RC14 end-user UX candidate notes](RELEASE_NOTES_2026-09-09_RC14.md)
+  - one replacement Draft Studio schema, PIN-assisted confirmed addresses,
+    conditional questions, and split minimum/post-payment consultation briefs.
 - [RC12 named-admin MFA release notes](RELEASE_NOTES_2026-09-08_RC12.md)
   - individual operations identities, TOTP/recovery authentication, persistent
     lockout, role enforcement, session invalidation, and verified audit actors.
 - [RC11 email-disabled operations release notes](RELEASE_NOTES_2026-09-07_RC11.md)
   - formally disables internal email for V1, preserves mandatory WhatsApp and
-    Document Studio delivery, and safely closes legacy email-only backlog.
+    Draft Studio delivery, and safely closes legacy email-only backlog.
 - [RC10 operations-hardening release notes](RELEASE_NOTES_2026-09-06_RC10.md)
-  - Document Studio reconciliation, audited refund review, durable final-link
+  - Draft Studio reconciliation, audited refund review, durable final-link
     delivery and idempotent operator redelivery.
 - [Integrated RC9 production launch checklist](PRODUCTION_LAUNCH_CHECKLIST_RC9.md)
-  - mandatory go/no-go gates for launching NyaySetu Bot and Document Studio
+  - mandatory go/no-go gates for launching NyaySetu Bot and Draft Studio
   together as one production release.
 
 - [RC9 release notes](RELEASE_NOTES_2026-08-27_RC9.md) — the implemented
-  globally visible, fail-closed Document Studio questionnaire, deterministic
+  globally visible, fail-closed Draft Studio questionnaire, deterministic
   preview, exact payment, private artifact and approval-gate workflow.
-- [Document Studio design package](document-studio/README.md) — the product,
+- [Draft Studio design package](document-studio/README.md) — the product,
   legal-governance, architecture, privacy, catalogue, delivery and cost
   baseline plus the first-product source, questionnaire, clause, retention,
   implementation, conservative V1 legal-drafting decisions, exact candidate
   template and advocate-authentication contracts.
+  The package also contains a discovery-only cheque-notice product pack and
+  the implemented Phase A-B multi-product catalogue plan; the cheque product
+  is not implemented, offered or approved for payment.
 
 Then continue with the established repository documentation:
 
 1. [RC8 release notes](RELEASE_NOTES_2026-08-19_RC8.md) — historical
-   staging-only Document Studio navigation and synthetic questionnaire harness.
+   staging-only Draft Studio navigation and synthetic questionnaire harness.
 2. [RC7 release notes](RELEASE_NOTES_2026-08-18_RC7.md) — structured case
    brief, consent, protected contact reveal, advocate registry, and manual
    handover operations.
@@ -81,7 +94,7 @@ assistant with:
   feedback.
 - IST-aware, capacity-filtered booking and review before payment.
 - Consent-based structured case briefs with no identity/evidence file upload.
-- A globally visible Document Studio entry when enabled, with bounded
+- A globally visible Draft Studio entry when enabled, with bounded
   eligibility, deterministic drafting, a watermarked preview, exact Razorpay
   payment verification, private final PDF/DOCX storage and short-lived
   owner-authorized downloads. Release remains blocked unless exact advocate
@@ -122,8 +135,8 @@ emergency response, or guarantee legal advice/outcome.
 | `GET/POST/DELETE /admin/availability[...]` | Capacity and blackout operations |
 | `GET/POST /admin/outbox[...]` | Queue inspection and retry |
 | `GET /admin/audit` | Operator mutation audit |
-| `GET /admin/document-orders` | Privacy-minimised Document Studio operations ledger |
-| `GET /admin/document-orders/<ref>` | Privacy-safe Document Studio audit detail |
+| `GET /admin/document-orders` | Privacy-minimised Draft Studio operations ledger |
+| `GET /admin/document-orders/<ref>` | Privacy-safe Draft Studio audit detail |
 | `POST /admin/document-orders/<ref>/reconcile` | Exact current-evidence recovery |
 | `POST /admin/document-orders/<ref>/refund-review` | Audited refund-review decision |
 | `POST /admin/document-orders/<ref>/redeliver` | Idempotent fresh-link delivery |
@@ -177,7 +190,7 @@ Implemented in the repository:
 - A fail-closed one-shot frozen-SQLite-to-empty-PostgreSQL cutover utility;
   using it on live data still requires the runbook's backup, restore, rehearsal,
   reconciliation, approval, and rollback evidence.
-- RC9 Document Studio catalogue, bounded eligibility/questionnaire, immutable
+- RC9 Draft Studio catalogue, bounded eligibility/questionnaire, immutable
   answer revisions, deterministic rendering, exact-payment binding, private
   artifact vault, short-lived downloads, maintenance and append-only template
   release decisions.
@@ -197,7 +210,7 @@ Still required before production cutover:
   cancellation, privacy, AI, retention, and incident policies.
 - Activate monitoring for webhook failures, unmatched payments, readiness,
   queue age, and dead jobs.
-- Authenticate the exact Document Studio questionnaire/template/renderer and
+- Authenticate the exact Draft Studio questionnaire/template/renderer and
   golden artifact hashes with a licensed Maharashtra advocate; configure and
   prove private S3, retention/deletion, staging payment and cross-user access
   evidence before enabling its production switch.

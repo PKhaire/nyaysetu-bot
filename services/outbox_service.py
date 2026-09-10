@@ -612,7 +612,7 @@ def _handle_document_final_delivery(
         raise DeliveryFailure("document_final_links_unavailable")
     links = links_result.value
     message = (
-        "Payment confirmed. Your Document Studio final files are available "
+        "Payment confirmed. Your Draft Studio final files are available "
         "for 30 days.\n"
         f"PDF: {links['FINAL_PDF']}\n"
         f"Editable DOCX: {links['FINAL_DOCX']}"

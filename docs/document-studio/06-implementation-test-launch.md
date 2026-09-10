@@ -2,7 +2,7 @@
 
 ## Delivery strategy
 
-Document Studio is built and proven without enabling public sales. Staging may
+Draft Studio is built and proven without enabling public sales. Staging may
 use synthetic-only UAT controls. Production publication is bound to an
 immutable, advocate-approved Template Version and is universal for all
 eligible users; it has no named-user, cohort or percentage rollout gate.
@@ -30,7 +30,7 @@ it, what the output means, or how long NyaySetu retains it.
 - Implement schema validation with synthetic examples.
 - Keep the disabled staging/UAT gate while replacing the synthetic harness;
   do not carry named-user gating into production.
-- Add the catalogue-driven four-row home list, Document Studio landing-list
+- Add the catalogue-driven four-row home list, Draft Studio landing-list
   contract and safe keyword routing. Prove the current three-button home is
   unchanged while no production Template Version is active.
 - Add admin aggregate/queue views without document contents in list endpoints.

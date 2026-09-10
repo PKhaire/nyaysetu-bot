@@ -1,0 +1,70 @@
+# NyaySetu RC13 - Simplified Intake Candidate
+
+**Date:** 9 September 2026  
+**Database schema:** unchanged at `20260908_01`  
+**Document questionnaire:** `mh-ll-questionnaire-2026-09-v2`  
+**Status:** implemented locally; not approved, deployed or production-ready
+
+## Included
+
+- Replaces the unlaunched 43-question Document Studio prototype with exactly
+  one globally active conditional schema.
+- Reduces the typical no-optionals Document Studio path to 22 answers.
+- Groups equivalent eligibility confirmations while preserving fail-closed
+  route-out behaviour.
+- Removes unused furnishing input and repeated fixed-term acknowledgements.
+- Adds explicit yes/no branches for property reference, included areas, other
+  occupants and inventory.
+- Replaces fragmented premises address inputs with PIN assistance, one complete
+  customer-entered address and exact confirmation.
+- Packages 1,666 Maharashtra PIN references from IndiaPost source revision
+  `9903190eb2073826f869f0c384bb83a34a21ebd5`; its content hash and provenance
+  are bound into the Document Studio schema hash.
+- Shortens pre-payment consultation intake to issue summary and urgency, plus a
+  deadline or safety note only when relevant.
+- Offers a post-payment `Prepare for advocate` flow for stage, chronology,
+  desired help/questions, document types and optional opposing party.
+- Keeps every paid appointment valid when advocate preparation is incomplete,
+  and exposes `INCOMPLETE`/`COMPLETE` in the admin appointment detail.
+- Moves long Document Studio facts to an ordinary WhatsApp text message so the
+  interactive confirmation body stays within provider limits.
+- Removes the unused legacy four-field Document Studio UAT service and its
+  separate test-only schema.
+- Supersedes an incompatible active synthetic V1 draft with an audited empty
+  V2 draft instead of interpreting old answers under the new schema.
+
+## Release gates reset by this change
+
+The questionnaire schema, confirmed snapshot, golden artifacts and aggregate
+hash differ from the previously approved package. The prior approval must not
+authorize this candidate. Before any deployment that permits payment:
+
+1. Reconcile/cancel test payment links and clean synthetic V1 drafts/artifacts
+   through the controlled maintenance procedure.
+2. Generate the new release manifest and golden PDF/DOCX.
+3. Have the licensed Maharashtra advocate review the grouped eligibility text,
+   exact questionnaire/review copy and new golden files.
+4. Record an authenticated approval for the exact new aggregate and golden
+   hashes with a future review date.
+5. Run full automated regression, then fresh WhatsApp/Razorpay/S3/admin UAT on
+   this replacement only.
+
+No production deployment or environment change is part of this candidate.
+
+## Local candidate identity
+
+Generated after the 369-test local regression pass:
+
+| Evidence | SHA-256 / version |
+| --- | --- |
+| Template version | `mh-ll-en-2026-08-candidate-1` |
+| Questionnaire schema | `mh-ll-questionnaire-2026-09-v2` |
+| Template hash | `cb860be339805588afb352560ea66a32f91c1acabd6af47fc041e13650dc5535` |
+| Schema hash | `e7517ee9de42dd2f962f77848e9b48ef7a6b7e5b018cb249c7a08203959b75d4` |
+| Aggregate hash | `156910bb064bbd2d9b350ea53b7bd08c42eab67f70be4cfed14e510518e2e667` |
+| Golden PDF hash | `f37f573125c7d407a05814922c6a7091c4fe1a80e40502f42d6042c848029c42` |
+| Golden DOCX hash | `6a2cfd9a59d19a3ebe8212bab116d5e63281b479f2b7c936c76fb5e4cb3a134d` |
+
+Regenerate and compare these values after any change to the questionnaire,
+postal reference, template, renderer or golden answers. The Git commit SHA and
+CI URL are intentionally pending until the candidate is uploaded.

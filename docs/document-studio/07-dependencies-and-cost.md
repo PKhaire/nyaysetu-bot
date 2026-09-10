@@ -28,7 +28,7 @@ The user's selected Render configuration is approximately:
 - PostgreSQL 5 GB storage: USD 1.50/month.
 - Baseline: USD 27.50/month before tax, card and currency effects.
 
-Document Studio should not require another database or continuously running
+Draft Studio should not require another database or continuously running
 service for the pilot.
 
 ## S3 planning model

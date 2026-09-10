@@ -1230,6 +1230,62 @@ def test_staging_readiness_requires_postgresql_test_keys_and_strict_config(
     assert ready.status_code == 200
     assert ready.get_json()["environment"] == "staging"
 
+    from services.document_catalogue import CatalogueConfiguration
+
+    monkeypatch.setattr(app_module, "DOCUMENT_STUDIO_ENABLED", True)
+    monkeypatch.setattr(
+        app_module,
+        "catalogue_configuration",
+        lambda **_kwargs: CatalogueConfiguration(
+            True,
+            "CONFIGURED",
+            ("product_a", "product_b"),
+        ),
+    )
+    approved_release = {
+        "ok": True,
+        "reason_code": "APPROVED",
+        "products": {
+            "product_a": {"ok": True, "reason_code": "APPROVED"},
+            "product_b": {"ok": True, "reason_code": "APPROVED"},
+        },
+    }
+    monkeypatch.setattr(
+        app_module,
+        "release_readiness",
+        lambda _db: approved_release,
+    )
+    catalogue_ready = client.get("/health/ready")
+    assert catalogue_ready.status_code == 200
+    assert (
+        catalogue_ready.get_json()["document_studio_release"]
+        == approved_release
+    )
+
+    blocked_release = {
+        "ok": False,
+        "reason_code": "ADVOCATE_APPROVAL_MISSING",
+        "products": {
+            "product_a": {"ok": True, "reason_code": "APPROVED"},
+            "product_b": {
+                "ok": False,
+                "reason_code": "ADVOCATE_APPROVAL_MISSING",
+            },
+        },
+    }
+    monkeypatch.setattr(
+        app_module,
+        "release_readiness",
+        lambda _db: blocked_release,
+    )
+    catalogue_blocked = client.get("/health/ready")
+    assert catalogue_blocked.status_code == 503
+    assert (
+        catalogue_blocked.get_json()["document_studio_release"]
+        == blocked_release
+    )
+    monkeypatch.setattr(app_module, "DOCUMENT_STUDIO_ENABLED", False)
+
     monkeypatch.setattr(app_module, "RAZORPAY_MODE", "live")
     live_payments = client.get("/health/ready")
     assert live_payments.status_code == 503

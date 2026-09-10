@@ -1,4 +1,4 @@
-"""Deterministic PDF/DOCX renderer for approved Document Studio packages."""
+"""Deterministic PDF/DOCX renderer for approved Draft Studio packages."""
 
 from __future__ import annotations
 
@@ -17,10 +17,10 @@ from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
 from services.document_catalogue import (
-    RENDERER_VERSION,
-    TEMPLATE_PATH,
+    PRODUCT_CODE,
     DocumentProduct,
 )
+from services.document_address_service import render_premises_address
 
 
 MAX_ARTIFACT_BYTES = 5 * 1024 * 1024
@@ -80,16 +80,6 @@ def _clean_text(value: object) -> str:
     return text.replace("<", "").replace(">", "")
 
 
-def _premises_address(answers: dict[str, object]) -> str:
-    fields = (
-        "premises_unit", "premises_building", "premises_floor",
-        "premises_street_locality", "premises_city", "premises_taluka",
-        "premises_district", "premises_pin",
-    )
-    values = [_clean_text(answers.get(field)) for field in fields]
-    return ", ".join(value for value in values if value and value != "NONE")
-
-
 def _token_values(answers: dict[str, object]) -> dict[str, str]:
     monthly = int(str(answers["monthly_licence_fee_inr"]))
     deposit = int(str(answers["refundable_deposit_inr"]))
@@ -98,7 +88,7 @@ def _token_values(answers: dict[str, object]) -> dict[str, str]:
         "execution_date_or_blank": "________________",
         "monthly_licence_fee_words": _number_words(monthly),
         "refundable_deposit_words": _number_words(deposit),
-        "rendered_premises_address": _premises_address(answers),
+        "rendered_premises_address": render_premises_address(answers),
         "premises_property_reference_or_none": values.get("premises_property_reference", "NONE"),
         "included_areas_or_none": values.get("included_areas", "NONE"),
         "permitted_occupant_names_or_none": values.get("permitted_occupant_names", "NONE"),
@@ -106,8 +96,11 @@ def _token_values(answers: dict[str, object]) -> dict[str, str]:
     return values
 
 
-def _render_source(answers: dict[str, object]) -> str:
-    source = TEMPLATE_PATH.read_text(encoding="utf-8")
+def _render_source(
+    product: DocumentProduct,
+    answers: dict[str, object],
+) -> str:
+    source = product.template_path.read_text(encoding="utf-8")
     marker = "## Output notice"
     if marker not in source:
         raise ValueError("document_template_marker_missing")
@@ -175,14 +168,21 @@ def _paragraphs(markdown: str) -> list[tuple[str, str]]:
     return result
 
 
-def _pdf(markdown: str, *, preview: bool) -> bytes:
+def _pdf(
+    markdown: str,
+    *,
+    preview: bool,
+    renderer_version: str,
+) -> bytes:
     output = io.BytesIO()
     document = SimpleDocTemplate(
         output, pagesize=A4, rightMargin=18 * mm, leftMargin=18 * mm,
         topMargin=18 * mm, bottomMargin=18 * mm,
         title="NyaySetu Residential Leave and Licence Agreement",
+        # Retained as immutable artifact metadata so existing approved golden
+        # hashes are not invalidated by the customer-facing product rename.
         author="NyaySetu Document Studio",
-        creator=RENDERER_VERSION,
+        creator=renderer_version,
         invariant=1,
     )
     styles = getSampleStyleSheet()
@@ -247,9 +247,13 @@ def _docx(markdown: str) -> bytes:
 def render(product: DocumentProduct, answers: dict[str, object], kind: str) -> RenderedArtifact:
     if kind not in {"PREVIEW_PDF", "FINAL_PDF", "FINAL_DOCX"}:
         raise ValueError("unsupported_document_artifact_kind")
-    markdown = _render_source(answers)
+    markdown = _render_source(product, answers)
     if kind.endswith("PDF"):
-        content = _pdf(markdown, preview=kind == "PREVIEW_PDF")
+        content = _pdf(
+            markdown,
+            preview=kind == "PREVIEW_PDF",
+            renderer_version=product.renderer_version,
+        )
         content_type, extension = "application/pdf", "pdf"
     else:
         content = _docx(markdown)
@@ -261,32 +265,33 @@ def render(product: DocumentProduct, answers: dict[str, object], kind: str) -> R
         "answers_hash": _sha256(json.dumps(answers, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")),
         "artifact_hash": content_hash,
         "artifact_kind": kind,
-        "renderer_version": RENDERER_VERSION,
+        "renderer_version": product.renderer_version,
         "schema_hash": product.schema_hash,
         "template_hash": product.template_hash,
         "template_version": product.template_version,
     }
     manifest_hash = _sha256(json.dumps(manifest, separators=(",", ":"), sort_keys=True).encode("utf-8"))
-    return RenderedArtifact(kind, content, content_type, extension, content_hash, manifest_hash, RENDERER_VERSION)
+    return RenderedArtifact(
+        kind,
+        content,
+        content_type,
+        extension,
+        content_hash,
+        manifest_hash,
+        product.renderer_version,
+    )
 
 
-def golden_answers() -> dict[str, object]:
-    return {
-        "licensor_full_name": "Asha Test Licensor", "licensor_age_years": "45",
-        "licensor_notice_address": "1 Synthetic Road, Pune, Maharashtra 411001",
-        "licensee_full_name": "Ravi Test Licensee", "licensee_age_years": "32",
-        "licensee_notice_address": "2 Example Lane, Pune, Maharashtra 411002",
-        "premises_unit": "Flat 101", "premises_building": "Sample Residency",
-        "premises_floor": "First Floor", "premises_street_locality": "Test Road, Shivajinagar",
-        "premises_city": "Pune", "premises_taluka": "Haveli", "premises_district": "Pune",
-        "premises_pin": "411003", "premises_property_reference": "NONE", "included_areas": "Parking P-1",
-        "commencement_date": "2026-09-01", "expiry_date": "2027-07-31",
-        "monthly_licence_fee_inr": "25000", "fee_due_day": "5", "fee_payment_mode": "UPI",
-        "refundable_deposit_inr": "75000", "permitted_occupant_names": "NONE",
-        "inventory_items": "Ceiling fan - working, Wardrobe - good condition",
-    }
+def golden_answers(
+    product: DocumentProduct | None = None,
+) -> dict[str, object]:
+    if product is None:
+        from services.document_catalogue import resolve_product
+
+        product = resolve_product(PRODUCT_CODE)
+    return dict(product.golden_answers())
 
 
 def golden_hashes(product: DocumentProduct) -> tuple[str, str]:
-    answers = golden_answers()
+    answers = golden_answers(product)
     return render(product, answers, "FINAL_PDF").content_hash, render(product, answers, "FINAL_DOCX").content_hash

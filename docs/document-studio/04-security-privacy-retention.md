@@ -2,7 +2,7 @@
 
 ## Data classification
 
-Document Studio handles confidential legal and personal information. Treat
+Draft Studio handles confidential legal and personal information. Treat
 confirmed answers, rendered artifacts, review notes, access grants and delivery
 records as restricted business data. Payment secrets, cloud credentials and
 webhook secrets remain security credentials and are never document data.
@@ -58,7 +58,7 @@ is excluded from V1.
 - Budget alerts do not replace access restrictions.
 
 Any credential previously pasted into chat, screenshots or tickets must be
-treated as disclosed and rotated before Document Studio production access.
+treated as disclosed and rotated before Draft Studio production access.
 
 ## Consent and notices
 

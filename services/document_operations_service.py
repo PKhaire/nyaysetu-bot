@@ -1,4 +1,4 @@
-"""Bounded, auditable operations for paid Document Studio orders.
+"""Bounded, auditable operations for paid Draft Studio orders.
 
 The module owns recovery and refund-review decisions. Razorpay and WhatsApp
 remain external adapters, and presigned artifact URLs are never persisted.

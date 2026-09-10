@@ -198,6 +198,7 @@ function renderBrief(brief) {
   elements.briefEmpty.classList.toggle("hidden", Boolean(brief));
   elements.briefDetails.classList.toggle("hidden", !brief);
   if (!brief) return;
+  setText("briefPreparationStatus", brief.preparation_status);
   setText("briefSummary", brief.issue_summary);
   setText("briefStage", brief.legal_stage ? displayStatus(brief.legal_stage) : null);
   setText("briefDates", brief.important_dates);
@@ -443,6 +444,7 @@ function initialise() {
     rescheduleFields: byId("reschedule-fields"), dialogError: byId("dialog-error"),
     dialogSubmit: byId("dialog-submit"), toast: byId("toast"),
     briefEmpty: byId("brief-empty"), briefDetails: byId("brief-details"),
+    briefPreparationStatus: byId("brief-preparation-status"),
     briefSummary: byId("brief-summary"), briefStage: byId("brief-stage"),
     briefDates: byId("brief-dates"), briefOutcome: byId("brief-outcome"),
     briefUrgency: byId("brief-urgency"), briefOpposingParty: byId("brief-opposing-party"),

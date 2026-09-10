@@ -1,4 +1,4 @@
-"""Global daily-capacity tests for the integrated Document Studio release."""
+"""Global daily-capacity tests for the integrated Draft Studio release."""
 
 from __future__ import annotations
 

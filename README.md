@@ -12,9 +12,10 @@ manipulative retention patterns or imply a lawyer-client relationship.
 ## What the service includes
 
 - Multilingual WhatsApp onboarding and a persistent home menu.
-- A globally visible Document Studio entry when the product switch is enabled;
+- A globally visible Draft Studio entry when the product switch is enabled;
   it never samples users or depends on tester phone numbers. The first product
-  uses an atomic global daily capacity, bounded eligibility checks, a deterministic questionnaire, a
+  is selected through a data-driven, strictly priced and independently
+  release-gated catalogue. It uses an atomic global daily capacity, bounded eligibility checks, a deterministic questionnaire, a
   watermarked preview, exact Razorpay payment verification, and private final
   PDF/DOCX delivery. Preview, payment and release fail closed unless the exact
   template package has authenticated advocate approval and private storage is
@@ -26,7 +27,7 @@ manipulative retention patterns or imply a lawyer-client relationship.
   urgency/safety cue, and versioned consent before appointment selection.
 - Consultation intake accepts no evidence or identity-document upload: users
   retain original files and only state which document types are available.
-  Document Studio likewise accepts no Aadhaar, PAN, bank credential,
+  Draft Studio likewise accepts no Aadhaar, PAN, bank credential,
   signature or identity-document upload; it stores only generated artifacts in
   private object storage for the configured availability window.
 - A review step before creating a Razorpay payment link.
@@ -127,6 +128,7 @@ critical:
 | Internal email | V1: `EMAIL_NOTIFICATIONS_ENABLED=false`; SES settings are optional and required only for a separately tested email-enabled release |
 | User trust | reviewed `SUPPORT_*`, `PRIVACY_*`, policy URLs, and consent/terms versions |
 | Operations | long random `ADMIN_TOKEN`, `SECRET_KEY`, and `AI_SAFETY_IDENTIFIER_SECRET`; a durable generated `ADMIN_MFA_ENCRYPTION_KEY`; `ADMIN_PASSWORD` only for the one-time non-production bootstrap |
+| Draft Studio | global allowlist, `DOCUMENT_STUDIO_PRODUCT_PRICES_INR` (`product_code=whole_inr`), approved package evidence, capacity/retention settings, and private S3 credentials |
 
 AI is optional. The Render Blueprint defaults to `AI_PROVIDER=local`. To enable
 a third-party provider, set `AI_PROVIDER=openai`, `claude`, or `auto`, provide
@@ -197,7 +199,7 @@ necessary.
 | `GET/POST/DELETE /admin/availability[...]` | Blackouts and capacity overrides |
 | `GET/POST /admin/outbox[...]` | Outbox inspection and controlled retry |
 | `GET /admin/audit` | Audited operator mutation history |
-| `GET /admin/document-orders[...]` | Privacy-safe Document Studio queue and audit detail |
+| `GET /admin/document-orders[...]` | Privacy-safe Draft Studio queue and audit detail |
 | `POST /admin/document-orders/<ref>/reconcile` | Exact-evidence payment recovery |
 | `POST /admin/document-orders/<ref>/refund-review` | Audited manual refund-review decision |
 | `POST /admin/document-orders/<ref>/redeliver` | Idempotent fresh-link delivery queueing |
@@ -274,7 +276,7 @@ manual web redeploy because automatic deploys are off. The optional
 smoke test and remove it immediately afterward.
 
 The payment reconciler runs every five minutes with web-service database and
-Razorpay API credentials. It checks both consultation and Document Studio
+Razorpay API credentials. It checks both consultation and Draft Studio
 Payment Link/current Payment resources and auto-recovers only exact, captured,
 non-refunded evidence. Document recovery renders the final artifacts and queues
 a durable WhatsApp job whose private download URLs exist only during delivery.

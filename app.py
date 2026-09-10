@@ -38,8 +38,6 @@ from config import (
     DOCUMENT_STUDIO_ENABLED,
     DOCUMENT_STUDIO_CONSENT_VERSION,
     DOCUMENT_STUDIO_DAILY_CAPACITY,
-    DOCUMENT_STUDIO_PRICE_INR,
-    DOCUMENT_STUDIO_PRODUCT_ALLOWLIST,
     DOCUMENT_STUDIO_S3_ACCESS_KEY_ID,
     DOCUMENT_STUDIO_S3_BUCKET,
     DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY,
@@ -164,6 +162,7 @@ from services.legal_knowledge import (
     ui as legal_ui,
 )
 from services.document_studio_rc9_service import (
+    DOCUMENT_STUDIO_EDIT_SECTION,
     DOCUMENT_STUDIO_IDS,
     DOCUMENT_STUDIO_QUESTION,
     DOCUMENT_STUDIO_REVIEW,
@@ -173,23 +172,30 @@ from services.document_studio_rc9_service import (
     create_or_resume_order,
     current_question as current_document_question,
     document_studio_available,
+    edit_section_rows as document_edit_section_rows,
     home_rows as document_home_rows,
     landing_rows as document_landing_rows,
     latest_draft as latest_document_draft,
     latest_order as latest_document_order,
     order_routed_out as document_order_routed_out,
     parse_answer_id as parse_document_answer_id,
+    parse_edit_section_id as parse_document_edit_section_id,
+    parse_product_number as parse_document_product_number,
+    parse_product_page_id as parse_document_product_page_id,
     parse_product_id,
+    product_selection_page as document_product_selection_page,
+    product_selection_details as document_product_selection_details,
+    product_selection_state as document_product_selection_state,
     product_rows as document_product_rows,
     recent_orders_message,
-    reset_for_edit as reset_document_for_edit,
+    reset_section_for_edit as reset_document_section_for_edit,
     review_message as document_review_message,
     save_answer as save_document_answer,
     validate_answer as validate_document_answer,
 )
-from services.document_catalogue import PRODUCT_CODE as DOCUMENT_PRODUCT_CODE
+from services.document_catalogue import catalogue_configuration
 from services.document_capacity_service import DocumentStudioCapacityExhausted
-from services.document_release_service import release_gate as document_release_gate
+from services.document_release_service import release_readiness
 from services.document_payment_service import validate_current_document_capture
 from services.document_operations_service import enqueue_final_delivery
 from services.document_workflow import (
@@ -340,6 +346,7 @@ BOOKING_KEYWORDS = {
 }
 
 DOCUMENT_STUDIO_KEYWORDS = {
+    "draft studio",
     "document studio",
     "document test",
     "agreement test",
@@ -538,6 +545,7 @@ CONFIRM_LOCATION = "CONFIRM_LOCATION"
 ASK_CATEGORY = "ASK_CATEGORY"
 ASK_SUBCATEGORY = "ASK_SUBCATEGORY"
 ASK_BRIEF_SUMMARY = "ASK_BRIEF_SUMMARY"
+ASK_BRIEF_DEADLINE = "ASK_BRIEF_DEADLINE"
 ASK_BRIEF_STAGE = "ASK_BRIEF_STAGE"
 ASK_BRIEF_DATES = "ASK_BRIEF_DATES"
 ASK_BRIEF_OUTCOME = "ASK_BRIEF_OUTCOME"
@@ -546,6 +554,7 @@ ASK_BRIEF_SAFETY = "ASK_BRIEF_SAFETY"
 ASK_BRIEF_DOCUMENTS = "ASK_BRIEF_DOCUMENTS"
 ASK_BRIEF_OPPOSING_PARTY = "ASK_BRIEF_OPPOSING_PARTY"
 REVIEW_CASE_BRIEF = "REVIEW_CASE_BRIEF"
+REVIEW_PREP_CASE_BRIEF = "REVIEW_PREP_CASE_BRIEF"
 ASK_DATE = "ASK_DATE"
 ASK_SLOT = "ASK_SLOT"
 WAITING_PAYMENT = "WAITING_PAYMENT"
@@ -568,6 +577,10 @@ BTN_BOOKING_SCOPE_CANCEL = "booking_scope_cancel"
 BTN_BRIEF_CONFIRM = "case_brief_confirm"
 BTN_BRIEF_EDIT = "case_brief_edit"
 BTN_BRIEF_CANCEL = "case_brief_cancel"
+BTN_PREPARE_ADVOCATE = "prepare_for_advocate"
+BTN_PREP_BRIEF_CONFIRM = "prepared_brief_confirm"
+BTN_PREP_BRIEF_EDIT = "prepared_brief_edit"
+BTN_PREP_BRIEF_SKIP = "prepared_brief_skip"
 BTN_REVIEW_PAY = "review_pay"
 BTN_REVIEW_CHANGE_TIME = "review_change_time"
 BTN_REVIEW_CANCEL = "review_cancel"
@@ -1244,32 +1257,75 @@ def send_document_studio_home(wa_id, user) -> None:
 def send_document_question(wa_id, user, order) -> None:
     question = current_document_question(order)
     options = list(question.get("options") or ())
-    if options:
+    progress = t(
+        user,
+        "document_section_progress",
+        number=question["section_number"],
+        total=question["section_total"],
+        section=question["section_title"],
+    )
+    body = (
+        f"{progress}\n\n{question['prompt']}\n\n"
+        f"{t(user, 'document_save_hint')}"
+    )
+    if len(options) <= 2:
         buttons = [
             {
                 "id": f"doc_answer::{question['key']}::{code}",
                 "title": str(label)[:20],
             }
-            for code, label in options[:3]
+            for code, label in options
         ]
-    else:
-        buttons = [
+        buttons.append(
             {
-                "id": DOCUMENT_STUDIO_IDS["cancel"],
-                "title": t(user, "document_uat_cancel")[:20],
+                "id": DOCUMENT_STUDIO_IDS["save"],
+                "title": t(user, "document_save_exit")[:20],
             }
+        )
+        send_buttons(wa_id, body, buttons)
+    else:
+        rows = [
+            {
+                "id": f"doc_answer::{question['key']}::{code}",
+                "title": str(label)[:24],
+                "description": "Select this answer",
+            }
+            for code, label in options
         ]
-    send_buttons(
+        rows.append(
+            {
+                "id": DOCUMENT_STUDIO_IDS["save"],
+                "title": t(user, "document_save_exit")[:24],
+                "description": t(user, "document_save_exit_desc")[:72],
+            }
+        )
+        send_list_picker(
+            wa_id,
+            header=str(question["section_title"])[:60],
+            body=body,
+            section_title=t(user, "document_answer_options")[:24],
+            rows=rows,
+        )
+
+
+def send_document_edit_sections(wa_id, user) -> None:
+    send_list_picker(
         wa_id,
-        str(question["prompt"]),
-        buttons,
+        header=t(user, "document_edit_section_header")[:60],
+        body=t(user, "document_edit_section_body"),
+        section_title=t(user, "document_edit_section_title")[:24],
+        rows=document_edit_section_rows(),
     )
 
 
 def send_document_review(wa_id, user, order) -> None:
-    send_buttons(
+    send_text(
         wa_id,
         document_review_message(order),
+    )
+    send_buttons(
+        wa_id,
+        t(user, "document_review_confirm_prompt"),
         [
             {
                 "id": DOCUMENT_STUDIO_IDS["confirm"],
@@ -1386,6 +1442,21 @@ def _cancel_unattached_case_briefs(db, user) -> None:
         brief.status = "CANCELLED"
 
 
+def _paid_case_brief(db, user) -> CaseBrief | None:
+    booking = latest_booking_with_statuses(
+        db,
+        user.whatsapp_id,
+        (BookingStatus.PAID,),
+    )
+    if not booking:
+        return None
+    return (
+        db.query(CaseBrief)
+        .filter(CaseBrief.booking_id == booking.id)
+        .first()
+    )
+
+
 def begin_case_brief(db, user, wa_id) -> CaseBrief:
     _cancel_unattached_case_briefs(db, user)
     brief = CaseBrief(
@@ -1472,26 +1543,18 @@ def _case_brief_documents(brief) -> list[str]:
     return [str(value) for value in values] if isinstance(values, list) else []
 
 
-def send_case_brief_review(db, user, wa_id, brief) -> None:
+def send_minimum_case_brief_review(db, user, wa_id, brief) -> None:
     user.flow_state = REVIEW_CASE_BRIEF
     db.commit()
-    documents = _case_brief_documents(brief)
-    # Keep the factual brief separate from the interactive consent message.
-    # WhatsApp limits interactive button bodies to 1,024 characters; a long
-    # client narrative must never push the consent terms out of that limit.
     send_text(
         wa_id,
         t(
             user,
-            "brief_review",
+            "brief_minimum_review",
             summary=brief.issue_summary or "N/A",
-            stage=brief.legal_stage or "N/A",
-            dates=brief.important_dates or "N/A",
-            outcome=brief.desired_outcome or "N/A",
             urgency=brief.urgency or "N/A",
+            deadline=brief.important_dates or "None disclosed",
             safety=brief.safety_concerns or "None disclosed",
-            documents=", ".join(documents) if documents else "None",
-            opposing_party=brief.opposing_party or "None disclosed",
         ),
     )
     send_buttons(
@@ -1514,6 +1577,117 @@ def send_case_brief_review(db, user, wa_id, brief) -> None:
             },
         ],
     )
+
+
+def send_case_brief_review(
+    db,
+    user,
+    wa_id,
+    brief,
+    *,
+    flow_state=REVIEW_CASE_BRIEF,
+) -> None:
+    user.flow_state = flow_state
+    db.commit()
+    documents = _case_brief_documents(brief)
+    # Keep the factual brief separate from the interactive consent message.
+    # WhatsApp limits interactive button bodies to 1,024 characters; a long
+    # client narrative must never push the consent terms out of that limit.
+    send_text(
+        wa_id,
+        t(
+            user,
+            "brief_review",
+            summary=brief.issue_summary or "N/A",
+            stage=brief.legal_stage or "N/A",
+            dates=brief.important_dates or "N/A",
+            outcome=brief.desired_outcome or "N/A",
+            urgency=brief.urgency or "N/A",
+            safety=brief.safety_concerns or "None disclosed",
+            documents=", ".join(documents) if documents else "None",
+            opposing_party=brief.opposing_party or "None disclosed",
+        ),
+    )
+    buttons = (
+        [
+            {
+                "id": BTN_PREP_BRIEF_CONFIRM,
+                "title": t(user, "brief_preparation_confirm")[:20],
+            },
+            {
+                "id": BTN_PREP_BRIEF_EDIT,
+                "title": t(user, "brief_edit")[:20],
+            },
+            {
+                "id": BTN_PREP_BRIEF_SKIP,
+                "title": t(user, "brief_preparation_skip")[:20],
+            },
+        ]
+        if flow_state == REVIEW_PREP_CASE_BRIEF
+        else [
+            {
+                "id": BTN_BRIEF_CONFIRM,
+                "title": t(user, "brief_confirm")[:20],
+            },
+            {"id": BTN_BRIEF_EDIT, "title": t(user, "brief_edit")[:20]},
+            {
+                "id": BTN_BRIEF_CANCEL,
+                "title": t(user, "brief_cancel")[:20],
+            },
+        ]
+    )
+    send_buttons(
+        wa_id,
+        (
+            t(user, "brief_preparation_review_prompt")
+            if flow_state == REVIEW_PREP_CASE_BRIEF
+            else t(
+                user,
+                "brief_consent_prompt",
+                consent_version=CASE_BRIEF_CONSENT_VERSION,
+                privacy_url=PRIVACY_POLICY_URL or "N/A",
+            )
+        ),
+        buttons,
+    )
+
+
+def begin_paid_brief_preparation(db, user, wa_id) -> bool:
+    brief = _paid_case_brief(db, user)
+    if not brief:
+        user.flow_state = PAYMENT_CONFIRMED
+        db.commit()
+        send_text(wa_id, t(user, "brief_preparation_unavailable"))
+        return False
+    if brief.status == "PREPARED":
+        user.flow_state = PAYMENT_CONFIRMED
+        db.commit()
+        send_text(wa_id, t(user, "brief_preparation_already_complete"))
+        return True
+
+    if not brief.legal_stage:
+        send_case_brief_stage(db, user, wa_id, brief)
+    elif not brief.important_dates:
+        user.flow_state = ASK_BRIEF_DATES
+        db.commit()
+        send_text(wa_id, t(user, "brief_preparation_dates_prompt"))
+    elif not brief.desired_outcome:
+        user.flow_state = ASK_BRIEF_OUTCOME
+        db.commit()
+        send_text(wa_id, t(user, "brief_preparation_outcome_prompt"))
+    elif not brief.opposing_party:
+        user.flow_state = ASK_BRIEF_DOCUMENTS
+        db.commit()
+        send_text(wa_id, t(user, "brief_documents_prompt"))
+    else:
+        send_case_brief_review(
+            db,
+            user,
+            wa_id,
+            brief,
+            flow_state=REVIEW_PREP_CASE_BRIEF,
+        )
+    return True
 
 
 def _parse_case_brief_documents(value: str) -> list[str] | None:
@@ -2228,14 +2402,14 @@ def _deployment_configuration_is_valid(
 
 
 def _production_configuration_is_valid() -> bool:
+    catalogue = catalogue_configuration(enabled=DOCUMENT_STUDIO_ENABLED)
     document_studio_ok = bool(
         not DOCUMENT_STUDIO_ENABLED
         or (
             DOCUMENT_STUDIO_CONSENT_VERSION
-            and DOCUMENT_STUDIO_PRODUCT_ALLOWLIST
-            == {DOCUMENT_PRODUCT_CODE}
+            and catalogue.ok
+            and catalogue.reason_code == "CONFIGURED"
             and DOCUMENT_STUDIO_DAILY_CAPACITY > 0
-            and DOCUMENT_STUDIO_PRICE_INR > 0
             and DOCUMENT_STUDIO_S3_BUCKET
             and len(DOCUMENT_STUDIO_S3_ACCESS_KEY_ID) >= 16
             and len(DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY) >= 32
@@ -2249,12 +2423,13 @@ def _production_configuration_is_valid() -> bool:
 
 
 def _staging_configuration_is_valid() -> bool:
+    catalogue = catalogue_configuration(enabled=DOCUMENT_STUDIO_ENABLED)
     document_studio_ok = bool(
         not DOCUMENT_STUDIO_ENABLED
         or (
             DOCUMENT_STUDIO_CONSENT_VERSION
-            and DOCUMENT_STUDIO_PRODUCT_ALLOWLIST
-            == {DOCUMENT_PRODUCT_CODE}
+            and catalogue.ok
+            and catalogue.reason_code == "CONFIGURED"
             and DOCUMENT_STUDIO_DAILY_CAPACITY > 0
         )
     )
@@ -2337,20 +2512,16 @@ def health_ready():
     ):
         release_db = SessionLocal()
         try:
-            gate = document_release_gate(release_db)
-            document_release = {
-                "ok": gate.allowed,
-                "reason_code": gate.reason_code,
-            }
+            document_release = release_readiness(release_db)
         except Exception:
-            logger.exception("Document Studio release readiness check failed")
+            logger.exception("Draft Studio release readiness check failed")
             document_release = {
                 "ok": False,
                 "reason_code": "RELEASE_CHECK_FAILED",
             }
         finally:
             release_db.close()
-        if ENV == "production":
+        if strict_deployment:
             configuration_ok = bool(
                 configuration_ok and document_release["ok"]
             )
@@ -2694,6 +2865,8 @@ def webhook():
             if not document_studio_available(user):
                 send_text(wa_id, t(user, "document_studio_unavailable"))
                 return jsonify({"status": "document_studio_unavailable"}), 200
+            user.flow_state = document_product_selection_state(0)
+            db.commit()
             send_list_picker(
                 wa_id,
                 header=t(user, "document_product_header"),
@@ -2703,27 +2876,57 @@ def webhook():
             )
             return jsonify({"status": "ok"}), 200
 
+        requested_document_page = parse_document_product_page_id(
+            interactive_id
+        )
+        if requested_document_page is not None:
+            user.flow_state = document_product_selection_state(
+                requested_document_page
+            )
+            db.commit()
+            send_list_picker(
+                wa_id,
+                header=t(user, "document_product_header"),
+                body=t(user, "document_product_body"),
+                section_title=t(user, "document_product_section"),
+                rows=document_product_rows(
+                    user,
+                    t,
+                    page=requested_document_page,
+                ),
+            )
+            return jsonify({"status": "ok"}), 200
+
         selected_document_product = parse_product_id(interactive_id)
+        selection_page = document_product_selection_page(user.flow_state)
+        if (
+            selected_document_product is None
+            and interactive_id is None
+            and selection_page is not None
+        ):
+            selected_document_product = parse_document_product_number(
+                text_body,
+                page=selection_page,
+            )
         if selected_document_product:
             if not document_studio_available(user):
                 send_text(wa_id, t(user, "document_studio_unavailable"))
                 return jsonify({"status": "document_studio_unavailable"}), 200
+            overview, start_label = document_product_selection_details(
+                user,
+                t,
+                selected_document_product,
+            )
             send_buttons(
                 wa_id,
-                (
-                    "Prepare an English self-service draft for one "
-                    "11-month residential leave-and-licence arrangement "
-                    "in Maharashtra. NyaySetu does not verify identity, "
-                    "title or authority. Ineligible or disputed matters "
-                    "are routed to consultation before payment."
-                ),
+                overview,
                 [
                     {
                         "id": (
                             f"{DOCUMENT_START_ID_PREFIX}"
                             f"{selected_document_product}"
                         ),
-                        "title": "Check eligibility",
+                        "title": start_label[:20],
                     },
                     {
                         "id": DOCUMENT_STUDIO_IDS["back"],
@@ -2742,7 +2945,11 @@ def webhook():
                 send_text(wa_id, t(user, "document_studio_unavailable"))
                 return jsonify({"status": "document_studio_unavailable"}), 200
             try:
-                order = create_or_resume_order(db, user.id)
+                order = create_or_resume_order(
+                    db,
+                    user.id,
+                    started_document_product,
+                )
             except DocumentStudioCapacityExhausted:
                 db.rollback()
                 send_text(
@@ -2783,6 +2990,11 @@ def webhook():
                 send_text(wa_id, t(user, "document_uat_no_draft"))
                 send_document_studio_home(wa_id, user)
                 return jsonify({"status": "ok"}), 200
+            order = create_or_resume_order(
+                db,
+                user.id,
+                order.product_code,
+            )
             user.flow_state = (
                 DOCUMENT_STUDIO_REVIEW
                 if order.current_step == "review"
@@ -2831,7 +3043,7 @@ def webhook():
                 return jsonify({"status": "document_studio_unavailable"}), 200
             send_text(
                 wa_id,
-                "Document Studio collects only the facts needed for the "
+                "Draft Studio collects only the facts needed for the "
                 "selected draft. Do not send Aadhaar, PAN, bank details, "
                 "signatures or identity documents. You review a watermarked "
                 "preview before payment. Final PDF and DOCX are released "
@@ -2844,11 +3056,54 @@ def webhook():
         if user.flow_state in {
             DOCUMENT_STUDIO_QUESTION,
             DOCUMENT_STUDIO_REVIEW,
+            DOCUMENT_STUDIO_EDIT_SECTION,
         } and interactive_id in set(HOME_BUTTON_IDS.values()):
             # Home selections always win over an unfinished document draft. The
             # draft remains available through Continue Draft.
             user.flow_state = NORMAL
             db.commit()
+
+        if user.flow_state == DOCUMENT_STUDIO_EDIT_SECTION:
+            if not document_studio_available(user):
+                user.flow_state = NORMAL
+                db.commit()
+                send_text(wa_id, t(user, "document_studio_unavailable"))
+                send_home(wa_id, user)
+                return jsonify({"status": "document_studio_unavailable"}), 200
+            order = latest_document_draft(db, user.id)
+            if not order:
+                user.flow_state = NORMAL
+                db.commit()
+                send_text(wa_id, t(user, "document_uat_no_draft"))
+                send_home(wa_id, user)
+                return jsonify({"status": "ok"}), 200
+            if (
+                interactive_id == DOCUMENT_STUDIO_IDS["save"]
+                or lower_text in {"save", "save and exit"}
+            ):
+                user.flow_state = NORMAL
+                db.commit()
+                send_text(wa_id, t(user, "document_progress_saved"))
+                send_home(wa_id, user)
+                return jsonify({"status": "ok"}), 200
+            section = parse_document_edit_section_id(interactive_id)
+            if not section:
+                send_text(wa_id, t(user, "document_edit_section_invalid"))
+                send_document_edit_sections(wa_id, user)
+                return jsonify({"status": "ok"}), 200
+            reset_document_section_for_edit(db, order, section)
+            user.flow_state = DOCUMENT_STUDIO_QUESTION
+            db.commit()
+            send_text(
+                wa_id,
+                t(
+                    user,
+                    "document_editing_section",
+                    section=current_document_question(order)["section_title"],
+                ),
+            )
+            send_document_question(wa_id, user, order)
+            return jsonify({"status": "ok"}), 200
 
         if user.flow_state == DOCUMENT_STUDIO_QUESTION:
             if not document_studio_available(user):
@@ -2874,6 +3129,15 @@ def webhook():
                 send_text(wa_id, t(user, "document_uat_cancelled"))
                 send_home(wa_id, user)
                 return jsonify({"status": "ok"}), 200
+            if (
+                interactive_id == DOCUMENT_STUDIO_IDS["save"]
+                or lower_text in {"save", "save and exit"}
+            ):
+                user.flow_state = NORMAL
+                db.commit()
+                send_text(wa_id, t(user, "document_progress_saved"))
+                send_home(wa_id, user)
+                return jsonify({"status": "ok"}), 200
             parsed_answer = parse_document_answer_id(interactive_id)
             if parsed_answer:
                 answer_key, raw_answer = parsed_answer
@@ -2894,6 +3158,7 @@ def webhook():
                 send_text(wa_id, t(user, "document_uat_answer_invalid"))
                 send_document_question(wa_id, user, order)
                 return jsonify({"status": "ok"}), 200
+            previous_section = str(question["section"])
             review_ready = save_document_answer(order, answer, db=db)
             if document_order_routed_out(order):
                 reference = order.public_ref
@@ -2923,8 +3188,20 @@ def webhook():
             )
             db.commit()
             if review_ready:
+                send_text(wa_id, t(user, "document_all_sections_saved"))
                 send_document_review(wa_id, user, order)
             else:
+                next_question = current_document_question(order)
+                if next_question["section"] != previous_section:
+                    send_text(
+                        wa_id,
+                        t(
+                            user,
+                            "document_section_saved",
+                            section=question["section_title"],
+                            next_section=next_question["section_title"],
+                        ),
+                    )
                 send_document_question(wa_id, user, order)
             return jsonify({"status": "ok"}), 200
 
@@ -3031,10 +3308,18 @@ def webhook():
                 send_home(wa_id, user)
                 return jsonify({"status": "ok"}), 200
             if interactive_id == DOCUMENT_STUDIO_IDS["edit"]:
-                reset_document_for_edit(order)
-                user.flow_state = DOCUMENT_STUDIO_QUESTION
+                user.flow_state = DOCUMENT_STUDIO_EDIT_SECTION
                 db.commit()
-                send_document_question(wa_id, user, order)
+                send_document_edit_sections(wa_id, user)
+                return jsonify({"status": "ok"}), 200
+            if (
+                interactive_id == DOCUMENT_STUDIO_IDS["save"]
+                or lower_text in {"save", "save and exit"}
+            ):
+                user.flow_state = NORMAL
+                db.commit()
+                send_text(wa_id, t(user, "document_progress_saved"))
+                send_home(wa_id, user)
                 return jsonify({"status": "ok"}), 200
             if (
                 interactive_id == DOCUMENT_STUDIO_IDS["cancel"]
@@ -3429,6 +3714,10 @@ def webhook():
                 send_pending_payment_options(user, wa_id, pending_booking)
                 return jsonify({"status": "ok"}), 200
             begin_booking_scope_review(db, user, wa_id)
+            return jsonify({"status": "ok"}), 200
+
+        if interactive_id == BTN_PREPARE_ADVOCATE:
+            begin_paid_brief_preparation(db, user, wa_id)
             return jsonify({"status": "ok"}), 200
 
         if user.flow_state == ASK_AI_CONSENT:
@@ -4118,13 +4407,26 @@ def webhook():
                 send_text(wa_id, t(user, "brief_summary_retry"))
                 return jsonify({"status": "ok"}), 200
             brief.issue_summary = summary
-            send_case_brief_stage(db, user, wa_id, brief)
+            send_case_brief_urgency(db, user, wa_id)
+            return jsonify({"status": "ok"}), 200
+
+        if user.flow_state == ASK_BRIEF_DEADLINE:
+            brief = _latest_unattached_case_brief(db, user)
+            value = (text_body or "").strip()
+            if not brief:
+                begin_case_brief(db, user, wa_id)
+                return jsonify({"status": "ok"}), 200
+            if interactive_id or not 2 <= len(value) <= 300:
+                send_text(wa_id, t(user, "brief_dates_retry"))
+                return jsonify({"status": "ok"}), 200
+            brief.important_dates = value
+            send_minimum_case_brief_review(db, user, wa_id, brief)
             return jsonify({"status": "ok"}), 200
 
         if user.flow_state == ASK_BRIEF_STAGE:
-            brief = _latest_unattached_case_brief(db, user)
+            brief = _paid_case_brief(db, user)
             if not brief:
-                begin_case_brief(db, user, wa_id)
+                begin_paid_brief_preparation(db, user, wa_id)
                 return jsonify({"status": "ok"}), 200
             stage_values = {
                 "notice": "Notice or demand received",
@@ -4146,14 +4448,14 @@ def webhook():
             brief.legal_stage = stage_values[stage_key]
             user.flow_state = ASK_BRIEF_DATES
             db.commit()
-            send_text(wa_id, t(user, "brief_dates_prompt"))
+            send_text(wa_id, t(user, "brief_preparation_dates_prompt"))
             return jsonify({"status": "ok"}), 200
 
         if user.flow_state == ASK_BRIEF_DATES:
-            brief = _latest_unattached_case_brief(db, user)
+            brief = _paid_case_brief(db, user)
             value = (text_body or "").strip()
             if not brief:
-                begin_case_brief(db, user, wa_id)
+                begin_paid_brief_preparation(db, user, wa_id)
                 return jsonify({"status": "ok"}), 200
             if interactive_id or not 2 <= len(value) <= 300:
                 send_text(wa_id, t(user, "brief_dates_retry"))
@@ -4161,20 +4463,22 @@ def webhook():
             brief.important_dates = value
             user.flow_state = ASK_BRIEF_OUTCOME
             db.commit()
-            send_text(wa_id, t(user, "brief_outcome_prompt"))
+            send_text(wa_id, t(user, "brief_preparation_outcome_prompt"))
             return jsonify({"status": "ok"}), 200
 
         if user.flow_state == ASK_BRIEF_OUTCOME:
-            brief = _latest_unattached_case_brief(db, user)
+            brief = _paid_case_brief(db, user)
             value = (text_body or "").strip()
             if not brief:
-                begin_case_brief(db, user, wa_id)
+                begin_paid_brief_preparation(db, user, wa_id)
                 return jsonify({"status": "ok"}), 200
             if interactive_id or not 10 <= len(value) <= 500:
                 send_text(wa_id, t(user, "brief_outcome_retry"))
                 return jsonify({"status": "ok"}), 200
             brief.desired_outcome = value
-            send_case_brief_urgency(db, user, wa_id)
+            user.flow_state = ASK_BRIEF_DOCUMENTS
+            db.commit()
+            send_text(wa_id, t(user, "brief_documents_prompt"))
             return jsonify({"status": "ok"}), 200
 
         if user.flow_state == ASK_BRIEF_URGENCY:
@@ -4201,11 +4505,14 @@ def webhook():
                 user.flow_state = ASK_BRIEF_SAFETY
                 db.commit()
                 send_text(wa_id, t(user, "brief_safety_prompt"))
+            elif urgency_key == "time_sensitive":
+                brief.safety_concerns = "None disclosed"
+                user.flow_state = ASK_BRIEF_DEADLINE
+                db.commit()
+                send_text(wa_id, t(user, "brief_deadline_prompt"))
             else:
                 brief.safety_concerns = "None disclosed"
-                user.flow_state = ASK_BRIEF_DOCUMENTS
-                db.commit()
-                send_text(wa_id, t(user, "brief_documents_prompt"))
+                send_minimum_case_brief_review(db, user, wa_id, brief)
             return jsonify({"status": "ok"}), 200
 
         if user.flow_state == ASK_BRIEF_SAFETY:
@@ -4218,16 +4525,14 @@ def webhook():
                 send_text(wa_id, t(user, "brief_safety_retry"))
                 return jsonify({"status": "ok"}), 200
             brief.safety_concerns = value
-            user.flow_state = ASK_BRIEF_DOCUMENTS
-            db.commit()
-            send_text(wa_id, t(user, "brief_documents_prompt"))
+            send_minimum_case_brief_review(db, user, wa_id, brief)
             return jsonify({"status": "ok"}), 200
 
         if user.flow_state == ASK_BRIEF_DOCUMENTS:
-            brief = _latest_unattached_case_brief(db, user)
+            brief = _paid_case_brief(db, user)
             documents = _parse_case_brief_documents(text_body or "")
             if not brief:
-                begin_case_brief(db, user, wa_id)
+                begin_paid_brief_preparation(db, user, wa_id)
                 return jsonify({"status": "ok"}), 200
             if interactive_id or documents is None:
                 send_text(wa_id, t(user, "brief_documents_retry"))
@@ -4239,10 +4544,10 @@ def webhook():
             return jsonify({"status": "ok"}), 200
 
         if user.flow_state == ASK_BRIEF_OPPOSING_PARTY:
-            brief = _latest_unattached_case_brief(db, user)
+            brief = _paid_case_brief(db, user)
             value = (text_body or "").strip()
             if not brief:
-                begin_case_brief(db, user, wa_id)
+                begin_paid_brief_preparation(db, user, wa_id)
                 return jsonify({"status": "ok"}), 200
             if interactive_id or not 2 <= len(value) <= 240:
                 send_text(wa_id, t(user, "brief_opposing_retry"))
@@ -4252,7 +4557,13 @@ def webhook():
             }:
                 value = "None disclosed"
             brief.opposing_party = value
-            send_case_brief_review(db, user, wa_id, brief)
+            send_case_brief_review(
+                db,
+                user,
+                wa_id,
+                brief,
+                flow_state=REVIEW_PREP_CASE_BRIEF,
+            )
             return jsonify({"status": "ok"}), 200
 
         if user.flow_state == REVIEW_CASE_BRIEF:
@@ -4282,7 +4593,7 @@ def webhook():
                 send_home(wa_id, user)
                 return jsonify({"status": "ok"}), 200
             if interactive_id != BTN_BRIEF_CONFIRM:
-                send_case_brief_review(db, user, wa_id, brief)
+                send_minimum_case_brief_review(db, user, wa_id, brief)
                 return jsonify({"status": "ok"}), 200
             now = utc_now()
             brief.status = "CONFIRMED"
@@ -4299,6 +4610,41 @@ def webhook():
             db.commit()
             send_text(wa_id, t(user, "brief_confirmed"))
             send_available_dates(db, user, wa_id)
+            return jsonify({"status": "ok"}), 200
+
+        if user.flow_state == REVIEW_PREP_CASE_BRIEF:
+            brief = _paid_case_brief(db, user)
+            if not brief:
+                begin_paid_brief_preparation(db, user, wa_id)
+                return jsonify({"status": "ok"}), 200
+            if interactive_id == BTN_PREP_BRIEF_EDIT:
+                brief.legal_stage = None
+                brief.important_dates = None
+                brief.desired_outcome = None
+                brief.opposing_party = None
+                brief.documents_json = "[]"
+                db.commit()
+                send_case_brief_stage(db, user, wa_id, brief)
+                return jsonify({"status": "ok"}), 200
+            if interactive_id == BTN_PREP_BRIEF_SKIP:
+                user.flow_state = PAYMENT_CONFIRMED
+                db.commit()
+                send_text(wa_id, t(user, "brief_preparation_saved"))
+                return jsonify({"status": "ok"}), 200
+            if interactive_id != BTN_PREP_BRIEF_CONFIRM:
+                send_case_brief_review(
+                    db,
+                    user,
+                    wa_id,
+                    brief,
+                    flow_state=REVIEW_PREP_CASE_BRIEF,
+                )
+                return jsonify({"status": "ok"}), 200
+            brief.status = "PREPARED"
+            brief.updated_at = utc_now()
+            user.flow_state = PAYMENT_CONFIRMED
+            db.commit()
+            send_text(wa_id, t(user, "brief_preparation_complete"))
             return jsonify({"status": "ok"}), 200
 
         

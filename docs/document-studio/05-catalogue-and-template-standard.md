@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This standard prevents Document Studio from becoming a folder of unreviewed
+This standard prevents Draft Studio from becoming a folder of unreviewed
 Word files. A product is publishable only when its legal content, intake,
 commercial scope, rendering and operations form one versioned package.
 

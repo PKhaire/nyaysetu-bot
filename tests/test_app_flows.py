@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 from models import (
     Booking,
+    BookingStatus,
     CaseBrief,
     DocumentAnswerRevision,
     DocumentAuditEvent,
@@ -195,6 +196,7 @@ def test_document_studio_home_uses_four_ordered_list_rows(
         "home_documents",
         "home_more",
     ]
+    assert rows[2]["title"] == "Draft Studio"
 
 
 def test_document_studio_whatsapp_flow_starts_for_every_open_user(
@@ -217,6 +219,7 @@ def test_document_studio_whatsapp_flow_starts_for_every_open_user(
         lambda _user=None: True,
     )
     monkeypatch.setattr(document_catalogue, "DOCUMENT_STUDIO_ENABLED", True)
+    monkeypatch.setattr(document_catalogue, "DOCUMENT_STUDIO_PRICE_INR", 299)
     monkeypatch.setattr(
         document_catalogue,
         "DOCUMENT_STUDIO_PRODUCT_ALLOWLIST",
@@ -228,17 +231,18 @@ def test_document_studio_whatsapp_flow_starts_for_every_open_user(
     monkeypatch.setattr(app_module, "is_global_rate_limited", lambda: False)
 
     selections = (
-        "home_documents",
-        "doc_create",
-        "doc_product::mh_residential_leave_licence_11m_self_service",
-        "doc_start::mh_residential_leave_licence_11m_self_service",
+        ("home_documents", None),
+        ("doc_create", None),
+        (None, "1"),
+        ("doc_start::mh_residential_leave_licence_11m_self_service", None),
     )
-    for index, selection in enumerate(selections, start=1):
+    for index, (selection, text) in enumerate(selections, start=1):
         response = _signed_whatsapp_post(
             client,
             _whatsapp_payload(
                 message_id=f"wamid.doc.selection.{index}",
                 interactive_id=selection,
+                text=text,
             ),
         )
         assert response.status_code == 200
@@ -284,6 +288,7 @@ def test_document_studio_capacity_exhaustion_creates_no_draft_or_payment(
         lambda _user=None: True,
     )
     monkeypatch.setattr(document_catalogue, "DOCUMENT_STUDIO_ENABLED", True)
+    monkeypatch.setattr(document_catalogue, "DOCUMENT_STUDIO_PRICE_INR", 299)
     monkeypatch.setattr(
         document_catalogue,
         "DOCUMENT_STUDIO_PRODUCT_ALLOWLIST",
@@ -321,6 +326,175 @@ def test_document_studio_capacity_exhaustion_creates_no_draft_or_payment(
         assert db.query(DocumentCapacityReservation).count() == 0
     finally:
         db.close()
+
+
+def test_document_draft_save_and_exit_preserves_progress(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+):
+    from services import document_catalogue
+    from services.document_studio_rc9_service import create_or_resume_order
+
+    _secure_whatsapp_route(monkeypatch, app_module)
+    monkeypatch.setattr(
+        app_module,
+        "document_studio_available",
+        lambda _user=None: True,
+    )
+    monkeypatch.setattr(document_catalogue, "DOCUMENT_STUDIO_ENABLED", True)
+    monkeypatch.setattr(document_catalogue, "DOCUMENT_STUDIO_PRICE_INR", 299)
+    monkeypatch.setattr(
+        document_catalogue,
+        "DOCUMENT_STUDIO_PRODUCT_ALLOWLIST",
+        frozenset({document_catalogue.PRODUCT_CODE}),
+    )
+    user_id = _create_user(
+        isolated_app_db,
+        flow_state=app_module.DOCUMENT_STUDIO_QUESTION,
+    )
+    db = isolated_app_db()
+    try:
+        order = create_or_resume_order(db, user_id)
+        order_ref = order.public_ref
+        current_step = order.current_step
+        db.commit()
+    finally:
+        db.close()
+
+    response = _signed_whatsapp_post(
+        client,
+        _whatsapp_payload(
+            message_id="wamid.doc.save-exit",
+            interactive_id="doc_save_exit",
+        ),
+    )
+
+    assert response.status_code == 200
+    db = isolated_app_db()
+    try:
+        user = db.get(User, user_id)
+        order = db.query(DocumentOrder).filter_by(public_ref=order_ref).one()
+        assert user.flow_state == app_module.NORMAL
+        assert order.state == "ELIGIBILITY"
+        assert order.current_step == current_step
+    finally:
+        db.close()
+    assert "saved" in transport_spies["text"].call_args.args[1].lower()
+    transport_spies["home"].assert_called_once()
+
+
+def test_document_review_edit_opens_section_picker_without_erasing_answers(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+):
+    from services import document_catalogue
+    from services.document_studio_rc9_service import create_or_resume_order
+
+    _secure_whatsapp_route(monkeypatch, app_module)
+    monkeypatch.setattr(
+        app_module,
+        "document_studio_available",
+        lambda _user=None: True,
+    )
+    monkeypatch.setattr(document_catalogue, "DOCUMENT_STUDIO_ENABLED", True)
+    monkeypatch.setattr(document_catalogue, "DOCUMENT_STUDIO_PRICE_INR", 299)
+    monkeypatch.setattr(
+        document_catalogue,
+        "DOCUMENT_STUDIO_PRODUCT_ALLOWLIST",
+        frozenset({document_catalogue.PRODUCT_CODE}),
+    )
+    user_id = _create_user(
+        isolated_app_db,
+        flow_state=app_module.DOCUMENT_STUDIO_REVIEW,
+    )
+    db = isolated_app_db()
+    try:
+        order = create_or_resume_order(db, user_id)
+        order.state = "DRAFTING"
+        order.current_step = "review"
+        order.draft_answers_json = json.dumps(
+            {"licensor_full_name": "Asha Patil"}
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = _signed_whatsapp_post(
+        client,
+        _whatsapp_payload(
+            message_id="wamid.doc.edit-sections",
+            interactive_id="doc_edit",
+        ),
+    )
+
+    assert response.status_code == 200
+    db = isolated_app_db()
+    try:
+        user = db.get(User, user_id)
+        order = db.query(DocumentOrder).one()
+        assert user.flow_state == app_module.DOCUMENT_STUDIO_EDIT_SECTION
+        assert json.loads(order.draft_answers_json) == {
+            "licensor_full_name": "Asha Patil"
+        }
+    finally:
+        db.close()
+    rows = transport_spies["list"].call_args.kwargs["rows"]
+    assert len(rows) == 5
+    assert rows[1]["id"] == "doc_edit_section::parties"
+
+    response = _signed_whatsapp_post(
+        client,
+        _whatsapp_payload(
+            message_id="wamid.doc.edit-parties",
+            interactive_id="doc_edit_section::parties",
+        ),
+    )
+
+    assert response.status_code == 200
+    db = isolated_app_db()
+    try:
+        user = db.get(User, user_id)
+        order = db.query(DocumentOrder).one()
+        assert user.flow_state == app_module.DOCUMENT_STUDIO_QUESTION
+        assert json.loads(order.draft_answers_json) == {}
+        assert order.current_step == "licensor_full_name"
+    finally:
+        db.close()
+    question_body = transport_spies["buttons"].call_args.args[1]
+    assert "Section 2 of 5" in question_body
+
+
+def test_document_question_uses_list_for_three_choices_and_keeps_save_exit(
+    app_module,
+    transport_spies,
+):
+    user = User(
+        whatsapp_id="919911112222",
+        case_id="NS-DOC-THREE-CHOICES",
+        language="en",
+    )
+    order = DocumentOrder(
+        public_ref="DS-THREE-CHOICES",
+        state="DRAFTING",
+        current_step="fee_payment_mode",
+        draft_answers_json="{}",
+    )
+
+    app_module.send_document_question(user.whatsapp_id, user, order)
+
+    transport_spies["buttons"].assert_not_called()
+    rows = transport_spies["list"].call_args.kwargs["rows"]
+    assert len(rows) == 4
+    assert rows[-1]["id"] == "doc_save_exit"
+    assert "Section 4 of 5" in transport_spies["list"].call_args.kwargs[
+        "body"
+    ]
 
 
 def test_pre_capacity_draft_confirmation_fails_closed_when_day_is_full(
@@ -684,7 +858,7 @@ def test_all_booking_subcategory_lists_stay_within_whatsapp_limit(
         db.close()
 
 
-def test_case_brief_is_confirmed_with_versioned_consent_before_dates(
+def test_minimum_case_brief_is_confirmed_before_appointment_dates(
     monkeypatch,
     app_module,
     client,
@@ -706,12 +880,7 @@ def test_case_brief_is_confirmed_with_versioned_consent_before_dates(
                 "the appropriate legal process."
             )
         },
-        {"interactive_id": "brief_stage::pre_litigation"},
-        {"text": "No known deadline"},
-        {"text": "I want to understand options and the next lawful steps."},
         {"interactive_id": "brief_urgency::standard"},
-        {"text": "2,3"},
-        {"text": "Skip"},
         {"interactive_id": app_module.BTN_BRIEF_CONFIRM},
     ]
 
@@ -736,16 +905,200 @@ def test_case_brief_is_confirmed_with_versioned_consent_before_dates(
         assert brief.status == "CONFIRMED"
         assert brief.consent_version == app_module.CASE_BRIEF_CONSENT_VERSION
         assert brief.consented_at is not None
+        assert brief.urgency == "Standard"
+        assert brief.legal_stage is None
+        assert brief.important_dates is None
+        assert brief.desired_outcome is None
+        assert json.loads(brief.documents_json) == []
+        assert brief.opposing_party is None
+        assert consent.policy_version == app_module.CASE_BRIEF_CONSENT_VERSION
+        assert consent.granted is True
+    finally:
+        db.close()
+    assert transport_spies["list"].call_count >= 1
+
+
+def test_time_sensitive_booking_collects_known_deadline_before_dates(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+):
+    _secure_whatsapp_route(monkeypatch, app_module)
+    user_id = _create_user(
+        isolated_app_db,
+        flow_state=app_module.ASK_SUBCATEGORY,
+        category="Civil",
+    )
+    messages = [
+        {"interactive_id": "subcat::Civil::Property Dispute"},
+        {
+            "text": (
+                "I received a notice and need advice before the stated "
+                "response deadline."
+            )
+        },
+        {"interactive_id": "brief_urgency::time_sensitive"},
+        {"text": "Notice reply is due on 18-09-2026"},
+        {"interactive_id": app_module.BTN_BRIEF_CONFIRM},
+    ]
+
+    for index, message in enumerate(messages, start=1):
+        response = _signed_whatsapp_post(
+            client,
+            _whatsapp_payload(
+                message_id=f"wamid.deadline-brief-{index}",
+                **message,
+            ),
+        )
+        assert response.status_code == 200
+
+    db = isolated_app_db()
+    try:
+        user = db.get(User, user_id)
+        brief = db.query(CaseBrief).one()
+        assert user.flow_state == app_module.ASK_DATE
+        assert brief.important_dates == "Notice reply is due on 18-09-2026"
+    finally:
+        db.close()
+
+
+def test_document_review_keeps_long_facts_out_of_interactive_body(
+    app_module,
+    transport_spies,
+):
+    user = User(
+        whatsapp_id="919911112222",
+        case_id="NS-DOC-LONG-REVIEW",
+        language="en",
+    )
+    long_address = "A" * 450
+    order = DocumentOrder(
+        public_ref="DS-LONG-REVIEW",
+        draft_answers_json=json.dumps(
+            {
+                "licensor_full_name": "Asha Patil",
+                "licensee_full_name": "Rohan Joshi",
+                "licensor_notice_address": long_address,
+                "licensee_notice_address": long_address,
+                "premises_address_lines": long_address,
+                "premises_pin": "411001",
+                "commencement_date": "2026-10-01",
+                "monthly_licence_fee_inr": "25000",
+                "refundable_deposit_inr": "50000",
+            }
+        ),
+    )
+
+    app_module.send_document_review(user.whatsapp_id, user, order)
+
+    assert transport_spies["text"].call_count == 1
+    assert long_address in transport_spies["text"].call_args.args[1]
+    assert len(transport_spies["buttons"].call_args.args[1]) < 1024
+
+
+def test_paid_preparation_enriches_brief_without_affecting_entitlement(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+):
+    _secure_whatsapp_route(monkeypatch, app_module)
+    user_id = _create_user(
+        isolated_app_db,
+        flow_state=app_module.PAYMENT_CONFIRMED,
+        category="Family",
+        subcategory="Divorce",
+        state_name="Maharashtra",
+        district_name="Pune",
+    )
+    db = isolated_app_db()
+    try:
+        user = db.get(User, user_id)
+        booking = Booking(
+            whatsapp_id=user.whatsapp_id,
+            name=user.name,
+            phone=user.whatsapp_id,
+            state_name=user.state_name,
+            district_name=user.district_name,
+            category=user.category,
+            subcategory=user.subcategory,
+            date=(datetime.now(timezone.utc) + timedelta(days=2)).date(),
+            slot_code="10_11",
+            slot_readable="10:00 AM - 11:00 AM",
+            amount=499,
+            status=BookingStatus.PAID,
+            payment_processed=True,
+            payment_token="paid-preparation-token",
+            razorpay_payment_link_id="plink_paid_preparation",
+            razorpay_payment_id="pay_paid_preparation",
+        )
+        db.add(booking)
+        db.flush()
+        db.add(
+            CaseBrief(
+                user_id=user.id,
+                booking_id=booking.id,
+                status="CONFIRMED",
+                issue_summary=(
+                    "My spouse and I separated and I need legal advice."
+                ),
+                urgency="Standard",
+                safety_concerns="None disclosed",
+                preferred_language="en",
+                documents_json="[]",
+                consent_version=app_module.CASE_BRIEF_CONSENT_VERSION,
+                consented_at=datetime.now(timezone.utc),
+                confirmed_at=datetime.now(timezone.utc),
+            )
+        )
+        db.commit()
+        booking_id = booking.id
+    finally:
+        db.close()
+
+    messages = [
+        {"interactive_id": app_module.BTN_PREPARE_ADVOCATE},
+        {"interactive_id": "brief_stage::pre_litigation"},
+        {"text": "Separated in June; no hearing date is known."},
+        {
+            "text": (
+                "I want to understand the lawful options and the first "
+                "three steps I should take."
+            )
+        },
+        {"text": "2,3"},
+        {"text": "Skip"},
+        {"interactive_id": app_module.BTN_PREP_BRIEF_CONFIRM},
+    ]
+    for index, message in enumerate(messages, start=1):
+        response = _signed_whatsapp_post(
+            client,
+            _whatsapp_payload(
+                message_id=f"wamid.paid-preparation-{index}",
+                **message,
+            ),
+        )
+        assert response.status_code == 200
+
+    db = isolated_app_db()
+    try:
+        booking = db.get(Booking, booking_id)
+        brief = db.query(CaseBrief).filter_by(booking_id=booking_id).one()
+        assert booking.status == BookingStatus.PAID
+        assert booking.payment_processed is True
+        assert brief.status == "PREPARED"
+        assert brief.legal_stage == "Before court or formal filing"
+        assert brief.desired_outcome.startswith("I want to understand")
         assert json.loads(brief.documents_json) == [
             "Agreement or contract",
             "Receipt or payment proof",
         ]
         assert brief.opposing_party == "None disclosed"
-        assert consent.policy_version == app_module.CASE_BRIEF_CONSENT_VERSION
-        assert consent.granted is True
     finally:
         db.close()
-    assert transport_spies["list"].call_count >= 2
 
 
 def test_menu_is_persistent_and_does_not_destroy_booking_progress(
@@ -949,6 +1302,8 @@ def test_booking_home_action_shows_scope_before_collecting_details(
 
     prompt = transport_spies["buttons"].call_args.args[1]
     assert str(app_module.BOOKING_PRICE) in prompt
+    assert "minutes" in prompt.lower()
+    assert "after payment" in prompt.lower()
 
 
 def test_legal_guides_form_a_multilingual_tree_with_feedback_and_booking(

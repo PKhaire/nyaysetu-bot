@@ -71,6 +71,8 @@ infrastructure and concurrency/load/provider-limit tests pass.
 | `services/maintenance_service.py` | Bounded retention enforcement and operational-risk reporting |
 | `services/document_catalogue.py` | Immutable product scope, questionnaire schema, template and aggregate hashes |
 | `services/document_studio_rc9_service.py` | Eligibility, resumable answer capture, immutable revisions and review state |
+| `services/postal_reference_service.py` | Local, bounded Maharashtra PIN hints and release-bound source manifest |
+| `jobs/build_maharashtra_pincode_reference.py` | Reviewed deterministic refresh of the packaged official postal subset |
 | `services/document_release_service.py` | Exact append-only advocate approval and golden-render publication gate |
 | `services/document_renderer.py` | Deterministic watermarked preview and final PDF/DOCX generation |
 | `services/document_payment_service.py` | Exact Razorpay order payment validation and final artifact publication |
@@ -117,13 +119,13 @@ approval because assignment and confirmation messages are sent manually.
 
 The state machine includes language, AI consent, booking-scope review, identity
 and location collection, category/subcategory, date/slot, booking review,
-payment waiting, paid AI, Document Studio eligibility/questionnaire/review,
+payment waiting, paid AI, Draft Studio eligibility/questionnaire/review,
 support, and feedback states. `home`/`menu` is persistent and does not erase an
 in-progress consultation or document draft.
 
-## Document Studio lifecycle
+## Draft Studio lifecycle
 
-Document Studio is a deep module with four distinct boundaries: an immutable
+Draft Studio is a deep module with four distinct boundaries: an immutable
 catalogue, a workflow aggregate, an exact publication gate, and a private
 artifact vault. The WhatsApp adapter selects the global product and delegates
 answer validation and transitions; it does not embed legal clauses or storage
@@ -143,7 +145,7 @@ There is no user-sampling bypass. The product switch is global; when enabled,
 all users see the same catalogue while the exact legal and infrastructure
 gates remain fail-closed.
 
-Payment uses the shared signed Razorpay endpoint but resolves a Document Studio
+Payment uses the shared signed Razorpay endpoint but resolves a Draft Studio
 order independently of consultation bookings. Only exact authenticated
 current-provider evidence renders final artifacts. Objects are stored private
 with server-side encryption, metadata hashes and random order-based keys.
@@ -310,7 +312,7 @@ Limitations:
 ## Persistence and schema
 
 Core tables are `users`, `bookings`, `category_analytics`, `conversations`, and
-`advocates`. Document Studio uses `document_orders`, immutable
+`advocates`. Draft Studio uses `document_orders`, immutable
 `document_answer_revisions`, `document_capacity_reservations`,
 `document_artifacts`, append-only
 `document_access_events`, and append-only `document_template_approvals`.
@@ -323,7 +325,7 @@ blackouts/overrides, `admin_operators`, `admin_recovery_codes`, and
 
 Alembic revision `20260729_01` is the production baseline and `20260908_01` is
 the current production head. Revisions `20260818_01` and `20260819_01` add the
-case-brief and initial Document Studio ledgers; `20260827_01` adds the
+case-brief and initial Draft Studio ledgers; `20260827_01` adds the
 governed RC9 revision, artifact, access-event, and exact release-approval
 controls; `20260903_01` adds global daily-capacity evidence. On an empty database
 it creates the application and reliability/operations schema; `20260908_01`

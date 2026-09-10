@@ -2,7 +2,7 @@
 
 ## Objective
 
-Document Studio helps a person prepare a structured legal document without
+Draft Studio helps a person prepare a structured legal document without
 typing a free-form prompt or knowing legal drafting terminology. It collects
 only the facts required for a selected product, explains material choices,
 validates completeness, shows a preview before payment, and preserves the exact
@@ -129,7 +129,7 @@ classification, price, scope and refund/revision terms.
 
 ## Bot entry and navigation
 
-WhatsApp reply buttons support only three actions. At Document Studio launch,
+WhatsApp reply buttons support only three actions. At Draft Studio launch,
 the home changes to a list-style service menu so all four primary destinations
 remain visible and **More Options** stays last:
 
@@ -140,13 +140,13 @@ Hi / MENU
         General legal information
      2. Book Consultation
         Schedule a paid consultation
-     3. Document Studio
+     3. Draft Studio
         Create agreements and notices
      4. More Options
         Appointments, guides, support, privacy and language
 ```
 
-The Document Studio landing list contains:
+The Draft Studio landing list contains:
 
 1. **Create a document** - show only active, approved products.
 2. **Continue a draft** - resume the latest eligible in-progress order.

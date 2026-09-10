@@ -147,6 +147,7 @@ def test_deployment_commands_and_render_release_controls_exist():
     assert "DOCUMENT_STUDIO_UAT_ONLY" not in blueprint
     assert "DOCUMENT_STUDIO_TESTER_WA_IDS" not in blueprint
     assert "- key: DOCUMENT_STUDIO_PRICE_INR" in blueprint
+    assert "- key: DOCUMENT_STUDIO_PRODUCT_PRICES_INR" in blueprint
     assert (
         '- key: DOCUMENT_STUDIO_DAILY_CAPACITY\n        value: "10"'
         in blueprint
@@ -170,6 +171,36 @@ def test_render_only_schedules_existing_operational_modules():
     assert "python -m jobs.consultation_reminders" in blueprint
     assert 'schedule: "*/5 * * * *"' in blueprint
     assert 'schedule: "*/10 * * * *"' in blueprint
+
+
+def test_multi_product_price_map_is_strict_and_immutable(monkeypatch):
+    from config import env_inr_price_map
+
+    monkeypatch.setenv(
+        "TEST_DOCUMENT_PRICES",
+        "first_product=299,second_product=499",
+    )
+    prices = env_inr_price_map("TEST_DOCUMENT_PRICES", {})
+
+    assert dict(prices) == {
+        "first_product": 299,
+        "second_product": 499,
+    }
+    with pytest.raises(TypeError):
+        prices["first_product"] = 1
+
+    invalid_values = (
+        "first_product=0",
+        "first_product=299,first_product=499",
+        "first product=299",
+        "first_product=299.50",
+        "first_product=100001",
+        "unknown",
+    )
+    for value in invalid_values:
+        monkeypatch.setenv("TEST_DOCUMENT_PRICES", value)
+        with pytest.raises(ValueError):
+            env_inr_price_map("TEST_DOCUMENT_PRICES", {})
 
 
 def test_render_pins_operational_policy_for_maintenance():
@@ -197,6 +228,7 @@ def test_render_pins_operational_policy_for_maintenance():
         "DOCUMENT_STUDIO_DOWNLOAD_TTL_SECONDS": 2,
         "DOCUMENT_STUDIO_FINAL_TTL_DAYS": 1,
         "DOCUMENT_STUDIO_PRICE_INR": 1,
+        "DOCUMENT_STUDIO_PRODUCT_PRICES_INR": 1,
         "DOCUMENT_STUDIO_S3_BUCKET": 3,
         "DOCUMENT_STUDIO_S3_REGION": 3,
         "DOCUMENT_STUDIO_S3_ACCESS_KEY_ID": 3,
@@ -230,6 +262,7 @@ def test_render_pins_operational_policy_for_maintenance():
     )
     for key in {
         "DOCUMENT_STUDIO_PRICE_INR",
+        "DOCUMENT_STUDIO_PRODUCT_PRICES_INR",
         "DOCUMENT_STUDIO_FINAL_TTL_DAYS",
         "DOCUMENT_STUDIO_DOWNLOAD_TTL_SECONDS",
         "DOCUMENT_STUDIO_S3_BUCKET",

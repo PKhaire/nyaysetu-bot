@@ -1,4 +1,4 @@
-"""Fail-closed publication gate for immutable Document Studio packages."""
+"""Fail-closed publication gate for immutable Draft Studio packages."""
 
 from __future__ import annotations
 
@@ -7,7 +7,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from models import DocumentTemplateApproval, utc_now
-from services.document_catalogue import DocumentProduct, resolve_product
+from services.document_catalogue import (
+    PRODUCT_CODE,
+    DocumentProduct,
+    catalogue_configuration,
+    resolve_product,
+)
 from services.document_renderer import golden_hashes
 
 
@@ -22,10 +27,10 @@ class ReleaseGate:
     approval_id: int | None = None
 
 
-def release_manifest(product: DocumentProduct | None = None) -> dict:
+def release_manifest(product_code: str = PRODUCT_CODE) -> dict:
     """Return the exact non-secret package identity an advocate approves."""
 
-    product = product or resolve_product()
+    product = resolve_product(product_code)
     pdf_hash, docx_hash = golden_hashes(product)
     return {
         "product_code": product.code,
@@ -63,10 +68,16 @@ def approval_for_product(db, product: DocumentProduct) -> DocumentTemplateApprov
     )
 
 
-def release_gate(db, product: DocumentProduct | None = None) -> ReleaseGate:
+def release_gate(
+    db,
+    product_code: str = PRODUCT_CODE,
+) -> ReleaseGate:
     """Verify legal evidence and golden render hashes before monetisation."""
 
-    product = product or resolve_product()
+    try:
+        product = resolve_product(product_code)
+    except KeyError:
+        return ReleaseGate(False, "UNKNOWN_DOCUMENT_PRODUCT")
     if product.price_minor <= 0:
         return ReleaseGate(False, "PRICE_NOT_CONFIGURED")
     approval = approval_for_product(db, product)
@@ -90,10 +101,58 @@ def release_gate(db, product: DocumentProduct | None = None) -> ReleaseGate:
     return ReleaseGate(True, "APPROVED", approval.id)
 
 
-def validate_approval_payload(payload: dict) -> dict:
+def release_readiness(db) -> dict[str, object]:
+    """Return release evidence for every globally configured product."""
+
+    configuration = catalogue_configuration()
+    products: dict[str, dict[str, object]] = {}
+    first_failure: str | None = None
+    for product_code in configuration.enabled_product_codes:
+        gate = release_gate(db, product_code)
+        item: dict[str, object] = {
+            "ok": gate.allowed,
+            "reason_code": gate.reason_code,
+        }
+        try:
+            product = resolve_product(product_code)
+        except KeyError:
+            pass
+        else:
+            item.update(
+                {
+                    "template_version": product.template_version,
+                    "output_classification": product.output_classification,
+                }
+            )
+        products[product_code] = item
+        if not gate.allowed and first_failure is None:
+            first_failure = gate.reason_code
+
+    ok = bool(
+        configuration.ok
+        and configuration.reason_code in {"CONFIGURED", "DISABLED"}
+        and all(item["ok"] for item in products.values())
+    )
+    reason_code = (
+        configuration.reason_code
+        if not configuration.ok
+        else first_failure or configuration.reason_code
+    )
+    if ok and products:
+        reason_code = "APPROVED"
+    return {
+        "ok": ok,
+        "reason_code": reason_code,
+        "products": products,
+    }
+
+
+def _validate_approval_payload(
+    payload: dict,
+    product: DocumentProduct,
+) -> dict:
     """Normalize a privileged approval record without accepting ambiguity."""
 
-    product = resolve_product()
     required_text = (
         "reviewer_name",
         "reviewer_enrolment_ref",
@@ -151,11 +210,26 @@ def validate_approval_payload(payload: dict) -> dict:
     }
 
 
-def record_approval(db, payload: dict, *, recorded_by: str) -> DocumentTemplateApproval:
+def validate_approval_payload(
+    payload: dict,
+    product_code: str = PRODUCT_CODE,
+) -> dict:
+    """Validate an approval against an explicitly selected product."""
+
+    return _validate_approval_payload(payload, resolve_product(product_code))
+
+
+def record_approval(
+    db,
+    payload: dict,
+    *,
+    recorded_by: str,
+    product_code: str = PRODUCT_CODE,
+) -> DocumentTemplateApproval:
     """Append authenticated evidence; never silently overwrite history."""
 
-    product = resolve_product()
-    values = validate_approval_payload(payload)
+    product = resolve_product(product_code)
+    values = _validate_approval_payload(payload, product)
     approval = DocumentTemplateApproval(
         product_code=product.code,
         template_version=product.template_version,

@@ -60,7 +60,7 @@ When a product is active, use a WhatsApp list in this order:
 
 1. Ask Legal Question
 2. Book Consultation
-3. Document Studio
+3. Draft Studio
 4. More Options
 
 On list failure use numbered text and accept `1`-`4` plus stable commands.

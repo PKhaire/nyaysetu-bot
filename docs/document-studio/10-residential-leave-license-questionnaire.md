@@ -1,108 +1,102 @@
 # Questionnaire Contract: Maharashtra Residential Leave and Licence
 
-This is the stable intake contract for advocate and engineering review. Field
-codes, types, conditions and clause mappings are versioned.
+**Active schema:** `mh-ll-questionnaire-2026-09-v3`
 
-## Data rules
+**Runtime rule:** exactly one questionnaire schema is active for every user.
+
+This contract replaces the test-only 43-question prototype. No real customer
+used that prototype, so there is no public compatibility or migration path.
+Question codes, order, conditions, validations and derivations are hashed as
+part of the release package.
+
+## Data and navigation rules
 
 - Collect no Aadhaar, PAN, bank account, signature image or identity-document
-  upload in V1.
-- Normalize whitespace/Unicode and preserve confirmed display values.
+  upload.
+- Normalize whitespace and preserve the customer-confirmed display values.
 - Reject control characters, markup and values over field limits.
-- Never infer an unknown legal fact; uncertainty routes to consultation.
-- Show a grouped final summary and require explicit confirmation.
+- Never infer an unknown legal fact. An ineligible scope answer routes to
+  consultation without creating a payment entitlement.
+- A conditional detail is not shown when its controlling answer is `NO`.
+- Official postal data provides suggestions only. The customer types and
+  confirms the complete property address.
+- Show the exact parties, notice addresses, premises, dates and money terms in
+  the final review.
+- Present the journey as five sections, allow `Save & Exit` without deleting
+  answers, and let review correction reopen only the selected section.
 
-## A. Eligibility
+## A. Grouped eligibility
 
-| Field code | Meaning | Validation/effect |
+| Field code | Required confirmation | Effect |
 | --- | --- | --- |
-| `property_state` | Property state | Must be `MAHARASHTRA`; EL-01 |
-| `premises_use` | Intended use | Must be `RESIDENTIAL`; EL-02 |
-| `party_structure` | Party count/type | One individual each; EL-03 |
-| `parties_adult_competent` | Both adults able to understand/agree | Explicit yes; EL-04/11 |
-| `self_represented_parties` | Both act for themselves | Explicit yes; EL-05 |
-| `licensor_authority_confirmed` | Licensor confirms authority | Yes required; EL-06 |
-| `existing_dispute` | Title/possession/tenancy/eviction dispute | No required; EL-07 |
-| `conflicting_occupant` | Conflicting occupant exists | No required; EL-08 |
-| `term_months` | Duration | Fixed `11`, confirmed; EL-09 |
-| `standard_terms_accepted` | No custom clauses | Explicit yes; EL-12 |
-| `external_steps_understood` | Execution/fees/registration external | Explicit yes; EL-14 |
+| `property_eligibility` | Maharashtra, completed/occupiable premises, private residential use | `YES` required |
+| `party_eligibility` | One adult individual licensor and licensee, each acting personally | `YES` required |
+| `authority_dispute_eligibility` | Licensor states authority; no material property/occupation dispute or conflicting claimant | `YES` required |
+| `standard_product_terms` | Fixed 11-month/no-lock-in/notice/use/external-execution scope is suitable | `YES` required |
 
-Failures produce a reason-coded route, not a legal conclusion.
+Any `NO` routes out with a reason code. The grouped wording is visible in full
+and each answer remains in the immutable confirmed snapshot.
 
-## B. Parties
+## B. Parties and addresses
 
-| Field code | Meaning | Validation |
+| Field code | Meaning | Validation/condition |
 | --- | --- | --- |
-| `licensor_full_name` | Legal full name for draft | 2-120 chars, bounded punctuation |
-| `licensor_age_years` | Age | Integer 18-120; not date of birth |
-| `licensor_notice_address` | Notice address | Structured; max 500 rendered chars |
-| `licensee_full_name` | Legal full name for draft | Same controls |
-| `licensee_age_years` | Age | Integer 18-120 |
-| `licensee_notice_address` | Notice address | Structured; max 500 rendered chars |
+| `licensor_full_name` | Licensor legal name | 2-120 bounded characters |
+| `licensor_age_years` | Licensor age | Integer 18-120; do not collect date of birth |
+| `licensee_full_name` | Licensee legal name | 2-120 bounded characters |
+| `licensee_age_years` | Licensee age | Integer 18-120 |
+| `premises_pin` | Property PIN | Six digits |
+| `premises_address_lines` | Complete customer-entered property description | Bounded text; postal hints are not copied as legal facts |
+| `premises_address_confirmed` | Exact rendered address check | `CONFIRM` or return to address entry |
+| `licensor_notice_address` | Licensor notice address | Complete bounded response |
+| `licensee_address_same_as_premises` | Explicit reuse decision | `YES` copies the confirmed premises address |
+| `licensee_notice_address` | Separate licensee notice address | Required only when the reuse decision is `NO` |
 
-The summary warns that identity is not verified and names must be checked
-against documents used for execution/registration.
+The renderer adds `Maharashtra` and the confirmed PIN when the customer did
+not already include them. It does not infer a unit, building, road, locality,
+taluka, ownership or authority.
 
-## C. Premises
-
-| Field code | Meaning | Validation |
-| --- | --- | --- |
-| `premises_unit` | Flat/house/unit | Required, max 80 |
-| `premises_building` | Building/society | Optional, max 120 |
-| `premises_floor` | Floor | Optional, max 30 |
-| `premises_street_area` | Street/locality | Required, max 160 |
-| `premises_city` | City/town/village | Required, max 100 |
-| `premises_taluka` | Taluka | Required, max 100 |
-| `premises_district` | District | Controlled Maharashtra district list |
-| `premises_pin` | PIN | Six digits |
-| `premises_property_reference` | CTS/survey reference if known | Optional bounded text; no title inference |
-| `included_areas` | Parking/terrace/store | Controlled options and bounded identifiers |
-
-Unknown or disputed property identity routes out.
-
-## D. Dates and money
+## C. Dates and money
 
 | Field code | Meaning | Validation/derivation |
 | --- | --- | --- |
-| `commencement_date` | Start date | Valid date; IST presentation |
-| `expiry_date` | End date | Derived for 11 months ending one day earlier; display/confirm |
-| `monthly_licence_fee_inr` | Monthly fee | Positive bounded integer INR |
-| `fee_due_day` | Monthly due day | 1-28 |
-| `fee_payment_mode` | Payment method | `BANK_TRANSFER`, `UPI` or `ACCOUNT_PAYEE_CHEQUE`; no account data |
-| `refundable_deposit_inr` | Refundable deposit | Integer INR; zero allowed |
-| `deposit_refund_days` | Target return timing | Fixed seven business days; not customer-editable |
-| `non_refundable_consideration_inr` | Non-refundable premium | Must be zero in V1; otherwise route out |
-| `maintenance_payer` | Property tax/society maintenance | Fixed `LICENSOR`; another allocation routes out |
-| `utilities_payer` | Metered consumption utilities | Fixed `LICENSEE`; shared/unusual allocation routes out |
+| `commencement_date` | Start date | Valid permitted date; normalized to ISO |
+| `expiry_date` | End date | Derived as 11 months ending one day earlier |
+| `monthly_licence_fee_inr` | Monthly fee | Whole INR, 1-100,000,000 |
+| `fee_due_day` | Monthly due day | Integer 1-28 |
+| `fee_payment_mode` | Contractual payment method | Bank transfer, UPI or account-payee cheque; no account data |
+| `refundable_deposit_inr` | Refundable deposit | Whole INR, zero permitted |
 
-Display amounts in words and digits. Any stamp-duty figure is informational
-and requires current official calculation/disclaimer.
+The renderer displays money in digits and words. Fixed product allocations and
+rules remain part of the reviewed product/template contract rather than
+repeated customer questions.
 
-## E. Occupation and standard terms
+## D. Optional details
 
-| Field code | Meaning | Validation |
+The first control is `optional_details_mode`. `SKIP` bypasses every optional
+property, occupant and inventory question in one response; `ADD` opens the
+following conditional controls.
+
+| Control field | Detail field | Behaviour |
 | --- | --- | --- |
-| `permitted_occupant_count` | Total resident count including licensee | Integer 1-6 |
-| `permitted_occupant_names` | Other occupants | Optional names; no IDs; bounded |
-| `furnishing_level` | Furnishing | Controlled enum |
-| `inventory_summary` | Short inventory schedule | Optional, maximum 25 bounded lines; no upload |
-| `notice_period_days` | Ordinary termination notice | Fixed 30 calendar days |
-| `inspection_notice_hours` | Prior inspection notice | Fixed 24 hours, subject to genuine emergency |
-| `no_lock_in_ack` | No lock-in or minimum stay | Explicit yes |
-| `possession_condition_ack` | Vacant possession/condition understood | Yes |
-| `no_transfer_ack` | No assignment/sub-licensing | Yes |
-| `lawful_residential_use_ack` | Lawful residential use | Yes |
+| `property_reference_present` | `premises_property_reference` | Ask exact CTS/survey/reference only after `YES`; otherwise derive `NONE` |
+| `included_areas_present` | `included_areas` | Ask exact parking/storage/terrace identifiers only after `YES`; otherwise derive `NONE` |
+| `other_occupants_present` | `permitted_occupant_names` | Up to five other names after `YES`; total count is licensee plus names |
+| `inventory_present` | `inventory_items` | Up to 25 comma-separated items after `YES`; otherwise derive `NONE` |
 
-The seven-day curable-breach period, no-automatic-renewal rule, no-self-help
-rule and selected cost/repair allocation are system terms rather than customer
-inputs. Any requested variation routes to consultation. See the
-[V1 Legal-Drafting Decision Record](15-v1-legal-drafting-decision-record.md).
+These values identify what the parties describe; they do not verify title.
 
-## Confirmation evidence
+`furnishing` is not collected because the current candidate template does not
+render or route on it.
 
-Record consent/disclosure versions, schema version, normalized payload hash and
-confirmation time. State that the customer supplied/checked facts; identity,
-title and authority were not verified; output is not advice/advocate approval;
-execution/fees/registration remain external; and changing an answer creates a
-new revision that invalidates the prior preview.
+## Typical path and confirmation evidence
+
+The path with one licensee notice address reused from the premises and no
+optional property/occupant/inventory details reaches review after 19 answers,
+down from 43. Positive optional branches add only their relevant detail.
+
+Confirmation records the consent/disclosure version, schema version,
+normalized payload hash and time. The review states that the customer supplied
+and checked the facts; identity, title and authority are not verified; the
+output is not legal advice or advocate approval; and stamping, signing,
+registration and statutory fees remain external.

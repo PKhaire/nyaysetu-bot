@@ -25,12 +25,13 @@ of outcome.
 - Helpful/not-helpful guide feedback with guide, support, and consultation
   handoffs.
 - Name, district/state, category, and subcategory intake.
-- Structured case-brief intake before slot selection: issue summary, current
-  legal stage, important dates, desired outcome, urgency/safety cue,
-  document-availability checklist, and optional opposing-party name.
-- A separate, short WhatsApp confirmation records versioned consent before
-  the brief can be attached to a paid booking. The product accepts no document
-  uploads in this release.
+- Minimum case-brief intake before slot selection: issue summary and urgency,
+  plus an exact known deadline or safety note only when applicable.
+- A short WhatsApp confirmation records versioned consent before the minimum
+  brief can be attached to a booking. After payment, `Prepare for advocate`
+  collects stage, chronology, desired help/questions, available document types
+  and optional opposing-party name. The paid appointment remains valid when
+  that optional preparation is incomplete.
 - District ambiguity resolution through a WhatsApp list.
 - IST-aware, capacity-filtered consultation dates and five daily time slots.
 - Transparent service/fee introduction and full review before payment-link
@@ -45,11 +46,13 @@ of outcome.
 - Manual receipt resend; optional automatic PDF receipt delivery.
 - Optional deduplicated 24-hour/2-hour consultation reminders, disabled until
   exact Meta-approved language/template pairs are configured.
-- A globally visible Document Studio entry when the product-level switch is
+- A globally visible Draft Studio entry when the product-level switch is
   enabled; there is no tester phone list, cohort, or percentage sampling.
-- A privacy-minimised eligibility screen and 43-question English questionnaire
+- One globally active, privacy-minimised, conditional English questionnaire
   for the Maharashtra 11-month residential leave-and-licence self-service
-  draft. Ineligible or out-of-scope matters are routed out before payment.
+  draft. Its typical no-optionals path uses 19 answers across five visible
+  sections. Ineligible or
+  out-of-scope matters are routed out before payment.
 - Immutable answer revisions, an exact advocate-approved release gate,
   watermarked preview PDF, exact Razorpay payment verification, and private
   time-limited PDF/DOCX delivery.
@@ -61,7 +64,7 @@ menu, also available through `home`, `menu`, or `help`:
 
 - Ask Legal Question.
 - Book a consultation.
-- Document Studio, when the global product switch is enabled.
+- Draft Studio, when the global product switch is enabled.
 - More options.
 
 More options contains appointment status, consultation preparation, legal
@@ -78,13 +81,13 @@ bot shows payment/status/support options instead of silently starting a second
 booking.
 
 WhatsApp permits at most three reply buttons. NyaySetu therefore renders the
-four top-level choices as a list rather than hiding Document Studio behind a
-tester-only route. Disabling the single product switch removes Document Studio
+four top-level choices as a list rather than hiding Draft Studio behind a
+tester-only route. Disabling the single product switch removes Draft Studio
 for everyone; enabling it makes the same catalogue visible to every user. A
 separate release gate still blocks preview/payment if the exact deployed
 template package lacks a current authenticated advocate approval.
 
-## Document Studio flow
+## Draft Studio flow
 
 The first governed product is
 `mh_residential_leave_licence_11m_self_service`: an English self-service draft
@@ -92,7 +95,7 @@ for a Maharashtra residential leave-and-licence arrangement of up to 11
 months, between one adult individual licensor and one adult individual
 licensee, both acting for themselves, for completed residential premises.
 
-1. The user opens Document Studio, sees the scope, price, retention notice and
+1. The user opens Draft Studio, sees the scope, price, retention notice and
    safety boundary, and chooses to create or resume a draft. A new draft
    atomically reserves one of the globally shared India-business-day slots;
    resuming the same draft does not consume another slot. When capacity is
@@ -103,8 +106,11 @@ licensee, both acting for themselves, for completed residential premises.
    security/loan arrangement, or other excluded condition routes the user to
    support/consultation without creating a payment entitlement and releases an
    unconsumed slot. Explicit cancellation and retention expiry do the same.
-3. The eligible user completes the bounded 43-question questionnaire. Answers
-   are validated against the catalogue schema and saved as immutable numbered
+3. The eligible user completes the single active conditional questionnaire.
+   Four grouped confirmations preserve the material eligibility boundaries;
+   PIN assistance suggests postal metadata, while the customer types and
+   confirms the complete property address. Optional details open only when
+   applicable. Answers are validated and saved as immutable numbered
    revisions; the working draft can be resumed for seven days.
 4. The review message presents material terms and versioned consent. NyaySetu
    does not request Aadhaar/PAN numbers, bank credentials, identity documents,
@@ -172,17 +178,25 @@ confirm or restart detail collection.
 
 ### Structured case brief and consent
 
-After category/subcategory selection, the bot collects a privacy-minimised
-brief. It tells the user not to send Aadhaar/PAN numbers, passwords, banking
-details, or document images. The document step records only whether common
-document types are available; it does not accept or store files.
+After category/subcategory selection, the bot collects only the issue summary
+and urgency before availability. A time-sensitive answer opens one exact-known-
+deadline prompt; an immediate-safety answer displays the emergency limitation
+and opens the bounded safety-note prompt. Standard matters receive neither
+extra prompt. The bot warns the user not to send Aadhaar/PAN numbers,
+passwords, banking details or document images.
 
-The complete factual review is sent as an ordinary WhatsApp message. A second,
-bounded interactive message states the assigned-registered-advocate sharing
-purpose, consent version, and privacy URL. **Confirm brief** records both the
-brief consent fields and the `ADVOCATE_CASE_BRIEF_SHARING` user-consent row;
-**Edit brief** starts a fresh draft and **Cancel** prevents assignment. Only a
-confirmed brief can be linked to the booking created for the payment link.
+The minimum factual review and separate bounded consent message precede slot
+selection. **Confirm brief** records the brief consent fields and the
+`ADVOCATE_CASE_BRIEF_SHARING` consent row. Only this confirmed minimum brief is
+linked to the booking created for the payment link.
+
+After verified payment, the success message offers **Prepare for advocate**.
+That resumable flow collects the legal stage, short chronology/important dates,
+desired help plus up to three questions, available document types, and the
+optional opposing-party name. Confirmation changes the attached brief to
+`PREPARED`. Saving it incomplete or never starting it does not revoke, hide or
+delay the paid appointment. The appointment desk displays preparation as
+`INCOMPLETE` or `COMPLETE`.
 
 Immediate-safety selection displays an emergency limitation and captures a
 short operational note; NyaySetu does not present itself as an emergency
@@ -350,7 +364,7 @@ Implemented:
   `python -m jobs.reconcile_payments --limit 100`.
 - Template-gated reminder scheduling: `python -m jobs.consultation_reminders`.
 - Bounded retention and operational-risk maintenance.
-- Governed Document Studio catalogue, questionnaire, release-approval ledger,
+- Governed Draft Studio catalogue, questionnaire, release-approval ledger,
   deterministic PDF/DOCX rendering, private object storage, exact payment
   confirmation, download audit, and retention deletion.
 - Category and privacy-minimised product analytics events.
@@ -450,7 +464,7 @@ production provisioning gates below are complete:
   manual operator notification procedure. Any future email-enabled release
   requires approved Amazon SES identity/domain, authentication records,
   production access, monitored configuration set, and recipients.
-- Document Studio remains disabled until the exact RC9 hashes have a current
+- Draft Studio remains disabled until the exact RC9 hashes have a current
   authenticated licensed-Maharashtra-advocate approval, a non-zero reviewed
   price, a private S3 bucket with least-privilege credentials and lifecycle
   controls, and tested preview/payment/final-download/expiry evidence.

@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 import admin
 from db import Base
+from services import document_catalogue as catalogue
 from models import (
     AdminAuditEvent,
     Advocate,
@@ -28,6 +29,7 @@ from models import (
     utc_now,
 )
 from services.document_operations_service import DocumentOperationResult
+from services.document_catalogue import PRODUCT_CODE
 from services.engagement_service import booking_status_message
 from services.admin_identity_service import (
     begin_operator_enrollment,
@@ -635,6 +637,7 @@ def test_queue_masks_contact_and_reveal_and_manual_handover_are_audited(
     assert queue_item["contact_masked"] == "••••••1234"
     assert "whatsapp_id" not in queue_item
     assert queue_item["case_brief"]["issue_summary"].startswith("A family")
+    assert queue_item["case_brief"]["preparation_status"] == "INCOMPLETE"
 
     missing_reason = client.post(
         f"/admin/fulfillments/{booking_id}/contact-reveal",
@@ -1113,6 +1116,153 @@ def test_document_studio_ledger_excludes_answers_and_contact_data(
     assert "Do Not Expose This Answer" not in serialized
     assert "919900009999" not in serialized
     assert "Private Synthetic User" not in serialized
+
+
+def test_document_release_endpoint_uses_explicit_product_code(
+    client,
+    admin_db,
+):
+    response = client.get(
+        f"/admin/document-template-release?product_code={PRODUCT_CODE}",
+        headers=_headers(),
+    )
+    unknown = client.get(
+        "/admin/document-template-release?product_code=unknown_product",
+        headers=_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["manifest"]["product_code"] == PRODUCT_CODE
+    assert unknown.status_code == 404
+    assert unknown.get_json() == {"error": "unknown_document_product"}
+
+
+def test_document_admin_views_filter_by_registered_product(
+    client,
+    admin_db,
+):
+    db = admin_db()
+    try:
+        user = User(
+            whatsapp_id="919911110001",
+            case_id="NS-PRODUCT-FILTER",
+        )
+        db.add(user)
+        db.flush()
+        current = DocumentOrder(
+            public_ref="DS-PRODUCT-CURRENT",
+            user_id=user.id,
+            product_code=PRODUCT_CODE,
+            template_version="current-v1",
+            state="DRAFTING",
+            current_step="review",
+            draft_answers_json="{}",
+            output_classification="SELF_SERVICE_DRAFT",
+        )
+        other = DocumentOrder(
+            public_ref="DS-PRODUCT-OTHER",
+            user_id=user.id,
+            product_code="historical_removed_product",
+            template_version="historical-v1",
+            state="ABANDONED",
+            current_step="closed",
+            draft_answers_json="{}",
+            output_classification="SELF_SERVICE_DRAFT",
+        )
+        db.add_all((current, other))
+        db.flush()
+        db.add_all(
+            (
+                AdminAuditEvent(
+                    operator_id="test-operator",
+                    action="document_order.reconcile",
+                    target_type="document_order",
+                    target_id=current.public_ref,
+                ),
+                AdminAuditEvent(
+                    operator_id="test-operator",
+                    action="document_order.reconcile",
+                    target_type="document_order",
+                    target_id=other.public_ref,
+                ),
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    orders = client.get(
+        f"/admin/document-orders?product_code={PRODUCT_CODE}",
+        headers=_headers(),
+    )
+    metrics = client.get(
+        f"/admin/metrics?product_code={PRODUCT_CODE}",
+        headers=_headers(),
+    )
+    audit = client.get(
+        f"/admin/audit?product_code={PRODUCT_CODE}",
+        headers=_headers(),
+    )
+    unknown = client.get(
+        "/admin/document-orders?product_code=unknown_product",
+        headers=_headers(),
+    )
+
+    assert orders.status_code == 200
+    assert orders.get_json()["scope"] == f"document_product:{PRODUCT_CODE}"
+    assert [item["reference"] for item in orders.get_json()["items"]] == [
+        "DS-PRODUCT-CURRENT"
+    ]
+    assert metrics.status_code == 200
+    operations = metrics.get_json()["operations"]
+    assert operations["document_product_scope"] == PRODUCT_CODE
+    assert operations["document_orders_by_state"] == {"DRAFTING": 1}
+    assert operations["document_orders_by_product"] == {
+        PRODUCT_CODE: {"DRAFTING": 1}
+    }
+    assert audit.status_code == 200
+    assert audit.get_json()["product_scope"] == PRODUCT_CODE
+    assert [item["target_id"] for item in audit.get_json()["items"]] == [
+        "DS-PRODUCT-CURRENT"
+    ]
+    assert unknown.status_code == 404
+
+
+def test_document_product_admin_endpoint_is_non_secret_and_fail_closed(
+    monkeypatch,
+    client,
+    admin_db,
+):
+    monkeypatch.setattr(catalogue, "DOCUMENT_STUDIO_ENABLED", True)
+    monkeypatch.setattr(catalogue, "DOCUMENT_STUDIO_PRICE_INR", 299)
+    monkeypatch.setattr(
+        catalogue,
+        "DOCUMENT_STUDIO_PRODUCT_PRICES_INR_CONFIGURED",
+        False,
+    )
+    monkeypatch.setattr(
+        catalogue,
+        "DOCUMENT_STUDIO_PRODUCT_ALLOWLIST",
+        frozenset({PRODUCT_CODE}),
+    )
+
+    response = client.get("/admin/document-products", headers=_headers())
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["configuration"] == {
+        "ok": True,
+        "reason_code": "CONFIGURED",
+        "enabled_product_codes": [PRODUCT_CODE],
+    }
+    assert payload["release"]["ok"] is False
+    assert payload["release"]["reason_code"] == (
+        "ADVOCATE_APPROVAL_MISSING"
+    )
+    assert payload["items"][0]["customer_visible"] is True
+    serialized = response.get_data(as_text=True).lower()
+    assert "reviewer_name" not in serialized
+    assert "enrolment" not in serialized
 
 
 def _seed_document_operation(session_factory, *, state="FINAL_AVAILABLE"):

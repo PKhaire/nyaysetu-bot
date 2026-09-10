@@ -126,6 +126,24 @@ These items are “implemented,” not automatically “deployed” or “operat
 - Record acceptance/contact evidence and reassignment beyond current
   assignment/confirmation/completion/no-show states.
 
+### Additional Draft Studio products
+
+- Preserve the existing residential leave-and-license product identity,
+  approved hashes and behavior while introducing a product registry.
+- Complete Phase A characterization and order-bound product resolution from
+  the [multi-product catalogue plan](document-studio/22-multi-product-catalogue-implementation-plan.md)
+  before registering a second product.
+- Obtain an authenticated advocate decision of
+  `APPROVED_FOR_TEMPLATE_DRAFTING` against the
+  [cheque-notice review pack](document-studio/21-cheque-bounce-notice-advocate-review-pack.md)
+  before writing customer-visible statutory-notice prose.
+- Treat the proposed single-cheque section 138 notice as advocate-issued:
+  evidence review, matter acceptance and quote precede payment; final approval,
+  controlled signing and dispatch evidence follow it.
+- Keep the cheque-notice candidate absent from menus, payment and runtime
+  schemas until its exact template, intake, price, workflow and release
+  manifest pass separate legal, security, operations and staging gates.
+
 ### Reschedule, cancellation, and refund
 
 - Let users request changes without creating duplicate payments.

@@ -77,7 +77,7 @@ invalid JSON; `403` for invalid signatures; `413` for an oversized body; and
 ### `POST /payment/webhook`
 
 This endpoint accepts Razorpay `payment_link.paid` events for consultation
-bookings and Document Studio orders.
+bookings and Draft Studio orders.
 
 The current implementation:
 
@@ -92,7 +92,7 @@ The current implementation:
    `IGNORED`) before continuing.
 5. Requires the signed event snapshot to contain a captured payment and paid
    payment-link entity.
-6. Resolves exactly one consultation booking or Document Studio order by its
+6. Resolves exactly one consultation booking or Draft Studio order by its
    stored Razorpay payment-link ID, then requires INR and compares provider
    paise against that record's snapshotted amount, not the current global
    price.
@@ -140,7 +140,7 @@ of its existing sessions.
 Named roles are `ADMIN`, `OPERATOR`, and `VIEWER`. A viewer is read-only; an
 operator can work ordinary support/fulfilment/document operations; creating
 advocates, changing availability controls, retrying terminal outbox jobs, and
-approving/revoking an exact Document Studio template release require `ADMIN`.
+approving/revoking an exact Draft Studio template release require `ADMIN`.
 Browser mutations always audit the verified session identity and ignore a
 caller-supplied actor header. Before any named identity exists, staging only
 may use the legacy shared password as a one-time bootstrap; production never
@@ -158,7 +158,7 @@ before/after values and the operator ID in `admin_audit_events`.
 | `GET/POST /admin/login`, `POST /admin/logout` | Browser session lifecycle |
 | `GET /admin/appointments` | Responsive appointment queue for paid-consultation operations |
 | `GET /admin/fulfillment-workflow` | Server-authoritative fulfilment transitions used by the console |
-| `GET /admin/metrics` | Aggregate product and operational counts, including current Document Studio capacity, inbound claims, fulfilment and reconciliation risk |
+| `GET /admin/metrics[?product_code=...]` | Aggregate product and operational counts, with Draft Studio state optionally filtered by one registered product |
 | `GET /admin/support?limit=25&status=OPEN` | Support queue |
 | `PATCH /admin/support/<ticket_id>` | Assign, prioritize, resolve, or close a ticket; closing requires a resolution note |
 | `GET /admin/fulfillments?status=UNASSIGNED` | SLA-ordered paid-consultation queue |
@@ -175,8 +175,9 @@ before/after values and the operator ID in `admin_audit_events`.
 | `GET /admin/availability?from=YYYY-MM-DD&to=YYYY-MM-DD` | Active blackouts and capacity overrides |
 | `POST/DELETE /admin/availability/blackouts[...]` | Activate/deactivate date or slot blackouts |
 | `POST/DELETE /admin/availability/capacity[...]` | Activate/deactivate date or slot capacity overrides |
-| `GET /admin/audit` | Recent operator mutation audit |
-| `GET /admin/document-orders` | Privacy-minimised Document Studio order/artifact/release ledger plus current global daily-capacity snapshot |
+| `GET /admin/audit[?product_code=...]` | Recent operator mutation audit, optionally limited to one registered document product |
+| `GET /admin/document-products` | Non-secret registered-product configuration, price metadata, customer visibility and per-product release state |
+| `GET /admin/document-orders[?product_code=...]` | Privacy-minimised Draft Studio order/artifact/release ledger, optionally filtered by registered product, plus current global daily-capacity snapshot |
 | `GET /admin/document-orders/<reference>` | Privacy-safe order state and recent document audit; excludes answers, contacts and provider IDs |
 | `POST /admin/document-orders/<reference>/reconcile` | Fetch current Razorpay evidence and recover only one exact captured, non-refunded payment |
 | `POST /admin/document-orders/<reference>/refund-review` | Stop release and record an audited complete-or-refund operating decision; does not call Razorpay |
@@ -207,7 +208,7 @@ For an accepted payment, the reconciliation endpoint permits
 `REFUNDED` only after fulfilment is `REFUNDED` and the booking is `CANCELLED`.
 This prevents financial refund status from coexisting with paid entitlement.
 
-Document Studio recovery uses the same five-minute reconciliation command as
+Draft Studio recovery uses the same five-minute reconciliation command as
 consultations. `PAYMENT_PENDING`, `NEEDS_ATTENTION`, and `REFUND_REVIEW` orders
 are checked from current Payment Link and Payment resources. An exact capture
 can recover a missed/previously reviewed final release; an unpaid link is a
@@ -274,7 +275,7 @@ Amazon SES is optional. The first production release sets
 the manual-contact runbook. In this mode no email-only job is enqueued or sent,
 old email-only backlog is safely changed to `CANCELLED`, and SES/AWS credentials
 are not required for readiness. The durable outbox still sends WhatsApp,
-reminders, receipts when separately enabled, and Document Studio final links.
+reminders, receipts when separately enabled, and Draft Studio final links.
 
 The remainder of this section is the contract for a future release that sets
 `EMAIL_NOTIFICATIONS_ENABLED=true`.
@@ -471,10 +472,11 @@ The authoritative defaults and validation rules are in `config.py` and
   bounds.
 - Product trust: support SLA, privacy/terms/refund/cancellation URLs, consent
   versions, admin token, and AI safety settings.
-- Document Studio: global enable switch, allowlisted product, reviewed
-  non-zero price, consent version, draft/final/download TTLs, and a private S3
-  bucket/region/least-privilege credential set. There are deliberately no
-  tester-number, cohort, or percentage-rollout variables.
+- Draft Studio: global enable switch, allowlisted products, strict
+  `product_code=whole_inr` price map (with the legacy single-price key only as
+  a migration fallback), consent version, draft/final/download TTLs, and a
+  private S3 bucket/region/least-privilege credential set. There are
+  deliberately no tester-number, cohort, or percentage-rollout variables.
 
 Never put secrets in committed files, URLs, request logs, or analytics
 properties.
@@ -502,7 +504,7 @@ Before production traffic:
 - Amazon SES identity/domain, DKIM/SPF/DMARC, production access,
   least-privilege permission, configuration-set monitoring, recipients, and
   Meta templates are explicitly approved.
-- The exact Document Studio manifest and golden hashes have an unexpired,
+- The exact Draft Studio manifest and golden hashes have an unexpired,
   unrevoked authenticated advocate approval; preview watermarking, exact
   payment ownership, private owner-only downloads, access audit, and S3
   retention deletion are exercised in staging.

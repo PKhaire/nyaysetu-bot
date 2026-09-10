@@ -22,7 +22,7 @@ from flask import (
     session,
     url_for,
 )
-from sqlalchemy import func, or_
+from sqlalchemy import String, and_, cast, func, or_
 from sqlalchemy.exc import IntegrityError
 
 from config import (
@@ -45,6 +45,7 @@ from models import (
     CaseBrief,
     DocumentAuditEvent,
     DocumentOrder,
+    DocumentTemplateApproval,
     Feedback,
     InboundMessageEvent,
     ManualContactEvent,
@@ -60,7 +61,13 @@ from services.fulfillment_service import ensure_booking_fulfillment
 from services.payment_reconciliation_service import (
     lock_matching_payment_reconciliations,
 )
-from services.document_catalogue import resolve_product
+from services.document_catalogue import (
+    PRODUCT_CODE,
+    catalogue_configuration,
+    customer_visible,
+    registered_product_codes,
+    resolve_product,
+)
 from services.document_capacity_service import capacity_snapshot
 from services.document_operations_service import (
     queue_final_redelivery,
@@ -73,6 +80,7 @@ from services.document_release_service import (
     record_approval,
     release_gate,
     release_manifest,
+    release_readiness,
 )
 
 
@@ -267,6 +275,17 @@ def _clear_failed_logins(client_key: str) -> None:
 def _json_body() -> dict:
     body = request.get_json(silent=True)
     return body if isinstance(body, dict) else {}
+
+
+def _registered_product_filter():
+    product_code = str(request.args.get("product_code") or "").strip()
+    if not product_code:
+        return "", None
+    try:
+        resolve_product(product_code)
+    except KeyError:
+        return "", (jsonify({"error": "unknown_document_product"}), 404)
+    return product_code, None
 
 
 def _masked_contact(value: str | None) -> str:
@@ -507,6 +526,10 @@ def appointments():
 def metrics():
     """Return aggregate operating metrics without contact or legal-message data."""
 
+    product_code_filter, product_filter_error = _registered_product_filter()
+    if product_filter_error is not None:
+        return product_filter_error
+
     db = SessionLocal()
     try:
         since = utc_now() - timedelta(days=30)
@@ -564,14 +587,40 @@ def metrics():
                 .all()
             )
         }
+        document_count_query = db.query(
+            DocumentOrder.state,
+            func.count(DocumentOrder.id),
+        )
+        if product_code_filter:
+            document_count_query = document_count_query.filter(
+                DocumentOrder.product_code == product_code_filter
+            )
         document_order_counts = {
             str(state): int(count)
             for state, count in (
-                db.query(DocumentOrder.state, func.count(DocumentOrder.id))
+                document_count_query
                 .group_by(DocumentOrder.state)
                 .all()
             )
         }
+        product_state_query = db.query(
+            DocumentOrder.product_code,
+            DocumentOrder.state,
+            func.count(DocumentOrder.id),
+        )
+        if product_code_filter:
+            product_state_query = product_state_query.filter(
+                DocumentOrder.product_code == product_code_filter
+            )
+        document_orders_by_product: dict[str, dict[str, int]] = {}
+        for product_code, state, count in product_state_query.group_by(
+            DocumentOrder.product_code,
+            DocumentOrder.state,
+        ).all():
+            document_orders_by_product.setdefault(
+                str(product_code),
+                {},
+            )[str(state)] = int(count)
         oldest_outbox = (
             db.query(func.min(OutboxJob.created_at))
             .filter(OutboxJob.status.in_(("PENDING", "RUNNING")))
@@ -649,7 +698,11 @@ def metrics():
                     or 0
                 ),
                 "document_studio_capacity": capacity_snapshot(db),
+                "document_product_scope": (
+                    product_code_filter or "all"
+                ),
                 "document_orders_by_state": document_order_counts,
+                "document_orders_by_product": document_orders_by_product,
             },
         }
         return jsonify(payload)
@@ -657,9 +710,62 @@ def metrics():
         db.close()
 
 
+@admin_bp.get("/document-products")
+def document_products():
+    """Expose non-secret catalogue and release state to operators."""
+
+    db = SessionLocal()
+    try:
+        configuration = catalogue_configuration()
+        readiness = release_readiness(db)
+        return jsonify(
+            {
+                "configuration": {
+                    "ok": configuration.ok,
+                    "reason_code": configuration.reason_code,
+                    "enabled_product_codes": list(
+                        configuration.enabled_product_codes
+                    ),
+                },
+                "release": readiness,
+                "items": [
+                    {
+                        "product_code": product.code,
+                        "display_name": product.display_name,
+                        "language": product.language,
+                        "jurisdiction": product.jurisdiction,
+                        "output_classification": (
+                            product.output_classification
+                        ),
+                        "template_version": product.template_version,
+                        "schema_version": product.schema_version,
+                        "price_model": product.price_model,
+                        "price_minor": product.price_minor,
+                        "currency": product.currency,
+                        "turnaround_label": product.turnaround_label,
+                        "customer_visible": customer_visible(product.code),
+                        "release": readiness["products"].get(
+                            product.code,
+                            {
+                                "ok": False,
+                                "reason_code": "PRODUCT_NOT_ENABLED",
+                            },
+                        ),
+                    }
+                    for product in (
+                        resolve_product(code)
+                        for code in registered_product_codes()
+                    )
+                ],
+            }
+        )
+    finally:
+        db.close()
+
+
 @admin_bp.get("/document-orders")
 def document_orders():
-    """Expose privacy-minimised Document Studio state to operators.
+    """Expose privacy-minimised Draft Studio state to operators.
 
     Draft answers and user contact data are intentionally excluded. This is
     an operational ledger, not a document download endpoint.
@@ -669,18 +775,25 @@ def document_orders():
         limit = max(1, min(int(request.args.get("limit", "50")), 100))
     except (TypeError, ValueError):
         return jsonify({"error": "invalid_limit"}), 400
+    product_code_filter, product_filter_error = _registered_product_filter()
+    if product_filter_error is not None:
+        return product_filter_error
 
     db = SessionLocal()
     try:
-        orders = (
-            db.query(DocumentOrder)
-            .order_by(DocumentOrder.id.desc())
-            .limit(limit)
-            .all()
-        )
+        query = db.query(DocumentOrder)
+        if product_code_filter:
+            query = query.filter(
+                DocumentOrder.product_code == product_code_filter
+            )
+        orders = query.order_by(DocumentOrder.id.desc()).limit(limit).all()
         return jsonify(
             {
-                "scope": "all_document_orders",
+                "scope": (
+                    f"document_product:{product_code_filter}"
+                    if product_code_filter
+                    else "all_document_orders"
+                ),
                 "capacity": capacity_snapshot(db),
                 "items": [
                     {
@@ -932,11 +1045,27 @@ def document_template_release():
 
     db = SessionLocal()
     try:
-        product = resolve_product()
-        manifest = release_manifest(product)
+        payload = None
+        if request.method == "POST":
+            payload = request.get_json(silent=True)
+            if not isinstance(payload, dict):
+                payload = request.form.to_dict()
+        product_code = str(
+            (
+                payload.get("product_code")
+                if payload is not None
+                else request.args.get("product_code")
+            )
+            or PRODUCT_CODE
+        ).strip()
+        try:
+            product = resolve_product(product_code)
+        except KeyError:
+            return jsonify({"error": "unknown_document_product"}), 404
+        manifest = release_manifest(product.code)
         current = approval_for_product(db, product)
         if request.method == "GET":
-            gate = release_gate(db, product)
+            gate = release_gate(db, product.code)
             return jsonify(
                 {
                     "manifest": manifest,
@@ -969,15 +1098,13 @@ def document_template_release():
                 }
             )
 
-        payload = request.get_json(silent=True)
-        if not isinstance(payload, dict):
-            payload = request.form.to_dict()
         operator = _operator_id()
         try:
             approval = record_approval(
                 db,
                 payload,
                 recorded_by=operator,
+                product_code=product.code,
             )
         except ValueError as exc:
             db.rollback()
@@ -1000,7 +1127,7 @@ def document_template_release():
             },
         )
         db.commit()
-        gate = release_gate(db, product)
+        gate = release_gate(db, product.code)
         return jsonify(
             {
                 "ok": True,
@@ -1021,7 +1148,13 @@ def revoke_document_template_release():
 
     db = SessionLocal()
     try:
-        product = resolve_product()
+        product_code = str(
+            request.args.get("product_code") or PRODUCT_CODE
+        ).strip()
+        try:
+            product = resolve_product(product_code)
+        except KeyError:
+            return jsonify({"error": "unknown_document_product"}), 404
         approval = approval_for_product(db, product)
         if (
             approval is None
@@ -1186,6 +1319,9 @@ def _serialize_case_brief(brief: CaseBrief | None) -> dict | None:
         documents = []
     return {
         "status": brief.status,
+        "preparation_status": (
+            "COMPLETE" if brief.status == "PREPARED" else "INCOMPLETE"
+        ),
         "issue_summary": brief.issue_summary,
         "legal_stage": brief.legal_stage,
         "important_dates": brief.important_dates,
@@ -2403,16 +2539,41 @@ def deactivate_capacity_override(item_id: int):
 @admin_bp.get("/audit")
 def audit_log():
     limit = min(max(request.args.get("limit", default=100, type=int), 1), 500)
+    product_code_filter, product_filter_error = _registered_product_filter()
+    if product_filter_error is not None:
+        return product_filter_error
     db = SessionLocal()
     try:
-        rows = (
-            db.query(AdminAuditEvent)
-            .order_by(AdminAuditEvent.created_at.desc())
-            .limit(limit)
-            .all()
-        )
+        query = db.query(AdminAuditEvent)
+        if product_code_filter:
+            order_refs = db.query(DocumentOrder.public_ref).filter(
+                DocumentOrder.product_code == product_code_filter
+            )
+            approval_ids = db.query(
+                cast(DocumentTemplateApproval.id, String)
+            ).filter(
+                DocumentTemplateApproval.product_code
+                == product_code_filter
+            )
+            query = query.filter(
+                or_(
+                    and_(
+                        AdminAuditEvent.target_type == "document_order",
+                        AdminAuditEvent.target_id.in_(order_refs),
+                    ),
+                    and_(
+                        AdminAuditEvent.target_type
+                        == "document_template_approval",
+                        AdminAuditEvent.target_id.in_(approval_ids),
+                    ),
+                )
+            )
+        rows = query.order_by(
+            AdminAuditEvent.created_at.desc()
+        ).limit(limit).all()
         return jsonify(
             {
+                "product_scope": product_code_filter or "all",
                 "items": [
                     {
                         "id": item.id,

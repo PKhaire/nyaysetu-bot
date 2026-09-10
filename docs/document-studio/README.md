@@ -1,11 +1,12 @@
-# NyaySetu Document Studio
+# NyaySetu Draft Studio
 
-Status: RC9 controlled implementation complete in the repository. Global menu
-visibility, eligibility, deterministic questionnaire/rendering, exact payment,
-private artifact storage, short-lived downloads and retention controls are
-implemented. Production publication remains blocked until the exact candidate
-package receives authenticated advocate approval and storage/payment evidence
-passes.
+Status: RC16 multi-product catalogue candidate implemented in the repository.
+Global menu visibility, one conditional questionnaire, PIN assistance,
+deterministic rendering, exact payment, private artifact storage, short-lived
+downloads, retention controls, strict per-product pricing and per-product
+release readiness are implemented. The existing residential agreement remains
+the only runtime product; production publication still requires current
+release-gate, regression/UAT and operational evidence.
 
 ## Decision summary
 
@@ -27,7 +28,7 @@ The product distinguishes these outputs visibly and operationally:
    issue/signature procedure. A stored signature image is never applied
    automatically.
 
-## V1 flow
+## Current candidate flow
 
 ```text
 Choose product
@@ -63,6 +64,12 @@ Choose product
 | [Advocate review pack](14-advocate-review-pack.md) | Per-version content approval and activation record |
 | [V1 legal-drafting decisions](15-v1-legal-drafting-decision-record.md) | Conservative selected terms, route-outs, limitations and final human gate |
 | [Candidate agreement template](16-residential-leave-license-candidate-template.md) | Exact English candidate prose and renderer-token contract for authentication |
+| [V2 intake and booking UX plan](17-v2-intake-ux-reduction-plan.md) | All-question keep/combine/conditional/remove mapping, PIN-assisted address design and shorter consultation journey |
+| [Cheque-notice product specification](18-cheque-bounce-notice-product-spec.md) | Proposed advocate-issued V1 boundary, eligibility, evidence, payment, issuance and dispatch controls |
+| [Cheque-notice questionnaire](19-cheque-bounce-notice-questionnaire.md) | Candidate customer intake, routing, confirmation and advocate-only fields; not a runtime schema |
+| [Cheque-notice source and decision register](20-cheque-bounce-notice-source-and-decision-register.md) | Primary-law baseline, conservative decisions and legal questions blocking template drafting |
+| [Cheque-notice advocate review pack](21-cheque-bounce-notice-advocate-review-pack.md) | Blank discovery and exact-release decisions for an authenticated reviewing advocate |
+| [Multi-product catalogue plan](22-multi-product-catalogue-implementation-plan.md) | Product-registry and separate self-service/advocate-issued workflow plan with phased acceptance criteria |
 | [ADR 0001](../adr/0001-document-studio-publication-and-artifact-contract.md) | Universal publication and preview/payment/final binding decision |
 
 ## Non-negotiable launch principles
@@ -85,21 +92,26 @@ Choose product
 Approval of this design baseline authorized engineering work but does not
 approve any legal template. Template approval is a separate, per-version,
 authenticated advocate decision recorded using the standard in this package.
+The product owner reports advocate approval of the cheque-notice discovery
+pack for template drafting. That decision does not authorize an exact runtime
+template, customer visibility, payment collection, advocate signature,
+issuance or dispatch.
 
 ## Implemented RC9 boundary
 
 RC9 implements the controlled workflow described in
 [the RC9 release notes](../RELEASE_NOTES_2026-08-27_RC9.md). Once the global
-switch is enabled, the same Document Studio menu is visible to every user; no
+switch is enabled, the same Draft Studio menu is visible to every user; no
 named-user UAT allowlist exists. Eligibility, answer confirmation,
 deterministic watermarked preview, exact test-payment verification, private
 final PDF/DOCX generation, owner-authorized download and bounded deletion are
 implemented behind fail-closed release controls.
 
-The current advocate review pack remains blank and the decision record says
-authentication is pending. Therefore the exact template is not `ACTIVE` and
-preview/payment/final release must remain blocked. Repository implementation,
-synthetic testing, a submitted packet or a verbal/general green signal is not
-legal-template approval. Production can expose only an exact authenticated,
-unexpired and non-revoked package to every eligible user under
-[ADR 0001](../adr/0001-document-studio-publication-and-artifact-contract.md).
+The runtime release ledger, rather than repository prose, determines whether
+the exact residential package is active. The product owner has reported a
+successful authenticated staging activation, but production must independently
+verify that the same exact approval is current, unexpired and non-revoked.
+Repository implementation, synthetic testing or a general green signal cannot
+replace that evidence. Production can expose only a package that passes
+[ADR 0001](../adr/0001-document-studio-publication-and-artifact-contract.md)
+for every globally enabled product.

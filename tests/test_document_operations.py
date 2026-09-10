@@ -1,4 +1,4 @@
-"""Production-safety tests for Document Studio recovery and delivery."""
+"""Production-safety tests for Draft Studio recovery and delivery."""
 
 from __future__ import annotations
 

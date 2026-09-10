@@ -1,4 +1,4 @@
-"""Razorpay adapter dedicated to Document Studio payment links."""
+"""Razorpay adapter dedicated to Draft Studio payment links."""
 
 from __future__ import annotations
 
@@ -17,6 +17,11 @@ from config import (
     RAZORPAY_KEY_SECRET,
 )
 from models import DocumentOrder, User
+from services.document_catalogue import (
+    DocumentProduct,
+    product_availability,
+    resolve_product,
+)
 
 
 _RAZORPAY_REFERENCE_ID_MAX_LENGTH = 40
@@ -195,7 +200,7 @@ def fetch_current_document_payment_evidence(
     *,
     client: httpx.Client | None = None,
 ) -> DocumentPaymentEvidence:
-    """Fetch current link and capture evidence for one Document Studio order."""
+    """Fetch current link and capture evidence for one Draft Studio order."""
 
     if not _PAYMENT_LINK_ID_PATTERN.fullmatch(str(payment_link_id or "")):
         raise ValueError("invalid_document_payment_link_id")
@@ -223,10 +228,26 @@ def create_document_payment_link(
     order: DocumentOrder,
     user: User,
     *,
+    product: DocumentProduct | None = None,
     client: httpx.Client | None = None,
 ) -> str:
     """Create one exact-amount link bound to order/revision/manifest."""
 
+    product = product or resolve_product(order.product_code)
+    if order.product_code != product.code:
+        raise ValueError("document_product_mismatch")
+    availability = product_availability(product.code)
+    if not availability.ok:
+        raise ValueError(availability.reason_code.lower())
+    if not product.matches_package_snapshot(
+        template_version=order.template_version,
+        schema_hash=order.schema_hash,
+        template_hash=order.template_hash,
+        output_classification=order.output_classification,
+    ):
+        raise ValueError("document_product_snapshot_mismatch")
+    if order.currency != product.currency:
+        raise ValueError("document_product_currency_mismatch")
     if order.state != "PREVIEW_READY" or not order.preview_manifest_hash:
         raise ValueError("document_preview_not_ready")
     if not order.active_revision_number or not order.price_minor:
@@ -245,7 +266,7 @@ def create_document_payment_link(
         "accept_partial": False,
         "expire_by": int(expires_at.timestamp()),
         "reference_id": order.payment_token,
-        "description": "NyaySetu Document Studio final PDF and DOCX",
+        "description": product.payment_description,
         "customer": {
             "name": str(getattr(user, "name", None) or "NyaySetu customer")[:120],
             "contact": str(user.whatsapp_id),

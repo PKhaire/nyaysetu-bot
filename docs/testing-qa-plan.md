@@ -298,6 +298,50 @@ Run these checks only if a separately reviewed plan activates a future import:
 
 ## Release gates
 
+### RC13 local automation evidence
+
+- `python -m compileall -q ...`: passed.
+- `python -m ruff check .`: passed.
+- `python -m pytest -q --basetemp .pytest-tmp-rc13-full`: 369 passed.
+- `python -m pytest -q --basetemp .pytest-tmp-rc13-coverage --cov=app
+  --cov=services --cov-report=term-missing --cov-fail-under=60`: 369 passed;
+  total coverage 68.91%.
+- `python -m jobs.generate_sbom --check`: passed.
+
+This is local engineering evidence only. It does not replace advocate approval
+of the new exact hashes, native-speaker review, real WhatsApp staging UAT,
+provider smoke tests, or the remaining external production gates.
+
+### RC14 local automation evidence
+
+- Focused Draft Studio, consultation-flow and translation regression: 57
+  passed.
+- Full regression with `--cov=app --cov=services --cov-fail-under=60`: 374
+  passed; total coverage 69.06%.
+- Compile, Ruff, SBOM and diff-integrity checks pass.
+
+RC14 still requires exact-hash advocate approval, native-speaker review and
+fresh end-user staging UAT. Automated checks do not establish usability or
+legal approval.
+
+### RC16 Phase A/B local automation evidence
+
+- Focused catalogue, workflow, WhatsApp, webhook and deployment regression:
+  110 passed.
+- Full regression with the repository coverage gate: 400 passed; total
+  coverage 81.68%.
+- Exact missing-package-snapshot, immutable/invalid registry, bounded-price,
+  multi-page catalogue and numbered-reply tests pass.
+- Ruff, compilation, dependency consistency, deterministic SBOM, Alembic
+  single-head and diff-integrity checks pass.
+- A fresh `requirements.lock` audit reports no known published dependency
+  vulnerabilities. GitHub CI must repeat the audit on Linux before upload is
+  accepted.
+
+This evidence covers the Phase A/B code package. It does not claim zero risk or
+replace provider staging UAT, PostgreSQL migration validation, penetration
+testing, native-language review, or the separate Phase C-E release gates.
+
 Code gates:
 
 - Compile/static checks pass.
