@@ -127,6 +127,12 @@ def _sha256(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
 
+def _canonical_template_bytes(value: bytes) -> bytes:
+    """Make text-template identity independent of checkout line endings."""
+
+    return value.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+
+
 def _questionnaire_schema_bytes() -> bytes:
     # Import lazily so the catalogue remains usable by migrations and config
     # checks without creating a module cycle.
@@ -385,7 +391,9 @@ def resolve_product(code: str = PRODUCT_CODE) -> DocumentProduct:
     except (KeyError, TypeError) as exc:
         raise KeyError("unknown_document_product") from exc
 
-    template_bytes = definition.template_path.read_bytes()
+    template_bytes = _canonical_template_bytes(
+        definition.template_path.read_bytes()
+    )
     schema_bytes = definition.schema_bytes()
     template_hash = _sha256(template_bytes)
     schema_hash = _sha256(schema_bytes)

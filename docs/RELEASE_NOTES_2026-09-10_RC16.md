@@ -66,6 +66,9 @@ non-empty, it is authoritative.
 
 ## Local validation
 
+- Template/package identity uses canonical LF line endings so Windows and
+  Linux checkouts resolve the same hashes.
+
 - Focused Phase B catalogue, workflow, admin, readiness and deployment tests:
   `110 passed`.
 - Full regression with the CI coverage gate: `400 passed`, `81.68%` coverage.

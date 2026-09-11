@@ -40,13 +40,13 @@ EXPECTED_PRODUCT_IDENTITY = {
     "schema_version": "mh-ll-questionnaire-2026-09-v3",
     "output_classification": "SELF_SERVICE_DRAFT",
     "template_hash": (
-        "cb860be339805588afb352560ea66a32f91c1acabd6af47fc041e13650dc5535"
+        "091bcff220c08374396e5d87c362c7c3ebe79cccbac2a0781568e60ee6d24194"
     ),
     "schema_hash": (
         "edd95798ee85f898a9de782599a3fd53ee15abdb3bf354a130cf1787f5a63021"
     ),
     "aggregate_hash": (
-        "1b2004d5d3c64a4bd66e67417ffe260e48a164d01b2ad23f9556a92d7c1edc6e"
+        "80b69faf49a2815c3e0b9d96a1d3bc354c53e4c3250a809b08dfff582b562f34"
     ),
     "golden_pdf_hash": (
         "f37f573125c7d407a05814922c6a7091c4fe1a80e40502f42d6042c848029c42"
@@ -135,6 +135,46 @@ def test_existing_product_identity_and_artifacts_are_frozen(monkeypatch):
     assert manifest["golden_docx_hash"] == EXPECTED_PRODUCT_IDENTITY[
         "golden_docx_hash"
     ]
+
+
+def test_template_identity_is_stable_across_text_line_endings(
+    monkeypatch,
+    tmp_path,
+):
+    _enable_current_product(monkeypatch)
+    definition = catalogue._PRODUCT_DEFINITIONS[catalogue.PRODUCT_CODE]
+    lf_template = tmp_path / "template-lf.md"
+    crlf_template = tmp_path / "template-crlf.md"
+    lf_template.write_bytes(b"Synthetic line one\nSynthetic line two\n")
+    crlf_template.write_bytes(
+        b"Synthetic line one\r\nSynthetic line two\r\n"
+    )
+
+    monkeypatch.setattr(
+        catalogue,
+        "_PRODUCT_DEFINITIONS",
+        {
+            catalogue.PRODUCT_CODE: replace(
+                definition,
+                template_path=lf_template,
+            )
+        },
+    )
+    lf_product = catalogue.resolve_product(catalogue.PRODUCT_CODE)
+    monkeypatch.setattr(
+        catalogue,
+        "_PRODUCT_DEFINITIONS",
+        {
+            catalogue.PRODUCT_CODE: replace(
+                definition,
+                template_path=crlf_template,
+            )
+        },
+    )
+    crlf_product = catalogue.resolve_product(catalogue.PRODUCT_CODE)
+
+    assert crlf_product.template_hash == lf_product.template_hash
+    assert crlf_product.aggregate_hash == lf_product.aggregate_hash
 
 
 def test_registry_exposes_only_enabled_allowlisted_products(monkeypatch):

@@ -58,13 +58,16 @@ release record and completed operational dependencies.
 | --- | --- |
 | Template version | `mh-ll-en-2026-08-candidate-1` |
 | Questionnaire schema | `mh-ll-questionnaire-2026-09-v3` |
-| Template hash | `cb860be339805588afb352560ea66a32f91c1acabd6af47fc041e13650dc5535` |
+| Template hash | `091bcff220c08374396e5d87c362c7c3ebe79cccbac2a0781568e60ee6d24194` |
 | Schema hash | `edd95798ee85f898a9de782599a3fd53ee15abdb3bf354a130cf1787f5a63021` |
-| Aggregate hash | `1b2004d5d3c64a4bd66e67417ffe260e48a164d01b2ad23f9556a92d7c1edc6e` |
+| Aggregate hash | `80b69faf49a2815c3e0b9d96a1d3bc354c53e4c3250a809b08dfff582b562f34` |
 | Golden PDF hash | `f37f573125c7d407a05814922c6a7091c4fe1a80e40502f42d6042c848029c42` |
 | Golden DOCX hash | `6a2cfd9a59d19a3ebe8212bab116d5e63281b479f2b7c936c76fb5e4cb3a134d` |
 
 ## Local validation
+
+Template hashes use canonical LF line endings so Windows and Linux resolve the
+same package identity.
 
 - Full regression with the CI coverage gate: `380 passed`, `69.12%` coverage.
 - Focused product/admin/payment/application regression: `147 passed`.
