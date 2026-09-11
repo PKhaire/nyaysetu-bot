@@ -80,7 +80,7 @@ def test_fresh_database_upgrade_builds_current_schema(tmp_path):
                 connection.execute(
                     sa.text("SELECT version_num FROM alembic_version")
                 ).scalar_one()
-                == "20260910_01"
+                == "20260911_01"
             )
         assert {
             "admin_operators",
@@ -116,6 +116,11 @@ def test_fresh_database_upgrade_builds_current_schema(tmp_path):
             for column in inspector.get_columns("document_access_events")
         }
         assert "document_evidence_artifact_id" in access_columns
+        approval_columns = {
+            column["name"]
+            for column in inspector.get_columns("document_template_approvals")
+        }
+        assert "golden_artifact_hashes_json" in approval_columns
     finally:
         engine.dispose()
 

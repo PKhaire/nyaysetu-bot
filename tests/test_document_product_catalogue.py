@@ -200,7 +200,10 @@ def test_docx_bytes_do_not_depend_on_deflate_backend(monkeypatch):
 def test_registry_exposes_only_enabled_allowlisted_products(monkeypatch):
     _enable_current_product(monkeypatch)
 
-    assert catalogue.registered_product_codes() == (catalogue.PRODUCT_CODE,)
+    assert catalogue.registered_product_codes() == (
+        catalogue.PRODUCT_CODE,
+        catalogue.CHEQUE_NOTICE_PRODUCT_CODE,
+    )
     assert tuple(product.code for product in catalogue.visible_products()) == (
         catalogue.PRODUCT_CODE,
     )

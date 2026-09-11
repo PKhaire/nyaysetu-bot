@@ -1,7 +1,7 @@
 # Product Specification: Single-Cheque Section 138 Demand Notice
 
-**Status:** discovery candidate; not implemented, priced, approved or
-customer-visible  
+**Status:** revalidated for private Phase D implementation on 11 September
+2026; not customer-visible, globally allowlisted or approved for launch  
 **Research cut-off:** 10 September 2026  
 **Activation rule:** fail closed until the exact questionnaire, legal text,
 review workflow, evidence controls and golden artifacts receive authenticated
@@ -26,7 +26,7 @@ The assigned advocate remains responsible for every notice that is issued.
 | Customer preview | Confirmed factual summary, not an issuable statutory notice |
 | Paid output | Locked advocate-issued PDF plus dispatch and next-step record |
 | Editable DOCX | Not supplied for an advocate-issued or signed notice |
-| Price and turnaround | To be approved after the advocate operations pilot |
+| Price and turnaround | Matter-specific quote after advocate acceptance; no fixed catalogue price |
 
 The code and marketing name are provisional until product, legal, privacy and
 operations review. An activated code is stable. Every change to legal wording,
@@ -270,4 +270,3 @@ evidence review, issuance, signing or dispatch evidence.
 - [ ] Native legal-language review exists for every enabled translation.
 - [ ] Synthetic end-to-end UAT passes before any real customer is offered the
   product.
-

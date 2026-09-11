@@ -1,11 +1,15 @@
 # Advocate Review Pack: Single-Cheque Section 138 Demand Notice
 
-**Status:** blank decision record; completion is required before template
-implementation and again for the exact rendered release package
+**Status:** discovery revalidation reported by the product owner on 11
+September 2026; reviewer identity is intentionally not copied into source
+control. The exact deployed hashes still require an authenticated runtime
+release record before activation.
 
-This record must be completed by a practising advocate authorized for the
-approved scope. A general statement, verbal approval, sample notice or reused
-signature is not sufficient.
+The private fields below must be completed and retained in the controlled
+review record by a practising advocate authorized for the approved scope. A
+general statement, verbal approval, sample notice or reused signature is not
+sufficient. Repository status records engineering authority only; it does not
+manufacture or replace advocate authentication.
 
 ## A. Reviewer and scope
 
@@ -231,4 +235,3 @@ Choose one:
 
 Activation remains blocked unless the deployed package and all operational
 dependencies exactly match this authenticated record.
-

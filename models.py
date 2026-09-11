@@ -592,8 +592,11 @@ class DocumentTemplateApproval(Base):
     decision = Column(String(24), nullable=False)
     conditions = Column(Text, nullable=True)
     template_aggregate_hash = Column(String(64), nullable=False)
-    golden_pdf_hash = Column(String(64), nullable=False)
-    golden_docx_hash = Column(String(64), nullable=False)
+    # Legacy fixed-output columns are retained for existing self-service
+    # approvals. New product classes use the typed artifact map below.
+    golden_pdf_hash = Column(String(64), nullable=True)
+    golden_docx_hash = Column(String(64), nullable=True)
+    golden_artifact_hashes_json = Column(Text, nullable=True)
     authenticated_method = Column(String(80), nullable=False)
     authenticated_at = Column(DateTime, nullable=False)
     next_review_at = Column(DateTime, nullable=False)

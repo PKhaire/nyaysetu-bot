@@ -23,6 +23,16 @@ from config import (
     DOCUMENT_STUDIO_PRODUCT_PRICES_INR,
     DOCUMENT_STUDIO_PRODUCT_PRICES_INR_CONFIGURED,
 )
+from services.cheque_notice_product import (
+    OUTPUT_CLASSIFICATION as CHEQUE_NOTICE_OUTPUT_CLASSIFICATION,
+    PRODUCT_CODE as CHEQUE_NOTICE_PRODUCT_CODE,
+    RENDERER_VERSION as CHEQUE_NOTICE_RENDERER_VERSION,
+    SCHEMA_VERSION as CHEQUE_NOTICE_SCHEMA_VERSION,
+    TEMPLATE_VERSION as CHEQUE_NOTICE_TEMPLATE_VERSION,
+    golden_answers as cheque_notice_golden_answers,
+    golden_artifact_hashes as cheque_notice_golden_artifact_hashes,
+    questionnaire_schema_bytes as cheque_notice_questionnaire_schema_bytes,
+)
 
 
 PRODUCT_CODE = "mh_residential_leave_licence_11m_self_service"
@@ -38,6 +48,19 @@ TEMPLATE_PATH = (
     / "document-studio"
     / "16-residential-leave-license-candidate-template.md"
 )
+CHEQUE_NOTICE_TEMPLATE_PATH = (
+    _REPO_ROOT
+    / "docs"
+    / "document-studio"
+    / "24-cheque-bounce-notice-candidate-template.md"
+)
+
+
+def _self_service_golden_artifact_hashes(product) -> dict[str, str]:
+    from services.document_renderer import golden_hashes
+
+    pdf_hash, docx_hash = golden_hashes(product)
+    return {"FINAL_PDF": pdf_hash, "FINAL_DOCX": docx_hash}
 
 
 @dataclass(frozen=True)
@@ -67,6 +90,7 @@ class DocumentProduct:
     renderer_version: str
     template_path: Path
     golden_answers: Callable[[], dict[str, object]]
+    golden_artifact_hashes: Callable[[object], dict[str, str]]
 
     def matches_package_snapshot(
         self,
@@ -112,6 +136,7 @@ class _DocumentProductDefinition:
     template_path: Path
     schema_bytes: Callable[[], bytes]
     golden_answers: Callable[[], dict[str, object]]
+    golden_artifact_hashes: Callable[[object], dict[str, str]]
 
 
 @dataclass(frozen=True)
@@ -223,7 +248,39 @@ _PRODUCT_DEFINITIONS: Mapping[str, _DocumentProductDefinition] = (
         template_path=TEMPLATE_PATH,
         schema_bytes=_questionnaire_schema_bytes,
         golden_answers=_golden_answers,
-    )
+        golden_artifact_hashes=_self_service_golden_artifact_hashes,
+    ),
+    CHEQUE_NOTICE_PRODUCT_CODE: _DocumentProductDefinition(
+        code=CHEQUE_NOTICE_PRODUCT_CODE,
+        display_name="Cheque Bounce Demand Notice",
+        display_name_key="document_cheque_notice_product",
+        list_description=(
+            "Advocate-issued | India | English | quote after advocate review"
+        ),
+        list_description_key="document_cheque_notice_product_desc",
+        selection_overview=(
+            "Collect facts and private evidence for one individual-payee, "
+            "individual-drawer cheque matter. An assigned advocate decides "
+            "scope, provides a quote and approves the exact locked PDF."
+        ),
+        selection_overview_key="document_cheque_notice_overview",
+        start_label="Start fact intake",
+        start_label_key="document_cheque_notice_start",
+        template_version=CHEQUE_NOTICE_TEMPLATE_VERSION,
+        schema_version=CHEQUE_NOTICE_SCHEMA_VERSION,
+        output_classification=CHEQUE_NOTICE_OUTPUT_CLASSIFICATION,
+        language="en",
+        jurisdiction="India; assigned-advocate scope required",
+        price_model="ADVOCATE_QUOTE",
+        currency="INR",
+        payment_description="Advocate-issued cheque notice",
+        turnaround_label="Quoted after advocate review",
+        renderer_version=CHEQUE_NOTICE_RENDERER_VERSION,
+        template_path=CHEQUE_NOTICE_TEMPLATE_PATH,
+        schema_bytes=cheque_notice_questionnaire_schema_bytes,
+        golden_answers=cheque_notice_golden_answers,
+        golden_artifact_hashes=cheque_notice_golden_artifact_hashes,
+    ),
     })
 )
 
@@ -271,6 +328,7 @@ def _registry_validation_error() -> str | None:
             or not definition.template_path.is_file()
             or not callable(definition.schema_bytes)
             or not callable(definition.golden_answers)
+            or not callable(definition.golden_artifact_hashes)
         ):
             return "INVALID_PRODUCT_DEFINITION"
     return None
@@ -335,13 +393,35 @@ def catalogue_configuration(
     effective_prices = dict(
         _runtime_prices_inr() if prices_inr is None else prices_inr
     )
+    fixed_price_codes = frozenset(
+        code
+        for code in enabled_codes
+        if _PRODUCT_DEFINITIONS[code].price_model == "FIXED"
+    )
+    quote_price_codes = frozenset(
+        code
+        for code in enabled_codes
+        if _PRODUCT_DEFINITIONS[code].price_model == "ADVOCATE_QUOTE"
+    )
+    if fixed_price_codes | quote_price_codes != enabled_codes:
+        return CatalogueConfiguration(
+            False,
+            "INVALID_PRICE_MODEL",
+            ordered_codes,
+        )
     if set(effective_prices) - enabled_codes:
         return CatalogueConfiguration(
             False,
             "PRICE_CONFIGURED_FOR_DISABLED_PRODUCT",
             ordered_codes,
         )
-    if enabled_codes - set(effective_prices):
+    if set(effective_prices) & quote_price_codes:
+        return CatalogueConfiguration(
+            False,
+            "PRICE_CONFIGURED_FOR_QUOTE_PRODUCT",
+            ordered_codes,
+        )
+    if fixed_price_codes - set(effective_prices):
         return CatalogueConfiguration(
             False,
             "PRICE_NOT_CONFIGURED",
@@ -441,6 +521,7 @@ def resolve_product(code: str = PRODUCT_CODE) -> DocumentProduct:
         renderer_version=definition.renderer_version,
         template_path=definition.template_path,
         golden_answers=definition.golden_answers,
+        golden_artifact_hashes=definition.golden_artifact_hashes,
     )
 
 

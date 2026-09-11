@@ -17,6 +17,7 @@ from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
 from services.document_catalogue import (
+    OUTPUT_CLASSIFICATION,
     PRODUCT_CODE,
     DocumentProduct,
 )
@@ -73,6 +74,12 @@ def _number_words(number: int) -> str:
             parts.append(unit_name)
     parts.extend(under_thousand(number))
     return " ".join(parts) + " rupees only"
+
+
+def format_whole_inr_words(number: int) -> str:
+    """Return deterministic Indian-numbering words for whole rupees."""
+
+    return _number_words(number)
 
 
 def _clean_text(value: object) -> str:
@@ -168,20 +175,22 @@ def _paragraphs(markdown: str) -> list[tuple[str, str]]:
     return result
 
 
-def _pdf(
+def render_markdown_pdf(
     markdown: str,
     *,
     preview: bool,
     renderer_version: str,
+    title: str,
+    author: str,
 ) -> bytes:
+    """Render bounded Markdown deterministically for an approved package."""
+
     output = io.BytesIO()
     document = SimpleDocTemplate(
         output, pagesize=A4, rightMargin=18 * mm, leftMargin=18 * mm,
         topMargin=18 * mm, bottomMargin=18 * mm,
-        title="NyaySetu Residential Leave and Licence Agreement",
-        # Retained as immutable artifact metadata so existing approved golden
-        # hashes are not invalidated by the customer-facing product rename.
-        author="NyaySetu Document Studio",
+        title=title,
+        author=author,
         creator=renderer_version,
         invariant=1,
     )
@@ -218,6 +227,23 @@ def _pdf(
     return output.getvalue()
 
 
+def _pdf(
+    markdown: str,
+    *,
+    preview: bool,
+    renderer_version: str,
+) -> bytes:
+    return render_markdown_pdf(
+        markdown,
+        preview=preview,
+        renderer_version=renderer_version,
+        title="NyaySetu Residential Leave and Licence Agreement",
+        # Retained as immutable artifact metadata so existing approved golden
+        # hashes are not invalidated by the customer-facing product rename.
+        author="NyaySetu Document Studio",
+    )
+
+
 def _docx(markdown: str) -> bytes:
     paragraphs = []
     for kind, text in _paragraphs(_plain_ascii(markdown)):
@@ -249,6 +275,8 @@ def _docx(markdown: str) -> bytes:
 
 
 def render(product: DocumentProduct, answers: dict[str, object], kind: str) -> RenderedArtifact:
+    if product.output_classification != OUTPUT_CLASSIFICATION:
+        raise ValueError("self_service_renderer_classification_required")
     if kind not in {"PREVIEW_PDF", "FINAL_PDF", "FINAL_DOCX"}:
         raise ValueError("unsupported_document_artifact_kind")
     markdown = _render_source(product, answers)

@@ -2,8 +2,8 @@
 
 **Document status:** Working master for partner, product, legal, engineering,
 operations and marketing review  
-**Prepared on:** 31 July 2026  
-**Application candidate:** `2026-07-31 RC3`  
+**Prepared on:** 31 July 2026; status addendum updated 11 September 2026
+**Application candidate:** `2026-09-11 RC18 (local private Phase D)`
 **Legal-content version:** `legal-content-2026-07-r4`  
 **Release approach:** Fresh first production release; no legacy-user or
 legacy-database migration  
@@ -83,7 +83,7 @@ The correct launch strategy is a controlled fresh release:
 - isolated staging before any real customer traffic;
 - a capped pilot before marketing at scale.
 
-The current application candidate, `2026-07-31 RC3`, is **not yet
+The current application candidate, `2026-09-11 RC18`, is **not yet
 production-approved or live**.
 It must be committed/uploaded, pass CI, pass conversation/product review,
 receive legal/language approval, pass staging provider tests and complete a
@@ -162,7 +162,7 @@ urgency, payment or privacy.
 
 ---
 
-## 5. Current status as of 31 July 2026
+## 5. Historical status as of 31 July 2026
 
 ### 5.1 Release status
 
@@ -187,6 +187,19 @@ archive and checksum.
 
 Generated print editions of this blueprint are retained outside the runtime
 archive. The Markdown source remains part of the reviewed release.
+
+### 5.3 Status addendum as of 11 September 2026
+
+- RC17 is CI-validated and staging-verified with Alembic head `20260910_01`.
+- RC18 Phase D is implemented locally with head `20260911_01`: the real
+  cheque-notice package is privately registered, but the global allowlist and
+  customer journey still expose only the residential agreement.
+- The Phase D package requires an exact classification-specific two-PDF
+  approval. It uses advocate review and a matter-specific quote; registration
+  alone cannot create a payment entitlement or issued notice.
+- RC18 remains a production **NO-GO** until upload/CI, staging migration,
+  exact-hash advocate approval, scanner/interface/provider UAT and the
+  integrated launch checklist are complete.
 
 ### 5.3 New user-facing content in `legal-content-2026-07-r4`
 

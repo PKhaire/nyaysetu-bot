@@ -1,8 +1,8 @@
 # NyaySetu First Production Launch Checklist - Bot + Draft Studio
 
-Updated: 9 September 2026
+Updated: 11 September 2026
 
-Release candidate: RC14 (integrated checklist filename retained for continuity)
+Release candidate: RC18 (integrated checklist filename retained for continuity)
 
 Decision rule: NyaySetu Bot and Draft Studio launch together. There is no
 base-bot-only production path in this checklist. Any unchecked mandatory gate
@@ -10,23 +10,28 @@ keeps the release at **NO-GO**.
 
 ## Current verdict
 
-**NO-GO for production.** The simplified RC14 intake candidate is implemented
-locally, but its changed Draft Studio aggregate is not yet advocate-approved
-or deployed. Production isolation/live-provider configuration, translations,
-real-user/advocate UAT, restore proof, final regression, staffing/policy
-evidence, and a recorded GO decision remain mandatory.
+**NO-GO for production.** The Phase D cheque-notice package is implemented
+locally but remains outside the global allowlist. Its exact deployed hashes,
+production scanner, advocate interface, translations, real-user/advocate UAT,
+restore proof, final regression, staffing/policy evidence, and a recorded GO
+decision remain mandatory.
 
 Verified baseline:
 
 - [x] Public API is reachable and the current staging readiness response is OK.
-- [x] Current deployed staging schema is `20260903_01` and readiness is green.
+- [x] Current deployed RC17 staging schema is `20260910_01` and readiness is green.
 - [x] RC11 email-disabled/manual-operations behavior, outbox health, payment
   reconciliation, maintenance risk-zero report, and Draft Studio final
   PDF/DOCX flow have staging evidence.
 - [x] Local RC14 final validation passes with a single Alembic head
   `20260908_01`, updated SBOM, and the configured coverage gate.
-- [ ] RC17 Phase C has a single local Alembic head `20260910_01`; complete
-  regression, CI, staging migration and synthetic evidence are still required.
+- [x] RC17 Phase C has a single deployed Alembic head `20260910_01`; CI,
+  staging migration, private gate and synthetic cron evidence are green.
+- [ ] RC18 Phase D has a single local Alembic head `20260911_01`; upload, CI,
+  staging migration and exact cheque-package approval are still required.
+- [x] RC18 local full regression passes: 442 tests, 71.63% coverage, Ruff,
+  compilation, dependency consistency, SBOM, single-head, diff-integrity and
+  live dependency-audit gates are green.
 - [x] Draft Studio is globally available when enabled, not a test-user or
   cohort feature.
 - [ ] All mandatory gates below are complete and supported by saved evidence.
@@ -64,7 +69,7 @@ Evidence: Git SHA, reviewed manifest, CI URL, test report, and SBOM.
 - [ ] Set `ENV=production`, `FLASK_ENV=production`, and `DEBUG=false` only in
   production.
 - [ ] Confirm `RESET_DB=false` and destructive reset behavior is disabled.
-- [ ] Run Alembic and confirm schema `20260910_01` is applied.
+- [ ] Run Alembic and confirm schema `20260911_01` is applied.
 - [ ] Confirm `/health/live` and `/health/ready` return HTTP 200.
 
 Evidence: sanitized environment inventory, service IDs, migration log, and
@@ -94,9 +99,10 @@ health responses. Never store secret values in evidence.
   matters only: linked advocate MFA, assignment/conflict/acceptance, immutable
   quote, exact payment, scanned private evidence, per-order issue approval,
   PDF-only delivery, dispatch proof, legal hold and audited failure paths.
-- [ ] Complete Phase D's exact cheque-notice schema, clauses, template,
-  validators, supported/boundary/decline golden artifacts and authenticated
-  package approval. Discovery-pack approval alone is insufficient.
+- [x] Implement Phase D's exact private cheque-notice schema, clauses,
+  template, validators and supported/boundary/decline golden artifacts.
+- [ ] Deploy and authenticate the exact Phase D package hashes. Discovery-pack
+  or source-review approval alone is insufficient.
 - [ ] Select and validate the production malware/file scanner and approve the
   evidence type/size, access, retention, incident and legal-hold procedures.
 - [ ] Build and security-test the dedicated scoped advocate interface; never
@@ -331,7 +337,7 @@ Run only after a recorded GO decision:
 1. Announce the release window and freeze unrelated changes.
 2. Confirm backup, rollback target, support cover, and provider dashboards.
 3. Deploy the approved SHA with maintenance mode enabled.
-4. Apply/verify migration `20260910_01`.
+4. Apply/verify migration `20260911_01`.
 5. Verify production configuration without printing secret values.
 6. Verify `/health/live` and `/health/ready` internally.
 7. Confirm private S3, jobs, alerts, admin identity, Meta webhook, and Razorpay

@@ -56,6 +56,13 @@ class WorkflowActor:
 
 
 @dataclass(frozen=True)
+class EvaluateChequeNoticeIntake:
+    """Evaluate one immutable intake revision after evidence upload."""
+
+    pass
+
+
+@dataclass(frozen=True)
 class AssignAdvocate:
     advocate_id: int
     sla_due_at: datetime
@@ -185,6 +192,132 @@ def _assignment_snapshot(
             "authority_scope_version": assignment.authority_scope_version,
         },
     }
+
+
+def _evaluate_cheque_notice_intake(
+    db,
+    order: DocumentOrder,
+    actor: WorkflowActor,
+) -> NoticeWorkflowResult:
+    """Move a validated package into triage without making a legal decision."""
+
+    if actor.actor_type != "SYSTEM":
+        return NoticeWorkflowResult(False, "SYSTEM_INTAKE_EVALUATION_REQUIRED")
+    from services.cheque_notice_product import (
+        PRODUCT_CODE as CHEQUE_NOTICE_PRODUCT_CODE,
+        validate_intake,
+    )
+    from services.document_catalogue import resolve_product
+    from services.document_release_service import release_gate
+
+    if (
+        order.product_code != CHEQUE_NOTICE_PRODUCT_CODE
+        or order.output_classification != "ADVOCATE_ISSUED_NOTICE"
+        or order.state not in {"INTAKE", "EVIDENCE_PENDING"}
+        or not order.active_revision_number
+    ):
+        return NoticeWorkflowResult(False, "CHEQUE_NOTICE_INTAKE_STATE_INVALID")
+    try:
+        product = resolve_product(order.product_code)
+    except KeyError:
+        return NoticeWorkflowResult(False, "UNKNOWN_DOCUMENT_PRODUCT")
+    if not product.matches_package_snapshot(
+        template_version=order.template_version,
+        schema_hash=order.schema_hash,
+        template_hash=order.template_hash,
+        output_classification=order.output_classification,
+    ):
+        return NoticeWorkflowResult(False, "DOCUMENT_PACKAGE_SNAPSHOT_MISMATCH")
+    gate = release_gate(db, product.code)
+    if not gate.allowed:
+        return NoticeWorkflowResult(False, gate.reason_code)
+    revision = (
+        db.query(DocumentAnswerRevision)
+        .filter(
+            DocumentAnswerRevision.document_order_id == order.id,
+            DocumentAnswerRevision.revision_number
+            == order.active_revision_number,
+            DocumentAnswerRevision.schema_version == product.schema_version,
+        )
+        .first()
+    )
+    if revision is None:
+        return NoticeWorkflowResult(False, "INTAKE_REVISION_MISSING")
+    try:
+        answers = json.loads(revision.answers_json)
+    except (TypeError, ValueError):
+        return NoticeWorkflowResult(False, "INTAKE_REVISION_INVALID")
+    if not isinstance(answers, dict):
+        return NoticeWorkflowResult(False, "INTAKE_REVISION_INVALID")
+    evidence_statuses: dict[str, str] = {}
+    for evidence in (
+        db.query(DocumentEvidenceArtifact)
+        .filter(
+            DocumentEvidenceArtifact.document_order_id == order.id,
+            DocumentEvidenceArtifact.revision_number
+            == order.active_revision_number,
+            DocumentEvidenceArtifact.state == "AVAILABLE",
+        )
+        .all()
+    ):
+        evidence_statuses[evidence.evidence_kind] = (
+            evidence.scan_status
+            if evidence.expires_at > utc_now()
+            else "EXPIRED"
+        )
+    result = validate_intake(
+        answers,
+        evidence_scan_statuses=evidence_statuses,
+    )
+    if result.status == "INVALID":
+        return NoticeWorkflowResult(
+            False,
+            "INTAKE_INVALID",
+            {"reason_codes": list(result.reason_codes)},
+        )
+
+    previous = order.state
+    if result.status == "EVIDENCE_PENDING":
+        order.state = "EVIDENCE_PENDING"
+        order.current_step = "evidence_validation"
+        order.exception_code = result.reason_codes[0]
+        result_code = "EVIDENCE_PENDING"
+    elif result.status == "ROUTED_OUT":
+        order.state = "ROUTED_OUT"
+        order.current_step = "manual_consultation"
+        order.exception_code = result.reason_codes[0]
+        result_code = "ROUTED_OUT"
+    else:
+        order.state = "ADVOCATE_TRIAGE"
+        order.current_step = "advocate_assignment"
+        order.exception_code = None
+        result_code = "ADVOCATE_TRIAGE"
+    db.add(
+        DocumentAuditEvent(
+            document_order_id=order.id,
+            actor_type="SYSTEM",
+            event_type="DOCUMENT_CHEQUE_INTAKE_EVALUATED",
+            from_state=previous,
+            to_state=order.state,
+            details_json=_canonical(
+                {
+                    "reason_codes": result.reason_codes,
+                    "revision_number": revision.revision_number,
+                    "warnings": result.warnings,
+                }
+            ),
+        )
+    )
+    return NoticeWorkflowResult(
+        True,
+        result_code,
+        {
+            "order_ref": order.public_ref,
+            "state": order.state,
+            "reason_codes": list(result.reason_codes),
+            "warnings": list(result.warnings),
+        },
+    )
 
 
 def _assign_advocate(
@@ -1693,6 +1826,8 @@ def execute_notice_command(
 ) -> NoticeWorkflowResult:
     """Execute one authorized transition for an advocate-issued order."""
 
+    if isinstance(command, EvaluateChequeNoticeIntake):
+        return _evaluate_cheque_notice_intake(db, order, actor)
     if isinstance(command, AssignAdvocate):
         return _assign_advocate(db, order, actor, command)
     if isinstance(command, RecordConflictCheck):

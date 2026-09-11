@@ -1,6 +1,6 @@
 # Multi-Product Draft Studio Implementation Plan
 
-**Status:** Phases A-C implemented locally through RC17; Phases D-E have not started  
+**Status:** Phases A-D implemented locally; Phase E has not started  
 **Sequence:** preserve RC14, complete the catalogue foundation, then build the
 advocate-issued cheque-notice product through separate gated phases
 
@@ -383,9 +383,25 @@ Phase C does not add legal wording, a real cheque-notice schema, an advocate
 portal, a production file-scanner dependency, public payment or dispatch. Those
 remain Phase D/E gates.
 
-## Immediate next implementation ticket
+## Phase D implementation result
 
-After RC17 completes full local regression, start **Phase D only**: turn the
-authenticated advocate discovery decisions into an exact cheque-notice schema,
-clause catalogue and candidate template. Do not register or expose the product
-until its exact package and infrastructure dependencies pass Phase D/E gates.
+Phase D registers the real cheque-notice package privately while the current
+global allowlist continues to expose only the residential agreement. The
+package owns one immutable 18-response supported-path schema, conservative
+route-outs, three executable golden scenarios, an exact clause catalogue and
+candidate template, a neutral factual-summary PDF and an exact synthetic
+notice-review PDF. It accepts only a personal-loan fact pattern and the exact
+return reason `FUNDS INSUFFICIENT`; other legal fact patterns route before
+standard drafting or payment.
+
+The release ledger now stores a classification-specific golden artifact map.
+Existing residential PDF/DOCX approvals remain backward compatible and their
+hashes do not change. The cheque product uses a matter-specific advocate quote,
+so no fixed catalogue price may be configured. A system-only transition checks
+the exact package snapshot, current package approval, immutable answer
+revision and clean mandatory evidence before entering advocate triage.
+
+Phase D does not add the cheque product to the global allowlist or WhatsApp
+intake, collect a payment, select a production malware scanner, create an
+advocate portal, sign a notice or record a real dispatch. Those are explicit
+Phase E staging and launch-decision gates.

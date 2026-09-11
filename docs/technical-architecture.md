@@ -162,8 +162,10 @@ allows webhook or reconciliation processing to enter advocate drafting; it
 never invokes the self-service renderer. Evidence and signed PDFs require a
 clean scanner decision before private storage. Customer/advocate access,
 revision supersession, PDF-only durable delivery, redelivery, dispatch proof,
-legal holds and overdue assignment SLAs are fail-closed and audited. The
-synthetic Phase C product is not in the runtime catalogue.
+legal holds and overdue assignment SLAs are fail-closed and audited. Phase D
+adds the real cheque-notice definition to the private runtime registry, one
+validated intake schema and two deterministic package-review PDFs. It remains
+outside the global allowlist and therefore outside the customer catalogue.
 
 ## Booking and capacity lifecycle
 
@@ -337,7 +339,7 @@ Operational tables include `inbound_message_events`,
 blackouts/overrides, `admin_operators`, `admin_recovery_codes`, and
 `admin_audit_events`.
 
-Alembic revision `20260729_01` is the production baseline and `20260910_01` is
+Alembic revision `20260729_01` is the production baseline and `20260911_01` is
 the current production head. Revisions `20260818_01` and `20260819_01` add the
 case-brief and initial Draft Studio ledgers; `20260827_01` adds the
 governed RC9 revision, artifact, access-event, and exact release-approval
@@ -346,7 +348,9 @@ it creates the application and reliability/operations schema; `20260908_01`
 adds named administrator identities, one-use recovery-code digests, persistent
 lockout state, and session invalidation counters; `20260910_01` adds the
 advocate-issued assignment, review, quote, evidence, issue, dispatch and legal
-hold ledgers. The migration chain retains
+hold ledgers; `20260911_01` adds generic classification-specific golden
+artifact approval evidence without invalidating legacy PDF/DOCX rows. The
+migration chain retains
 compatibility steps for selected legacy columns/constraints and backfills, but
 those paths are not exercised by the current fresh release. Render runs
 `python -m alembic -c alembic.ini upgrade head` before the web release;

@@ -421,7 +421,7 @@ SQLite data:
 ## Legacy SQLite import contingency (not authorised for this launch)
 
 Production uses baseline revision `20260729_01` and current head
-`20260910_01`; automatic `create_all()` is disabled and `/health/ready`
+`20260911_01`; automatic `create_all()` is disabled and `/health/ready`
 requires the expected head. The baseline is additive and contains
 compatibility/backfill logic for pre-Alembic databases.
 The following utility is retained only for a separately approved future
@@ -439,7 +439,7 @@ not a recurring sync:
   retain an untouched restore copy.
 - Prepare a separate working backup at Alembic head, then create the frozen
   import artifact from that working copy with the SQLite backup mechanism.
-  The utility requires the source and target to have revision `20260910_01`
+  The utility requires the source and target to have revision `20260911_01`
   and the full current table/column shape.
 - The source must be a regular non-symlink file with no adjacent `-wal`,
   `-journal`, or `-shm` sidecar. It is opened immutable/read-only and checked
@@ -570,7 +570,7 @@ Every later schema-changing release must add a frozen, reviewed Alembic
 revision and rehearse upgrade, compatibility rollback, and re-upgrade. Never
 edit any applied revision, including `20260729_01`, `20260818_01`,
 `20260819_01`, `20260827_01`, `20260903_01`, `20260908_01`, or
-`20260910_01`, after it has reached a shared
+`20260910_01`, or `20260911_01`, after it has reached a shared
 environment.
 
 ## Webhook configuration
@@ -1266,7 +1266,7 @@ Before enabling the switch:
    blocks preview/payment/final release.
 3. Set the approved price and the matching Razorpay test keys/webhook secret.
 4. Apply Alembic head and require `/health/ready` to report `ok=true`,
-   PostgreSQL and schema `20260910_01`.
+   PostgreSQL and schema `20260911_01`.
 
 The per-product release section must identify every allowlisted product. For
 the current single-product staging deployment the expected shape is:
@@ -1318,7 +1318,8 @@ captured; enabling staging does not authorize production publication.
   capacity reservations; `20260908_01` adds named administrator identity,
   MFA recovery, lockout, and session-invalidation state; `20260910_01` adds
   private advocate assignment, review, quote, evidence, issue, dispatch and
-  legal-hold records. Do not rewrite
+  legal-hold records; `20260911_01` adds classification-specific golden
+  artifact approval evidence. Do not rewrite
   applied revision files.
 - Per-user/global limits cover early menu, support, media, and paid-flow
   branches and deduplicate notices, but their state and some other abuse

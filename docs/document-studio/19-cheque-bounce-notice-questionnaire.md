@@ -1,7 +1,8 @@
 # Questionnaire Contract: Single-Cheque Section 138 Demand Notice
 
-**Status:** candidate for advocate workshop; not a runtime schema  
-**Candidate schema:** `in-ni138-single-cheque-en-2026-09-candidate-1`  
+**Status:** revalidated private Phase D runtime schema; not connected to the
+customer journey or global allowlist  
+**Schema:** `in-ni138-single-cheque-en-2026-09-v1`  
 **Output:** advocate-triage facts, not an automatic legal conclusion
 
 Exactly one approved schema may be active for this product, language and
@@ -10,10 +11,11 @@ permitted.
 
 ## Experience target
 
-The shortest supported WhatsApp path targets **18 customer responses plus
-evidence submission and final confirmation**. Questions are arranged in six
-visible sections. The user can `Save & Exit` at every non-payment step and can
-correct one section without repeating the entire intake.
+The shortest supported WhatsApp path targets **18 customer response screens
+before separate evidence upload**. The 18 include final fact confirmation,
+review consent and contact permission. Questions are arranged in six visible
+sections. The user can `Save & Exit` at every non-payment step and can correct
+one section without repeating the entire intake.
 
 Where the customer already has a confirmed NyaySetu name or address, the bot
 offers explicit reuse. It never silently copies an address into the legal
@@ -69,7 +71,7 @@ service.
 
 | Field code | Meaning | Validation |
 | --- | --- | --- |
-| `liability_category` | Loan, sale of goods, service invoice, rent/fee, refund or other | Controlled list; `OTHER` requires advocate triage |
+| `liability_category` | Personal loan for the first standard package | Every other category routes before standard drafting/payment |
 | `liability_summary` | Short factual origin of the stated debt | 20-800 characters; no generated accusation |
 | `liability_due_date` | Date payment was allegedly due | Valid date; uncertainty routes |
 | `cheque_number` | Exact cheque number | Digits/characters permitted by reviewed bank formats; confirm twice |
@@ -90,7 +92,7 @@ blocks rendering. The user cannot override that block through free text.
 | `presented_on` | Date cheque was presented/deposited | Valid date, not before cheque date without advocate route |
 | `return_memo_date` | Date on bank return memo/advice | Valid date |
 | `dishonour_information_received_on` | Date payee received bank information | Explicit customer answer; never default to memo date |
-| `return_reason_exact` | Exact bank return reason | Select from evidence-extracted suggestion or bounded exact text |
+| `return_reason_exact` | Exact bank return reason | Only exact `FUNDS INSUFFICIENT` is in the first standard package; every other reason routes for separate review |
 | `return_bank_name` | Bank that communicated return | Bounded confirmed value |
 
 The application may show:
@@ -188,8 +190,9 @@ own legal decision.
 
 ## Questionnaire acceptance tests
 
-- [ ] Shortest path does not exceed 18 customer responses before evidence and
-  final confirmation.
+- [x] Shortest package schema contains 18 non-conditional customer responses,
+  including final fact confirmation and consent, before separate evidence
+  upload.
 - [ ] Save/resume restores the exact section and does not duplicate an order.
 - [ ] Profile/address reuse is always explicit and separately confirmed.
 - [ ] Every unsupported or uncertain answer routes before payment.
@@ -204,4 +207,3 @@ own legal decision.
 - [ ] Every post-confirmation edit invalidates dependent review evidence.
 - [ ] Hindi/Marathi navigation cannot expose an English legal notice as if it
   were translated or reviewed in that language.
-

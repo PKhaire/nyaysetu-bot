@@ -1,6 +1,7 @@
 # Source and Legal-Decision Register: Section 138 Demand Notice
 
-**Status:** research baseline for advocate review  
+**Status:** source baseline revalidated for private Phase D implementation on
+11 September 2026; authenticated exact-package approval remains a runtime gate  
 **Retrieved/checked:** 10 September 2026  
 **Product:** `in_ni138_single_cheque_individual_advocate_issued`
 
@@ -53,12 +54,12 @@ each `ACCEPT`, `CHANGE` or `REJECT` and provide reasons.
 | Product classification | Advocate-Issued Notice; never self-service | |
 | Parties | One individual named payee and one individual drawer only | |
 | Instrument | One cheque, one presentation/return event, no prior notice | |
-| Liability | Customer states enforceable debt; advocate verifies evidence and sufficiency | |
+| Liability | Personal-loan statement only in the standard package; advocate verifies evidence and sufficiency | Revalidated Phase D baseline |
 | Validity | Check current three-month RBI direction plus instrument facts | |
 | Notice clock | Record receipt-of-bank-information date separately; advocate confirms section 138(b) treatment | |
 | Demand amount | Exact cheque amount, confirmed twice and matched to evidence; no automatic interest/cost/damages | |
 | Part payment/adjustment | Route out without payment | |
-| Return reason | No universal allowlist until advocate maps exact reasons and precedent; uncertain reason routes | |
+| Return reason | Exact `FUNDS INSUFFICIENT` only; every other reason routes | Revalidated Phase D baseline |
 | Company/firm drawer | Route out to a future section 141 product | |
 | Successive presentment/prior notice | Route out | |
 | Service | Speed post with registration and proof of delivery as baseline, subject to current advocate confirmation | |
@@ -109,21 +110,28 @@ The source owner performs a documented check before every new package and at
 least every three months while this time-sensitive product is active. A source
 change never silently modifies an accepted, paid or issued order.
 
-## Open legal questions blocking template drafting
+## Phase D decisions; recheck before activation and every issue
 
-- Which exact dishonour reasons will the first product accept?
-- Is the first product available across India or only in states where the
-  initial advocate panel and process are approved?
-- What debt evidence is sufficient for each allowed liability category?
-- What wording addresses notice charges or interest, if any, without obscuring
-  the exact cheque-amount demand?
-- What method proves advocate instruction, acceptance, approval and signature?
-- Which dispatch variants and returned/unclaimed outcomes are supported?
-- What matter-file retention is required after decline, issue, settlement or
-  contemplated complaint?
-- What happens when the customer reports payment after notice drafting or
-  dispatch?
+- The first standard package accepts only the exact recorded reason `FUNDS
+  INSUFFICIENT`; every other reason routes without standard-product payment.
+- India is the product jurisdiction, but an order cannot be assigned unless
+  the verified advocate's immutable authority scope includes the product.
+- Personal-loan support is mandatory and remains for matter-specific advocate
+  sufficiency review; software does not approve the debt.
+- The notice demands the exact cheque amount only. No interest, damages, costs
+  or professional charges are calculated or added.
+- Advocate responsibility is proved by named MFA identity, assignment,
+  conflict/matter decision, exact revision/hash and per-order offline-signed
+  PDF ingestion. Reusable signature images are prohibited.
+- Speed post with registration and proof of delivery is the baseline record.
+  Returned, refused, unclaimed or additional-method consequences remain an
+  advocate decision.
+- Existing bounded retention, paid-evidence preservation and legal-hold rules
+  apply pending the final Phase E privacy/operations sign-off.
+- Reported payment or settlement after intake suspends standard drafting or
+  dispatch and returns the matter to the assigned advocate; no automatic legal
+  consequence is recorded.
 
-Until these questions are resolved and authenticated, no candidate notice
-prose should be exposed to customers or connected to payment.
-
+These decisions permit private implementation and synthetic artifact review.
+They do not permit customer visibility, payment collection or issue until the
+exact deployed hashes and dependencies receive authenticated approval.

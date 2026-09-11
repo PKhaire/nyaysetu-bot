@@ -1,6 +1,6 @@
 # NyaySetu Draft Studio
 
-Status: RC17 private advocate-issued workflow foundation implemented locally.
+Status: Phase D cheque-notice package implemented privately after RC17.
 Global menu visibility, one conditional questionnaire, PIN assistance,
 deterministic rendering, exact payment, private artifact storage, short-lived
 downloads, retention controls, strict per-product pricing and per-product
@@ -68,10 +68,12 @@ Choose product
 | [Candidate agreement template](16-residential-leave-license-candidate-template.md) | Exact English candidate prose and renderer-token contract for authentication |
 | [V2 intake and booking UX plan](17-v2-intake-ux-reduction-plan.md) | All-question keep/combine/conditional/remove mapping, PIN-assisted address design and shorter consultation journey |
 | [Cheque-notice product specification](18-cheque-bounce-notice-product-spec.md) | Proposed advocate-issued V1 boundary, eligibility, evidence, payment, issuance and dispatch controls |
-| [Cheque-notice questionnaire](19-cheque-bounce-notice-questionnaire.md) | Candidate customer intake, routing, confirmation and advocate-only fields; not a runtime schema |
-| [Cheque-notice source and decision register](20-cheque-bounce-notice-source-and-decision-register.md) | Primary-law baseline, conservative decisions and legal questions blocking template drafting |
-| [Cheque-notice advocate review pack](21-cheque-bounce-notice-advocate-review-pack.md) | Blank discovery and exact-release decisions for an authenticated reviewing advocate |
+| [Cheque-notice questionnaire](19-cheque-bounce-notice-questionnaire.md) | Private versioned runtime schema, bounded validation, route-outs and advocate-only decisions |
+| [Cheque-notice source and decision register](20-cheque-bounce-notice-source-and-decision-register.md) | Primary-law baseline and conservative revalidated Phase D decisions |
+| [Cheque-notice advocate review pack](21-cheque-bounce-notice-advocate-review-pack.md) | Controlled discovery and exact-release authentication record |
 | [Multi-product catalogue plan](22-multi-product-catalogue-implementation-plan.md) | Product-registry and separate self-service/advocate-issued workflow plan with phased acceptance criteria |
+| [Cheque-notice clause catalogue](23-cheque-bounce-notice-clause-catalogue.md) | Exact clause purposes, tokens, prohibited branches and artifact contract |
+| [Cheque-notice candidate template](24-cheque-bounce-notice-candidate-template.md) | Exact private English notice prose for assigned-advocate review and signing |
 | [ADR 0001](../adr/0001-document-studio-publication-and-artifact-contract.md) | Universal publication and preview/payment/final binding decision |
 | [ADR 0002](../adr/0002-advocate-identity-and-legal-decision-boundary.md) | Named advocate identity and operator/legal-decision separation |
 

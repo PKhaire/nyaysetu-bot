@@ -31,8 +31,9 @@ documentation. It describes the domain, not the implementation.
   may re-download Final Artifacts before scheduled deletion.
 - **Advocate-Issued Notice**: A separately priced service in which a Verified
   Advocate accepts one matter, approves an immutable quote, reviews the
-  customer's evidence and issues one exact locked PDF. Phase C exercises this
-  workflow with synthetic data only; it is not a published Document Product.
+  customer's evidence and issues one exact locked PDF. The cheque-notice
+  package is registered privately after Phase D, but it is not globally
+  allowlisted or published.
 - **Verified Advocate**: An active advocate whose enrolment evidence and
   product authority scope have been recorded before assignment.
 - **Advocate Identity**: A named password-plus-TOTP identity linked one-to-one

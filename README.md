@@ -15,11 +15,17 @@ manipulative retention patterns or imply a lawyer-client relationship.
 - A globally visible Draft Studio entry when the product switch is enabled;
   it never samples users or depends on tester phone numbers. The first product
   is selected through a data-driven, strictly priced and independently
-  release-gated catalogue. It uses an atomic global daily capacity, bounded eligibility checks, a deterministic questionnaire, a
+  release-gated catalogue. It uses an atomic global daily capacity, bounded
+  eligibility checks, a deterministic questionnaire, a
   watermarked preview, exact Razorpay payment verification, and private final
   PDF/DOCX delivery. Preview, payment and release fail closed unless the exact
   template package has authenticated advocate approval and private storage is
   ready.
+- A privately registered, non-visible cheque-notice package for Phase D. It
+  supports only a narrow personal-loan/single-cheque fact pattern, routes
+  uncertainty to an advocate, uses a matter-specific quote and binds release
+  approval to a factual-summary PDF plus an internal notice-review PDF. Phase E
+  must complete the customer journey and staging gates before global release.
 - Consent-gated AI information with deterministic safety checks and local
   fallback content.
 - Guided legal category, district, date, and capacity-aware slot selection.
@@ -27,9 +33,10 @@ manipulative retention patterns or imply a lawyer-client relationship.
   urgency/safety cue, and versioned consent before appointment selection.
 - Consultation intake accepts no evidence or identity-document upload: users
   retain original files and only state which document types are available.
-  Draft Studio likewise accepts no Aadhaar, PAN, bank credential,
-  signature or identity-document upload; it stores only generated artifacts in
-  private object storage for the configured availability window.
+  The visible self-service agreement likewise accepts no Aadhaar, PAN, bank
+  credential, signature or identity-document upload. The private
+  advocate-issued workflow accepts only defined matter evidence through the
+  scanned, encrypted evidence vault and is not yet connected to customers.
 - A review step before creating a Razorpay payment link.
 - Signed and idempotent Meta and Razorpay webhook processing. Payment
   entitlement additionally requires exact, current Razorpay Payment Link and
@@ -302,7 +309,7 @@ untested working tree.
 ## Fresh database release gate
 
 The repository includes production baseline `20260729_01` and current head
-`20260910_01`. Render runs
+`20260911_01`. Render runs
 `python -m alembic -c alembic.ini upgrade head` before the web release, and
 staging and production readiness require the current head. Automatic
 `create_all()` is disabled by default in both environments and remains only a

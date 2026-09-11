@@ -129,20 +129,19 @@ These items are “implemented,” not automatically “deployed” or “operat
 ### Additional Draft Studio products
 
 - Preserve the existing residential leave-and-license product identity,
-  approved hashes and behavior while introducing a product registry.
-- Preserve the completed Phase A-B registry/catalogue and Phase C synthetic
-  advocate-issued workflow boundaries from the
+  approved hashes and behavior through the implemented product registry.
+- Preserve the completed Phase A-D registry, workflow and private legal-package
+  boundaries from the
   [multi-product catalogue plan](document-studio/22-multi-product-catalogue-implementation-plan.md).
-- Obtain an authenticated advocate decision of
-  `APPROVED_FOR_TEMPLATE_DRAFTING` against the
-  [cheque-notice review pack](document-studio/21-cheque-bounce-notice-advocate-review-pack.md)
-  before writing customer-visible statutory-notice prose.
-- Treat the proposed single-cheque section 138 notice as advocate-issued:
+- Obtain an authenticated exact-hash runtime approval against the candidate
+  template, schema, renderer and two golden PDFs before staging activation.
+- Treat the privately registered single-cheque section 138 notice as
+  advocate-issued:
   evidence review, matter acceptance and quote precede payment; final approval,
   controlled signing and dispatch evidence follow it.
-- Keep the cheque-notice candidate absent from menus, payment and runtime
-  schemas until its exact template, intake, price, workflow and release
-  manifest pass separate legal, security, operations and staging gates.
+- Keep the cheque-notice package absent from menus and the global allowlist
+  until Phase E connects its intake/evidence journey and its exact package,
+  quote, signing, dispatch, privacy, security and staging gates pass.
 
 ### Reschedule, cancellation, and refund
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -13,7 +14,6 @@ from services.document_catalogue import (
     catalogue_configuration,
     resolve_product,
 )
-from services.document_renderer import golden_hashes
 
 
 _HASH = re.compile(r"^[0-9a-f]{64}$")
@@ -31,16 +31,49 @@ def release_manifest(product_code: str = PRODUCT_CODE) -> dict:
     """Return the exact non-secret package identity an advocate approves."""
 
     product = resolve_product(product_code)
-    pdf_hash, docx_hash = golden_hashes(product)
-    return {
+    artifact_hashes = product.golden_artifact_hashes(product)
+    manifest = {
         "product_code": product.code,
         "template_version": product.template_version,
         "template_aggregate_hash": product.aggregate_hash,
         "schema_hash": product.schema_hash,
         "template_hash": product.template_hash,
-        "golden_pdf_hash": pdf_hash,
-        "golden_docx_hash": docx_hash,
+        "golden_artifact_hashes": artifact_hashes,
     }
+    if set(artifact_hashes) == {"FINAL_PDF", "FINAL_DOCX"}:
+        manifest.update(
+            {
+                "golden_pdf_hash": artifact_hashes["FINAL_PDF"],
+                "golden_docx_hash": artifact_hashes["FINAL_DOCX"],
+            }
+        )
+    return manifest
+
+
+def _stored_artifact_hashes(
+    approval: DocumentTemplateApproval,
+) -> dict[str, str] | None:
+    """Read new artifact evidence with a legacy self-service fallback."""
+
+    if approval.golden_artifact_hashes_json:
+        try:
+            value = json.loads(approval.golden_artifact_hashes_json)
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(value, dict):
+            return None
+        normalized = {
+            str(key): str(item).lower()
+            for key, item in value.items()
+            if isinstance(key, str) and isinstance(item, str)
+        }
+        return normalized if len(normalized) == len(value) else None
+    if approval.golden_pdf_hash and approval.golden_docx_hash:
+        return {
+            "FINAL_PDF": approval.golden_pdf_hash,
+            "FINAL_DOCX": approval.golden_docx_hash,
+        }
+    return None
 
 
 def approval_for_product(db, product: DocumentProduct) -> DocumentTemplateApproval | None:
@@ -78,8 +111,10 @@ def release_gate(
         product = resolve_product(product_code)
     except KeyError:
         return ReleaseGate(False, "UNKNOWN_DOCUMENT_PRODUCT")
-    if product.price_minor <= 0:
+    if product.price_model == "FIXED" and product.price_minor <= 0:
         return ReleaseGate(False, "PRICE_NOT_CONFIGURED")
+    if product.price_model not in {"FIXED", "ADVOCATE_QUOTE"}:
+        return ReleaseGate(False, "INVALID_PRICE_MODEL")
     approval = approval_for_product(db, product)
     if approval is None:
         return ReleaseGate(False, "ADVOCATE_APPROVAL_MISSING")
@@ -93,11 +128,18 @@ def release_gate(
         )
     if approval.next_review_at <= utc_now():
         return ReleaseGate(False, "ADVOCATE_APPROVAL_EXPIRED", approval.id)
-    pdf_hash, docx_hash = golden_hashes(product)
-    if approval.golden_pdf_hash != pdf_hash:
-        return ReleaseGate(False, "GOLDEN_PDF_HASH_MISMATCH", approval.id)
-    if approval.golden_docx_hash != docx_hash:
-        return ReleaseGate(False, "GOLDEN_DOCX_HASH_MISMATCH", approval.id)
+    expected_hashes = product.golden_artifact_hashes(product)
+    stored_hashes = _stored_artifact_hashes(approval)
+    if stored_hashes != expected_hashes:
+        if set(expected_hashes) == {"FINAL_PDF", "FINAL_DOCX"}:
+            if not stored_hashes or stored_hashes.get("FINAL_PDF") != expected_hashes["FINAL_PDF"]:
+                return ReleaseGate(False, "GOLDEN_PDF_HASH_MISMATCH", approval.id)
+            return ReleaseGate(False, "GOLDEN_DOCX_HASH_MISMATCH", approval.id)
+        return ReleaseGate(
+            False,
+            "GOLDEN_ARTIFACT_HASH_MISMATCH",
+            approval.id,
+        )
     return ReleaseGate(True, "APPROVED", approval.id)
 
 
@@ -194,10 +236,38 @@ def _validate_approval_payload(
     ).strip().lower()
     if supplied_aggregate != product.aggregate_hash:
         raise ValueError("template_aggregate_hash_mismatch")
-    pdf_hash = str(payload.get("golden_pdf_hash") or "").strip().lower()
-    docx_hash = str(payload.get("golden_docx_hash") or "").strip().lower()
-    if not _HASH.fullmatch(pdf_hash) or not _HASH.fullmatch(docx_hash):
-        raise ValueError("invalid_golden_hash")
+    expected_keys = set(product.golden_artifact_hashes(product))
+    supplied_artifacts = payload.get("golden_artifact_hashes")
+    if supplied_artifacts is None:
+        if expected_keys != {"FINAL_PDF", "FINAL_DOCX"}:
+            raise ValueError("invalid_golden_artifact_hashes")
+        pdf_hash = str(payload.get("golden_pdf_hash") or "").strip().lower()
+        docx_hash = str(payload.get("golden_docx_hash") or "").strip().lower()
+        if not _HASH.fullmatch(pdf_hash) or not _HASH.fullmatch(docx_hash):
+            raise ValueError("invalid_golden_hash")
+        artifact_hashes = {"FINAL_PDF": pdf_hash, "FINAL_DOCX": docx_hash}
+    else:
+        if not isinstance(supplied_artifacts, dict):
+            raise ValueError("invalid_golden_artifact_hashes")
+        artifact_hashes = {
+            str(key).strip(): str(value).strip().lower()
+            for key, value in supplied_artifacts.items()
+        }
+        if (
+            set(artifact_hashes) != expected_keys
+            or any(not _HASH.fullmatch(value) for value in artifact_hashes.values())
+        ):
+            raise ValueError("invalid_golden_artifact_hashes")
+        pdf_hash = (
+            artifact_hashes.get("FINAL_PDF")
+            if expected_keys == {"FINAL_PDF", "FINAL_DOCX"}
+            else None
+        )
+        docx_hash = (
+            artifact_hashes.get("FINAL_DOCX")
+            if expected_keys == {"FINAL_PDF", "FINAL_DOCX"}
+            else None
+        )
     return {
         **normalized,
         "decision": decision,
@@ -207,6 +277,11 @@ def _validate_approval_payload(
         "template_aggregate_hash": supplied_aggregate,
         "golden_pdf_hash": pdf_hash,
         "golden_docx_hash": docx_hash,
+        "golden_artifact_hashes_json": json.dumps(
+            artifact_hashes,
+            separators=(",", ":"),
+            sort_keys=True,
+        ),
     }
 
 

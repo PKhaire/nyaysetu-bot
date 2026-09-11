@@ -8,6 +8,11 @@ from external rollout work and future product ideas.
 
 Start with:
 
+- [RC18 private cheque-notice package](RELEASE_NOTES_2026-09-11_RC18.md)
+  - privately registers one conservative personal-loan/single-cheque package,
+    a bounded intake validator, factual-summary and notice-review PDFs, and a
+    classification-specific release manifest; it remains absent from the
+    global allowlist and WhatsApp journey.
 - [RC17 advocate-issued workflow foundation](RELEASE_NOTES_2026-09-10_RC17.md)
   - private synthetic assignment, quote, evidence, issue, PDF-only delivery,
     dispatch, legal-hold and operations behavior; no cheque-notice legal
@@ -43,9 +48,9 @@ Start with:
   baseline plus the first-product source, questionnaire, clause, retention,
   implementation, conservative V1 legal-drafting decisions, exact candidate
   template and advocate-authentication contracts.
-  The package also contains a discovery-only cheque-notice product pack and
-  the implemented Phase A-C multi-product/advocate-workflow plan. The legal
-  cheque-notice product is not registered, offered or approved for payment.
+  The package also contains the implemented Phase A-D multi-product and
+  advocate-issued workflow plan. The legal cheque-notice package is privately
+  registered but is not offered, globally allowlisted or connected to payment.
 
 Then continue with the established repository documentation:
 
@@ -202,8 +207,10 @@ Implemented in the repository:
   release decisions.
 - RC17 private advocate-issued workflow foundations for synthetic tests,
   including exact quote/payment binding, scanned evidence, per-order issue
-  approval, locked-PDF delivery, dispatch proof and legal holds. No second
-  runtime product or real legal content is included.
+  approval, locked-PDF delivery, dispatch proof and legal holds.
+- RC18 private cheque-notice package registration, 18-response intake schema,
+  conservative routing, exact two-PDF review artifacts and generic release
+  evidence. It is not customer-visible and creates no payment entitlement.
 
 Still required before production cutover:
 

@@ -235,6 +235,11 @@ or production rollout.
 19. Apply `20260910_01` and exercise the synthetic advocate-issued workflow:
     exact assignment/review/quote/payment, private evidence, revision-bound
     issue, PDF-only delivery/redelivery, dispatch, legal hold and maintenance.
+20. Apply `20260911_01`; verify the private cheque product remains outside the
+    global catalogue, old residential approvals still pass, legacy PDF/DOCX
+    approval payloads cannot approve the cheque package, and exact two-PDF
+    package evidence is required before system intake evaluation reaches
+    advocate triage.
 
 Never run destructive, refund, or load scenarios against real user data.
 
@@ -344,6 +349,24 @@ legal approval.
 This evidence covers the Phase A/B code package. It does not claim zero risk or
 replace provider staging UAT, PostgreSQL migration validation, penetration
 testing, native-language review, or the separate Phase C-E release gates.
+
+### RC18 Phase D local automation evidence
+
+- Focused private cheque-package tests: 20 passed.
+- Full regression with the repository coverage gate: 442 passed; total
+  coverage 71.63%.
+- Ruff, compilation, dependency consistency, deterministic SBOM, Alembic
+  single-head and diff-integrity checks pass.
+- The local live advisory audit reports no known vulnerabilities in the pinned
+  runtime set. Linux Gunicorn and PostgreSQL migration checks remain mandatory
+  in GitHub CI for the exact uploaded commit.
+- Registration/visibility, quote pricing, intake route-outs, evidence gating,
+  deterministic PDF hashes, legacy-approval rejection and exact package release
+  behavior are covered.
+
+This evidence does not activate the product or replace authenticated exact-hash
+advocate approval, production scanner/interface security tests, translations,
+provider staging UAT or the Phase E global launch decision.
 
 Code gates:
 
