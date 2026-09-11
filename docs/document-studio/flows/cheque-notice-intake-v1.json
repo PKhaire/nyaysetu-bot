@@ -7,14 +7,7 @@
     "DEBT_CHEQUE": ["DISHONOUR"],
     "DISHONOUR": ["EVIDENCE_CHANGES"],
     "EVIDENCE_CHANGES": ["REVIEW_HANDOVER"],
-    "REVIEW_HANDOVER": [
-      "SUITABILITY",
-      "PEOPLE_ADDRESSES",
-      "DEBT_CHEQUE",
-      "DISHONOUR",
-      "EVIDENCE_CHANGES",
-      "SUCCESS"
-    ],
+    "REVIEW_HANDOVER": ["SUCCESS"],
     "SUCCESS": []
   },
   "screens": [
@@ -247,7 +240,7 @@
         "liability_summary": {"type": "string", "__example__": ""},
         "cheque_number": {"type": "string", "__example__": ""},
         "cheque_date": {"type": "string", "__example__": ""},
-        "cheque_amount_inr": {"type": "string", "__example__": ""},
+        "cheque_amount_inr": {"type": "number", "__example__": 250000},
         "payee_name_on_cheque": {"type": "string", "__example__": ""},
         "drawer_bank_name": {"type": "string", "__example__": ""},
         "drawer_bank_branch": {"type": "string", "__example__": ""},
@@ -566,7 +559,7 @@
       "id": "REVIEW_HANDOVER",
       "title": "6 of 6 - Review and handover",
       "data": {
-        "cheque_amount_confirmation_inr": {"type": "string", "__example__": ""},
+        "cheque_amount_confirmation_inr": {"type": "number", "__example__": 250000},
         "facts_confirmed": {"type": "string", "__example__": ""},
         "review_consent": {"type": "string", "__example__": ""},
         "contact_permission": {"type": "string", "__example__": ""},
@@ -598,7 +591,7 @@
               },
               {
                 "type": "TextBody",
-                "text": "Re-enter the cheque amount and confirm the complete factual summary."
+                "text": "Re-enter the cheque amount and confirm the complete factual summary. Use the back control before submitting if an earlier answer needs correction."
               },
               {
                 "type": "TextInput",
@@ -613,21 +606,7 @@
                 "label": "Are all displayed facts correct?",
                 "required": true,
                 "data-source": [
-                  {"id": "CONFIRM", "title": "Confirm"},
-                  {"id": "EDIT", "title": "Edit a section"}
-                ]
-              },
-              {
-                "type": "Dropdown",
-                "name": "edit_section",
-                "label": "Section to edit, only if selected",
-                "required": false,
-                "data-source": [
-                  {"id": "SUITABILITY", "title": "Suitability"},
-                  {"id": "PEOPLE_ADDRESSES", "title": "People and addresses"},
-                  {"id": "DEBT_CHEQUE", "title": "Debt and cheque"},
-                  {"id": "DISHONOUR", "title": "Dishonour"},
-                  {"id": "EVIDENCE_CHANGES", "title": "Evidence and changes"}
+                  {"id": "CONFIRM", "title": "Confirm"}
                 ]
               },
               {
@@ -667,7 +646,6 @@
                   "payload": {
                     "cheque_amount_confirmation_inr": "${form.cheque_amount_confirmation_inr}",
                     "facts_confirmed": "${form.facts_confirmed}",
-                    "edit_section": "${form.edit_section}",
                     "review_consent": "${form.review_consent}",
                     "contact_permission": "${form.contact_permission}"
                   }

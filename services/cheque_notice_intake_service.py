@@ -11,6 +11,7 @@ import hashlib
 import json
 import secrets
 from datetime import timedelta
+from decimal import Decimal, InvalidOperation
 from types import MappingProxyType
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -97,7 +98,9 @@ SCREEN_FIELDS = MappingProxyType(
     }
 )
 _OPTIONAL_FIELDS = frozenset({"drawer_alternate_address"})
-_EDITABLE_SCREENS = frozenset(FLOW_SCREENS[:-1])
+_FLOW_NUMBER_FIELDS = frozenset(
+    {"cheque_amount_inr", "cheque_amount_confirmation_inr"}
+)
 _TOKEN_SALT = "nyaysetu-cheque-notice-flow-v1"
 _MAX_FLOW_FIELDS = 16
 
@@ -299,7 +302,25 @@ def _screen_data(
     error_message: str = "",
 ) -> dict[str, object]:
     answers = _answers(order)
-    data = {field: str(answers.get(field) or "") for field in SCREEN_FIELDS[screen]}
+    data: dict[str, object] = {}
+    for field in SCREEN_FIELDS[screen]:
+        value = answers.get(field)
+        if field == "cheque_amount_confirmation_inr" and not value:
+            value = answers.get("cheque_amount_inr")
+        if field in _FLOW_NUMBER_FIELDS:
+            try:
+                number = Decimal(str(value or "0"))
+            except InvalidOperation:
+                number = Decimal(0)
+            if not number.is_finite():
+                number = Decimal(0)
+            data[field] = (
+                int(number)
+                if number == number.to_integral_value()
+                else float(number)
+            )
+        else:
+            data[field] = str(value or "")
     data.update(
         {
             "has_error": bool(error_message),
@@ -332,8 +353,6 @@ def _validated_screen_values(
     if not isinstance(supplied, dict) or len(supplied) > _MAX_FLOW_FIELDS:
         return None, "Please check every field on this section."
     allowed = set(SCREEN_FIELDS[screen])
-    if screen == "REVIEW_HANDOVER":
-        allowed.add("edit_section")
     if any(not isinstance(key, str) or key not in allowed for key in supplied):
         return None, "This form contained an unexpected field. Please reopen it."
 
@@ -415,29 +434,18 @@ def handle_notice_flow_request(db, request_body: object) -> dict[str, object]:
         }
     assert values is not None
 
-    if screen == "REVIEW_HANDOVER" and values.get("facts_confirmed") == "EDIT":
-        target = str((data or {}).get("edit_section") or "").strip().upper()
-        if target not in _EDITABLE_SCREENS:
-            return {
-                "screen": screen,
-                "data": _screen_data(
-                    order,
-                    screen,
-                    error_message="Choose the section you want to correct.",
+    if screen == "REVIEW_HANDOVER" and values.get("facts_confirmed") != "CONFIRM":
+        return {
+            "screen": screen,
+            "data": _screen_data(
+                order,
+                screen,
+                error_message=(
+                    "Use the Flow back control to correct an earlier answer "
+                    "before submitting."
                 ),
-            }
-        answers = _answers(order)
-        for field in SCREEN_FIELDS[target]:
-            answers.pop(field, None)
-        order.draft_answers_json = _canonical(answers)
-        order.current_step = target
-        _audit(
-            db,
-            order,
-            "DOCUMENT_SECTION_EDIT_STARTED",
-            details={"section": target},
-        )
-        return {"screen": target, "data": _screen_data(order, target)}
+            ),
+        }
 
     answers = _answers(order)
     answers.update(values)

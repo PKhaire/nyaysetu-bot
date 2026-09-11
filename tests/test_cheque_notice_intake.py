@@ -121,6 +121,10 @@ def test_customer_can_complete_six_sections_without_payment_or_notice(
         result = _exchange(db, token, screen, answers)
         if index < len(intake.FLOW_SCREENS) - 1:
             assert result["screen"] == intake.FLOW_SCREENS[index + 1]
+        if result["screen"] == "DEBT_CHEQUE":
+            assert result["data"]["cheque_amount_inr"] == 0
+        if result["screen"] == "REVIEW_HANDOVER":
+            assert result["data"]["cheque_amount_confirmation_inr"] == 250000
 
     params = result["data"]["extension_message_response"]["params"]
     assert result["screen"] == "SUCCESS"
@@ -218,6 +222,41 @@ def test_unsupported_answers_stop_before_evidence_and_payment(
     assert order.price_minor is None
     assert db.query(DocumentQuote).count() == 0
     assert db.query(DocumentEvidenceArtifact).count() == 0
+
+
+def test_review_cannot_emit_a_backward_edit_route(db, published_cheque_intake):
+    user = published_cheque_intake
+    order = intake.create_or_resume_notice_order(db, user.id)
+    token = intake.issue_notice_flow_token(order)
+    answers = golden_answers()
+
+    for screen in intake.FLOW_SCREENS[:-1]:
+        _exchange(db, token, screen, answers)
+
+    review_data = {
+        field: answers[field]
+        for field in intake.SCREEN_FIELDS["REVIEW_HANDOVER"]
+    }
+    review_data.update(
+        {
+            "facts_confirmed": "EDIT",
+            "edit_section": "EVIDENCE_CHANGES",
+        }
+    )
+    result = intake.handle_notice_flow_request(
+        db,
+        {
+            "action": "data_exchange",
+            "flow_token": token,
+            "screen": "REVIEW_HANDOVER",
+            "data": review_data,
+        },
+    )
+
+    assert result["screen"] == "REVIEW_HANDOVER"
+    assert result["data"]["has_error"] is True
+    assert order.current_step == "REVIEW_HANDOVER"
+    assert db.query(DocumentAnswerRevision).count() == 0
 
 
 def test_hidden_cheque_product_cannot_create_an_intake(monkeypatch, db):

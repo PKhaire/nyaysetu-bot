@@ -33,7 +33,7 @@ Verified baseline:
 - [x] RC18 local full regression passes: 443 tests, 71.63% coverage, Ruff,
   compilation, dependency consistency, SBOM, single-head, diff-integrity and
   live dependency-audit gates are green.
-- [x] RC19 local Phase E intake regression passes: 466 tests and 71.60%
+- [x] RC19 local Phase E intake regression passes: 468 tests and 71.71%
   coverage; the cheque product remains production-prohibited and hidden.
 - [x] Draft Studio is globally available when enabled, not a test-user or
   cohort feature.

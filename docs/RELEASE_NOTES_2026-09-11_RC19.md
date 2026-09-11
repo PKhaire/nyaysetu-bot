@@ -26,6 +26,9 @@ notice creation, signing or dispatch.
 - Uses RSA-OAEP SHA-256 and AES-GCM for the Meta data-exchange contract, with
   bounded payloads, generic client errors and no fact values in logs.
 - Adds a bounded request-rate guard to the encrypted endpoint.
+- Mirrors Meta Flow Builder's forward-only routing contract, keeps one entry
+  screen, binds numeric amount fields as numbers, and rejects stale backward
+  edit payloads without mutating the confirmed snapshot.
 
 ## Deliberate gates
 
@@ -42,8 +45,8 @@ notice creation, signing or dispatch.
 
 ## Automated evidence
 
-- Complete local regression: 466 passed.
-- Coverage: 71.60%, above the required 60% gate.
+- Complete local regression: 468 passed.
+- Coverage: 71.71%, above the required 60% gate.
 - Focused tests cover encryption round-trip/tamper rejection, the Meta send
   shape, Flow asset-to-schema alignment, six-section completion, save/resume,
   route-out, cross-user/out-of-sequence denial, staging-only HTTP behavior,

@@ -371,8 +371,8 @@ provider staging UAT or the Phase E global launch decision.
 
 ### RC19 Phase E intake-slice local automation evidence
 
-- Complete regression with the repository coverage gate: 466 passed; total
-  coverage 71.60%.
+- Complete regression with the repository coverage gate: 468 passed; total
+  coverage 71.71%.
 - The encrypted Flow endpoint round trip and inverted-IV response contract,
   tamper/wrong-key rejection, bounded send payload, and endpoint rate guard
   pass.
@@ -380,6 +380,8 @@ provider staging UAT or the Phase E global launch decision.
   18-response schema; section save/resume, final immutable confirmation,
   unsupported routing, stale/cross-user sequence denial and no-payment/no-
   evidence boundaries pass.
+- The asset has one entry screen, forward-only routes and numeric bindings for
+  both amount inputs; stale backward-edit payloads remain on the review screen.
 - Production readiness rejects the incomplete cheque slice. Staging readiness
   requires its explicit switch, numeric Flow ID and valid RSA private key.
 
