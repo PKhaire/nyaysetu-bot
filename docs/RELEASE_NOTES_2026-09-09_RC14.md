@@ -55,10 +55,12 @@ mandatory.
 | Schema hash | `edd95798ee85f898a9de782599a3fd53ee15abdb3bf354a130cf1787f5a63021` |
 | Aggregate hash | `80b69faf49a2815c3e0b9d96a1d3bc354c53e4c3250a809b08dfff582b562f34` |
 | Golden PDF hash | `f37f573125c7d407a05814922c6a7091c4fe1a80e40502f42d6042c848029c42` |
-| Golden DOCX hash | `6a2cfd9a59d19a3ebe8212bab116d5e63281b479f2b7c936c76fb5e4cb3a134d` |
+| Golden DOCX hash | `bc41414a90d312fa2ab6a3db50fa0b74849b86c41d34deb65749c6a603d5fcbc` |
 
 Local validation passes: 374 tests with 69.06% total coverage, plus compile,
 Ruff, SBOM and diff-integrity checks. The Git commit SHA and CI URL remain
 pending until the candidate is reviewed and uploaded.
 Template hashes use canonical LF line endings so Windows and Linux resolve the
 same package identity.
+DOCX entries use deterministic stored ZIP members so their artifact hash is
+also stable across operating-system compression backends.

@@ -235,10 +235,14 @@ def _docx(markdown: str) -> bytes:
     content_types = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>'
     relationships = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'
     output = io.BytesIO()
-    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+    # Store entries without deflate compression. Deflate bitstreams may differ
+    # between zlib implementations even when their uncompressed XML is
+    # identical, which would make the approved artifact hash platform-specific.
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_STORED) as archive:
         for name, content in (("[Content_Types].xml", content_types), ("_rels/.rels", relationships), ("word/document.xml", document_xml)):
             info = zipfile.ZipInfo(name, date_time=(2026, 8, 1, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_DEFLATED
+            info.compress_type = zipfile.ZIP_STORED
+            info.create_system = 3
             info.external_attr = 0o600 << 16
             archive.writestr(info, content.encode("utf-8"))
     return output.getvalue()

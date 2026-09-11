@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import timedelta
+import zipfile
 
 import pytest
 from sqlalchemy import create_engine
@@ -19,6 +20,7 @@ from models import (
     utc_now,
 )
 from services import document_catalogue as catalogue
+from services import document_renderer as renderer
 from services.document_payment_service import create_document_payment_link
 from services.document_release_service import (
     release_manifest,
@@ -52,7 +54,7 @@ EXPECTED_PRODUCT_IDENTITY = {
         "f37f573125c7d407a05814922c6a7091c4fe1a80e40502f42d6042c848029c42"
     ),
     "golden_docx_hash": (
-        "6a2cfd9a59d19a3ebe8212bab116d5e63281b479f2b7c936c76fb5e4cb3a134d"
+        "bc41414a90d312fa2ab6a3db50fa0b74849b86c41d34deb65749c6a603d5fcbc"
     ),
 }
 
@@ -175,6 +177,24 @@ def test_template_identity_is_stable_across_text_line_endings(
 
     assert crlf_product.template_hash == lf_product.template_hash
     assert crlf_product.aggregate_hash == lf_product.aggregate_hash
+
+
+def test_docx_bytes_do_not_depend_on_deflate_backend(monkeypatch):
+    original_get_compressor = zipfile._get_compressor
+
+    def render_with_compression_level(level: int) -> bytes:
+        def compressor(compress_type, compresslevel=None):
+            if compress_type == zipfile.ZIP_DEFLATED:
+                compresslevel = level
+            return original_get_compressor(compress_type, compresslevel)
+
+        monkeypatch.setattr(zipfile, "_get_compressor", compressor)
+        return renderer._docx("# Synthetic\nSame logical document")
+
+    low_compression = render_with_compression_level(1)
+    high_compression = render_with_compression_level(9)
+
+    assert low_compression == high_compression
 
 
 def test_registry_exposes_only_enabled_allowlisted_products(monkeypatch):

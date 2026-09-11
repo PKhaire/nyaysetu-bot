@@ -68,6 +68,8 @@ non-empty, it is authoritative.
 
 - Template/package identity uses canonical LF line endings so Windows and
   Linux checkouts resolve the same hashes.
+- DOCX entries use deterministic stored ZIP members so approved artifact
+  hashes do not depend on the operating-system compression backend.
 
 - Focused Phase B catalogue, workflow, admin, readiness and deployment tests:
   `110 passed`.

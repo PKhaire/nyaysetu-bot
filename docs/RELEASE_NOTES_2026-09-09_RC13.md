@@ -63,10 +63,12 @@ Generated after the 369-test local regression pass:
 | Schema hash | `e7517ee9de42dd2f962f77848e9b48ef7a6b7e5b018cb249c7a08203959b75d4` |
 | Aggregate hash | `5815ecc1b3de5425ff84dedde8b3479740cf12b0de501662d5cad6633d6af72c` |
 | Golden PDF hash | `f37f573125c7d407a05814922c6a7091c4fe1a80e40502f42d6042c848029c42` |
-| Golden DOCX hash | `6a2cfd9a59d19a3ebe8212bab116d5e63281b479f2b7c936c76fb5e4cb3a134d` |
+| Golden DOCX hash | `bc41414a90d312fa2ab6a3db50fa0b74849b86c41d34deb65749c6a603d5fcbc` |
 
 Regenerate and compare these values after any change to the questionnaire,
 postal reference, template, renderer or golden answers. The Git commit SHA and
 CI URL are intentionally pending until the candidate is uploaded.
 Template hashes use canonical LF line endings so Windows and Linux resolve the
 same package identity.
+DOCX entries use deterministic stored ZIP members so their artifact hash is
+also stable across operating-system compression backends.
