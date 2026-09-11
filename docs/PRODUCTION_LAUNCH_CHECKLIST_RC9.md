@@ -29,7 +29,7 @@ Verified baseline:
   staging migration, private gate and synthetic cron evidence are green.
 - [ ] RC18 Phase D has a single local Alembic head `20260911_01`; upload, CI,
   staging migration and exact cheque-package approval are still required.
-- [x] RC18 local full regression passes: 442 tests, 71.63% coverage, Ruff,
+- [x] RC18 local full regression passes: 443 tests, 71.63% coverage, Ruff,
   compilation, dependency consistency, SBOM, single-head, diff-integrity and
   live dependency-audit gates are green.
 - [x] Draft Studio is globally available when enabled, not a test-user or

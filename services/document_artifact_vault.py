@@ -24,6 +24,8 @@ _KINDS = {
     "PREVIEW_PDF": "pdf",
     "FINAL_PDF": "pdf",
     "FINAL_DOCX": "docx",
+    "FACTUAL_SUMMARY_PDF": "pdf",
+    "NOTICE_REVIEW_PDF": "pdf",
     "NOTICE_DRAFT_PDF": "pdf",
     "ISSUED_PDF": "pdf",
 }

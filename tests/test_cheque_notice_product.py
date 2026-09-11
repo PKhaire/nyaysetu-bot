@@ -32,6 +32,7 @@ from services.cheque_notice_renderer import (
     render_factual_summary,
     render_notice_for_advocate,
 )
+from services.document_artifact_vault import MemoryArtifactVault
 from services.document_release_service import (
     record_approval,
     release_gate,
@@ -351,6 +352,38 @@ def test_notice_package_has_internal_pdf_pair_but_no_self_service_docx():
         match="self_service_renderer_classification_required",
     ):
         document_renderer.render(product, answers, "FINAL_DOCX")
+
+
+def test_phase_d_review_pair_can_be_stored_in_artifact_vault():
+    product = catalogue.resolve_product(catalogue.CHEQUE_NOTICE_PRODUCT_CODE)
+    answers = cheque_notice.golden_answers()
+    advocate_context = {
+        "notice_date": "2026-09-11",
+        "advocate_practice_name": "Synthetic Review Practice",
+        "advocate_full_name": "Synthetic Review Advocate",
+        "advocate_enrolment_ref": "SYNTHETIC-NOT-AN-ENROLMENT",
+        "advocate_service_address": (
+            "3 Review Street, Mumbai, Maharashtra 400001"
+        ),
+    }
+    artifacts = (
+        render_factual_summary(product, answers),
+        render_notice_for_advocate(product, answers, advocate_context),
+    )
+    vault = MemoryArtifactVault()
+
+    for artifact in artifacts:
+        stored = vault.put(
+            order_ref="NS-CHEQUE-ADVREVIEW",
+            revision_number=1,
+            artifact_kind=artifact.kind,
+            content=artifact.content,
+            content_type=artifact.content_type,
+            content_hash=artifact.content_hash,
+            manifest_hash=artifact.manifest_hash,
+        )
+        assert stored.object_key in vault.objects
+        assert stored.object_key.endswith(".pdf")
 
 
 def test_golden_supported_boundary_and_decline_scenarios_are_executable():

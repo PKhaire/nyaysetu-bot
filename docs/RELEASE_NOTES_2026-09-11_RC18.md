@@ -35,6 +35,9 @@ payment path. No tester flag or user cohort controls availability.
   artifacts. The second is an unsigned internal review candidate, not an
   issued notice; the per-order advocate workflow remains the only issuance
   path.
+- Allows both review artifact kinds through the private artifact-vault identity
+  contract. This closes the staging failure where correct review PDFs were
+  rendered but rejected before S3 upload.
 - Extends the release ledger with a canonical classification-specific artifact
   hash map. Existing residential PDF/DOCX approval rows remain supported.
 - Rejects the legacy PDF/DOCX approval payload for the cheque package, so the
@@ -61,8 +64,8 @@ never copy an earlier product approval.
 
 ## Verification evidence
 
-- Phase D focused tests: 20 passed.
-- Complete regression: 442 passed.
+- Phase D focused tests: 21 passed.
+- Complete regression: 443 passed.
 - Coverage gate: 71.63%, above the required 60%.
 - Ruff, Python compilation, dependency consistency, deterministic SBOM,
   Alembic single-head and diff-integrity checks pass.

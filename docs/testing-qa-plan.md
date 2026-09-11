@@ -352,8 +352,8 @@ testing, native-language review, or the separate Phase C-E release gates.
 
 ### RC18 Phase D local automation evidence
 
-- Focused private cheque-package tests: 20 passed.
-- Full regression with the repository coverage gate: 442 passed; total
+- Focused private cheque-package tests: 21 passed.
+- Full regression with the repository coverage gate: 443 passed; total
   coverage 71.63%.
 - Ruff, compilation, dependency consistency, deterministic SBOM, Alembic
   single-head and diff-integrity checks pass.
@@ -361,8 +361,9 @@ testing, native-language review, or the separate Phase C-E release gates.
   runtime set. Linux Gunicorn and PostgreSQL migration checks remain mandatory
   in GitHub CI for the exact uploaded commit.
 - Registration/visibility, quote pricing, intake route-outs, evidence gating,
-  deterministic PDF hashes, legacy-approval rejection and exact package release
-  behavior are covered.
+  deterministic PDF hashes, private-vault storage of both review artifact
+  kinds, legacy-approval rejection and exact package release behavior are
+  covered.
 
 This evidence does not activate the product or replace authenticated exact-hash
 advocate approval, production scanner/interface security tests, translations,
