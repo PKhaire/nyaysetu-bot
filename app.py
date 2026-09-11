@@ -33,6 +33,11 @@ from config import (
     WHATSAPP_PHONE_ID,
     WHATSAPP_TOKEN,
     WHATSAPP_VERIFY_TOKEN,
+    CHEQUE_NOTICE_STAGING_UAT_ENABLED,
+    WHATSAPP_CHEQUE_NOTICE_FLOW_ID,
+    WHATSAPP_CHEQUE_NOTICE_FLOW_MODE,
+    WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY,
+    WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY_PASSPHRASE,
     BOOKING_TERMS_VERSION,
     CASE_BRIEF_CONSENT_VERSION,
     DOCUMENT_STUDIO_ENABLED,
@@ -124,6 +129,7 @@ from services.whatsapp_service import (
     send_typing_on as _wa_send_typing_on,
     send_typing_off as _wa_send_typing_off,
     send_list_picker as _wa_send_list_picker,
+    send_flow as _wa_send_flow,
     send_payment_receipt_pdf as _wa_send_payment_receipt_pdf,
 )
 from services.receipt_service import generate_pdf_receipt
@@ -194,7 +200,11 @@ from services.document_studio_rc9_service import (
     save_answer as save_document_answer,
     validate_answer as validate_document_answer,
 )
-from services.document_catalogue import catalogue_configuration
+from services.document_catalogue import (
+    CHEQUE_NOTICE_PRODUCT_CODE,
+    catalogue_configuration,
+    resolve_product,
+)
 from services.document_capacity_service import DocumentStudioCapacityExhausted
 from services.document_release_service import release_readiness
 from services.document_payment_service import validate_current_document_capture
@@ -203,6 +213,22 @@ from services.advocate_issued_workflow import (
     RecordVerifiedPayment,
     WorkflowActor,
     execute_notice_command,
+)
+from services.cheque_notice_intake_service import (
+    ChequeNoticeFlowError,
+    DOCUMENT_NOTICE_FLOW_PENDING,
+    cancel_notice_order,
+    completion_for_user as cheque_notice_completion_for_user,
+    create_or_resume_notice_order,
+    handle_notice_flow_request,
+    issue_notice_flow_token,
+    latest_resumable_notice_order,
+)
+from services.whatsapp_flow_crypto import (
+    FlowEncryptionError,
+    decrypt_flow_request,
+    encrypt_flow_response,
+    flow_private_key_is_valid,
 )
 from services.document_workflow import (
     apply_verified_payment as apply_verified_document_payment,
@@ -486,6 +512,14 @@ def send_list_picker(
             "rows": rows,
             "section_title": section_title,
         },
+    )
+
+
+def send_flow(wa_id: str, **kwargs):
+    return _require_whatsapp_delivery(
+        _wa_send_flow(wa_id, **kwargs),
+        operation="flow",
+        payload={"to": wa_id, "flow_id": kwargs.get("flow_id")},
     )
 
 
@@ -1257,6 +1291,32 @@ def send_document_studio_home(wa_id, user) -> None:
         body=t(user, "document_landing_body"),
         section_title=t(user, "document_landing_section"),
         rows=document_landing_rows(user, t),
+    )
+
+
+def send_cheque_notice_intake_flow(wa_id, order) -> None:
+    if (
+        ENV != "staging"
+        or not CHEQUE_NOTICE_STAGING_UAT_ENABLED
+        or not WHATSAPP_CHEQUE_NOTICE_FLOW_ID.isdigit()
+        or order.state != "INTAKE"
+    ):
+        raise ChequeNoticeFlowError("cheque_notice_uat_not_configured")
+    token = issue_notice_flow_token(order)
+    send_flow(
+        wa_id,
+        flow_id=WHATSAPP_CHEQUE_NOTICE_FLOW_ID,
+        flow_token=token,
+        screen=order.current_step,
+        mode=WHATSAPP_CHEQUE_NOTICE_FLOW_MODE,
+        header="Cheque notice intake",
+        body=(
+            "Complete the six-section fact form using synthetic staging "
+            "information only. No notice, payment or advocate relationship "
+            "is created by submitting it."
+        ),
+        cta="Open fact form",
+        footer="Exit anytime; completed sections are saved.",
     )
 
 
@@ -2409,6 +2469,9 @@ def _deployment_configuration_is_valid(
 
 def _production_configuration_is_valid() -> bool:
     catalogue = catalogue_configuration(enabled=DOCUMENT_STUDIO_ENABLED)
+    cheque_notice_enabled = (
+        CHEQUE_NOTICE_PRODUCT_CODE in catalogue.enabled_product_codes
+    )
     document_studio_ok = bool(
         not DOCUMENT_STUDIO_ENABLED
         or (
@@ -2419,6 +2482,10 @@ def _production_configuration_is_valid() -> bool:
             and DOCUMENT_STUDIO_S3_BUCKET
             and len(DOCUMENT_STUDIO_S3_ACCESS_KEY_ID) >= 16
             and len(DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY) >= 32
+            # This Phase E slice is deliberately staging-only.  A production
+            # allowlist change must remain unhealthy until the later scanner,
+            # advocate-interface and launch-decision gates are implemented.
+            and not cheque_notice_enabled
         )
     )
     return document_studio_ok and _deployment_configuration_is_valid(
@@ -2430,6 +2497,21 @@ def _production_configuration_is_valid() -> bool:
 
 def _staging_configuration_is_valid() -> bool:
     catalogue = catalogue_configuration(enabled=DOCUMENT_STUDIO_ENABLED)
+    cheque_notice_enabled = (
+        CHEQUE_NOTICE_PRODUCT_CODE in catalogue.enabled_product_codes
+    )
+    cheque_notice_uat_ok = bool(
+        not cheque_notice_enabled
+        or (
+            CHEQUE_NOTICE_STAGING_UAT_ENABLED
+            and WHATSAPP_CHEQUE_NOTICE_FLOW_ID.isdigit()
+            and WHATSAPP_CHEQUE_NOTICE_FLOW_MODE in {"draft", "published"}
+            and flow_private_key_is_valid(
+                WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY,
+                WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY_PASSPHRASE,
+            )
+        )
+    )
     document_studio_ok = bool(
         not DOCUMENT_STUDIO_ENABLED
         or (
@@ -2437,6 +2519,7 @@ def _staging_configuration_is_valid() -> bool:
             and catalogue.ok
             and catalogue.reason_code == "CONFIGURED"
             and DOCUMENT_STUDIO_DAILY_CAPACITY > 0
+            and cheque_notice_uat_ok
         )
     )
     return document_studio_ok and _deployment_configuration_is_valid(
@@ -2576,6 +2659,75 @@ def verify():
         return request.args.get("hub.challenge"), 200
     return "Invalid token", 403
 
+
+@app.post("/whatsapp/flows/cheque-notice")
+def cheque_notice_flow_endpoint():
+    """Process signed and encrypted Meta Flow section exchanges."""
+
+    if not CHEQUE_NOTICE_STAGING_UAT_ENABLED or ENV != "staging":
+        return "Not found", 404
+    if is_global_rate_limited():
+        return "", 429
+    payload = request.get_json(silent=True)
+    try:
+        decrypted = decrypt_flow_request(
+            payload,
+            private_key_pem=WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY,
+            passphrase=(
+                WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY_PASSPHRASE
+            ),
+        )
+    except FlowEncryptionError as exc:
+        reason = str(exc)
+        status = (
+            421
+            if reason
+            in {
+                "flow_private_key_required",
+                "invalid_flow_private_key",
+                "flow_key_decryption_failed",
+            }
+            else 400
+        )
+        logger.warning(
+            "WhatsApp Flow decryption rejected | request_id=%s | reason=%s",
+            g.request_id,
+            reason,
+        )
+        return "", status
+
+    db = get_db()
+    try:
+        response = handle_notice_flow_request(db, decrypted.body)
+        db.commit()
+        encrypted = encrypt_flow_response(
+            response,
+            aes_key=decrypted.aes_key,
+            initial_vector=decrypted.initial_vector,
+        )
+        return encrypted, 200, {"Content-Type": "text/plain"}
+    except ChequeNoticeFlowError as exc:
+        db.rollback()
+        reason = str(exc)[:80]
+        logger.warning(
+            "WhatsApp Flow request rejected | request_id=%s | reason=%s",
+            g.request_id,
+            reason,
+        )
+        encrypted = encrypt_flow_response(
+            {"error_msg": "This secure form is no longer available."},
+            aes_key=decrypted.aes_key,
+            initial_vector=decrypted.initial_vector,
+        )
+        return encrypted, 427, {"Content-Type": "text/plain"}
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "WhatsApp Flow processing failed | request_id=%s",
+            g.request_id,
+        )
+        return "", 500
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     # -------------------------------------------------
@@ -2707,25 +2859,91 @@ def webhook():
 
         text_body = ""
         interactive_id = None
+        flow_response = None
+        flow_response_invalid = False
 
         if message.get("type") == "text":
             text_body = str((message.get("text") or {}).get("body") or "")
         elif message.get("type") == "interactive":
             interactive = message.get("interactive") or {}
             itype = interactive.get("type")
-            selected = interactive.get(itype) if itype else None
-            interactive_id = (
-                str(selected.get("id"))
-                if isinstance(selected, dict) and selected.get("id")
-                else None
-            )
-            text_body = interactive_id
+            if itype == "nfm_reply":
+                reply = interactive.get("nfm_reply")
+                raw_response = (
+                    reply.get("response_json")
+                    if isinstance(reply, dict)
+                    else None
+                )
+                try:
+                    flow_response = json.loads(str(raw_response or ""))
+                except (TypeError, ValueError):
+                    flow_response_invalid = True
+                if not isinstance(flow_response, dict):
+                    flow_response_invalid = True
+                    flow_response = None
+            else:
+                selected = interactive.get(itype) if itype else None
+                interactive_id = (
+                    str(selected.get("id"))
+                    if isinstance(selected, dict) and selected.get("id")
+                    else None
+                )
+                text_body = interactive_id
         else:
             send_text(wa_id, t(user, "unsupported_message_type"))
             return jsonify({"status": "unsupported_message_type"}), 200
 
         text_body = text_body or ""
         lower_text = text_body.lower().strip()
+
+        if flow_response_invalid:
+            send_text(
+                wa_id,
+                "The secure form response could not be verified. No facts "
+                "were accepted. Reopen Draft Studio to continue.",
+            )
+            return jsonify({"status": "invalid_flow_response"}), 200
+        if flow_response is not None:
+            try:
+                order = cheque_notice_completion_for_user(
+                    db,
+                    flow_response,
+                    user_id=user.id,
+                )
+            except ChequeNoticeFlowError:
+                send_text(
+                    wa_id,
+                    "The secure form response is invalid or expired. No "
+                    "new payment or notice was created.",
+                )
+                return jsonify({"status": "invalid_flow_response"}), 200
+            user.flow_state = NORMAL
+            db.commit()
+            if order.state == "EVIDENCE_PENDING":
+                send_text(
+                    wa_id,
+                    "Your confirmed facts are saved for advocate triage. "
+                    "Evidence upload remains disabled during this synthetic "
+                    "staging step. No payment is available and no notice has "
+                    f"been issued. Reference: {order.public_ref}",
+                )
+            else:
+                send_text(
+                    wa_id,
+                    "This fact pattern requires a separate advocate review, "
+                    "so the standard cheque-notice path has stopped before "
+                    f"evidence or payment. Reference: {order.public_ref}",
+                )
+            record_event(
+                "cheque_notice_intake_completed",
+                {
+                    "product_code": order.product_code,
+                    "result_state": order.state,
+                },
+                user_id=user.id,
+            )
+            send_home(wa_id, user)
+            return jsonify({"status": "cheque_notice_intake_saved"}), 200
 
         advocate_intake = (
             parse_advocate_intake(text_body)
@@ -2839,6 +3057,7 @@ def webhook():
             if user.flow_state in {
                 DOCUMENT_STUDIO_QUESTION,
                 DOCUMENT_STUDIO_REVIEW,
+                DOCUMENT_NOTICE_FLOW_PENDING,
             }:
                 # Keep the draft resumable but leave its active conversation
                 # state when the user explicitly returns home.
@@ -2950,6 +3169,32 @@ def webhook():
             if not document_studio_available(user):
                 send_text(wa_id, t(user, "document_studio_unavailable"))
                 return jsonify({"status": "document_studio_unavailable"}), 200
+            selected_product = resolve_product(started_document_product)
+            if selected_product.output_classification == "ADVOCATE_ISSUED_NOTICE":
+                try:
+                    order = create_or_resume_notice_order(db, user.id)
+                    user.flow_state = DOCUMENT_NOTICE_FLOW_PENDING
+                    db.commit()
+                    send_cheque_notice_intake_flow(wa_id, order)
+                except ChequeNoticeFlowError:
+                    db.rollback()
+                    user.flow_state = NORMAL
+                    db.commit()
+                    send_text(
+                        wa_id,
+                        "The cheque-notice intake is not available for this "
+                        "controlled staging step. No facts or payment were "
+                        "accepted.",
+                    )
+                    return jsonify(
+                        {"status": "cheque_notice_uat_unavailable"}
+                    ), 200
+                record_event(
+                    "document_studio_started",
+                    {"product_code": started_document_product},
+                    user_id=user.id,
+                )
+                return jsonify({"status": "cheque_notice_flow_sent"}), 200
             try:
                 order = create_or_resume_order(
                     db,
@@ -2991,16 +3236,42 @@ def webhook():
             if not document_studio_available(user):
                 send_text(wa_id, t(user, "document_studio_unavailable"))
                 return jsonify({"status": "document_studio_unavailable"}), 200
+            notice_order = latest_resumable_notice_order(db, user.id)
             order = latest_document_draft(db, user.id)
+            if notice_order and (
+                order is None or notice_order.updated_at >= order.updated_at
+            ):
+                order = notice_order
             if not order:
                 send_text(wa_id, t(user, "document_uat_no_draft"))
                 send_document_studio_home(wa_id, user)
                 return jsonify({"status": "ok"}), 200
-            order = create_or_resume_order(
-                db,
-                user.id,
-                order.product_code,
-            )
+            if order.output_classification == "ADVOCATE_ISSUED_NOTICE":
+                if order.state != "INTAKE":
+                    send_text(
+                        wa_id,
+                        "Your cheque-notice facts are saved. Evidence upload "
+                        "is not enabled in this synthetic staging step, and "
+                        "no payment or notice is available.",
+                    )
+                    return jsonify({"status": "cheque_notice_evidence_pending"}), 200
+                try:
+                    user.flow_state = DOCUMENT_NOTICE_FLOW_PENDING
+                    db.commit()
+                    send_cheque_notice_intake_flow(wa_id, order)
+                except ChequeNoticeFlowError:
+                    user.flow_state = NORMAL
+                    db.commit()
+                    send_text(
+                        wa_id,
+                        "The secure cheque-notice form is currently "
+                        "unavailable. Your completed sections remain saved.",
+                    )
+                    return jsonify(
+                        {"status": "cheque_notice_uat_unavailable"}
+                    ), 200
+                return jsonify({"status": "cheque_notice_flow_sent"}), 200
+            order = create_or_resume_order(db, user.id, order.product_code)
             user.flow_state = (
                 DOCUMENT_STUDIO_REVIEW
                 if order.current_step == "review"
@@ -3063,6 +3334,7 @@ def webhook():
             DOCUMENT_STUDIO_QUESTION,
             DOCUMENT_STUDIO_REVIEW,
             DOCUMENT_STUDIO_EDIT_SECTION,
+            DOCUMENT_NOTICE_FLOW_PENDING,
         } and interactive_id in set(HOME_BUTTON_IDS.values()):
             # Home selections always win over an unfinished document draft. The
             # draft remains available through Continue Draft.
@@ -3339,6 +3611,43 @@ def webhook():
                 return jsonify({"status": "ok"}), 200
             send_document_review(wa_id, user, order)
             return jsonify({"status": "ok"}), 200
+
+        if user.flow_state == DOCUMENT_NOTICE_FLOW_PENDING:
+            order = latest_resumable_notice_order(db, user.id)
+            if (
+                interactive_id == DOCUMENT_STUDIO_IDS["cancel"]
+                or lower_text in RESTART_KEYWORDS
+            ):
+                if order:
+                    cancel_notice_order(db, order)
+                user.flow_state = NORMAL
+                db.commit()
+                send_text(
+                    wa_id,
+                    "The cheque-notice fact intake was cancelled. No payment "
+                    "or notice was created.",
+                )
+                send_home(wa_id, user)
+                return jsonify({"status": "cheque_notice_cancelled"}), 200
+            if (
+                interactive_id == DOCUMENT_STUDIO_IDS["save"]
+                or lower_text in {"save", "save and exit"}
+            ):
+                user.flow_state = NORMAL
+                db.commit()
+                send_text(
+                    wa_id,
+                    "Completed form sections are saved. Use Continue Draft "
+                    "to reopen the next section.",
+                )
+                send_home(wa_id, user)
+                return jsonify({"status": "cheque_notice_saved"}), 200
+            send_text(
+                wa_id,
+                "Please complete the secure form already sent, or type Save "
+                "to continue later or Cancel to stop.",
+            )
+            return jsonify({"status": "cheque_notice_flow_pending"}), 200
 
         if interactive_id in {
             HOME_BUTTON_IDS["more"],

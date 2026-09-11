@@ -80,6 +80,7 @@ def transport_spies(monkeypatch, app_module):
         "text": MagicMock(return_value={"ok": True}),
         "buttons": MagicMock(return_value={"ok": True}),
         "list": MagicMock(return_value={"ok": True}),
+        "flow": MagicMock(return_value={"ok": True}),
         "home": MagicMock(return_value={"ok": True}),
         "typing_on": MagicMock(return_value={"ok": True}),
         "typing_off": MagicMock(return_value={"ok": True}),
@@ -88,6 +89,7 @@ def transport_spies(monkeypatch, app_module):
     monkeypatch.setattr(app_module, "send_text", spies["text"])
     monkeypatch.setattr(app_module, "send_buttons", spies["buttons"])
     monkeypatch.setattr(app_module, "send_list_picker", spies["list"])
+    monkeypatch.setattr(app_module, "send_flow", spies["flow"])
     monkeypatch.setattr(app_module, "send_home", spies["home"])
     monkeypatch.setattr(app_module, "send_typing_on", spies["typing_on"])
     monkeypatch.setattr(app_module, "send_typing_off", spies["typing_off"])

@@ -44,6 +44,10 @@ LIST_ROW_DESCRIPTION_MAX = 72
 DOCUMENT_CAPTION_MAX = 1024
 TEMPLATE_NAME_MAX = 512
 LANGUAGE_CODE_MAX = 35
+FLOW_ID_MAX = 64
+FLOW_TOKEN_MAX = 1024
+FLOW_CTA_MAX = 30
+FLOW_SCREEN_MAX = 64
 
 _TRANSIENT_STATUSES = {408, 425, 429, 500, 502, 503, 504}
 _UNAMBIGUOUS_TRANSPORT_FAILURES = {
@@ -300,6 +304,89 @@ def _validate_template_message(template: dict) -> None:
         raise WhatsAppValidationError("template components must be JSON serializable") from exc
 
 
+def _validate_flow_message(interactive: dict) -> None:
+    header = interactive.get("header")
+    if header is not None:
+        if not isinstance(header, dict):
+            raise WhatsAppValidationError("flow header must be an object")
+        header["type"] = "text"
+        header["text"] = _truncate_text(
+            header.get("text"),
+            LIST_HEADER_MAX,
+            "flow header",
+        )
+    body = interactive.setdefault("body", {})
+    body["text"] = _truncate_text(
+        body.get("text"),
+        INTERACTIVE_BODY_MAX,
+        "flow body",
+    )
+    footer = interactive.get("footer")
+    if footer is not None:
+        if not isinstance(footer, dict):
+            raise WhatsAppValidationError("flow footer must be an object")
+        footer["text"] = _truncate_text(
+            footer.get("text"),
+            LIST_HEADER_MAX,
+            "flow footer",
+        )
+
+    action = interactive.get("action")
+    if not isinstance(action, dict) or action.get("name") != "flow":
+        raise WhatsAppValidationError("flow action is required")
+    parameters = action.get("parameters")
+    if not isinstance(parameters, dict):
+        raise WhatsAppValidationError("flow parameters are required")
+    parameters["flow_message_version"] = "3"
+    parameters["flow_action"] = "navigate"
+    flow_id = _validate_identifier(
+        parameters.get("flow_id"),
+        FLOW_ID_MAX,
+        "flow id",
+    )
+    if not flow_id.isdigit():
+        raise WhatsAppValidationError("flow id must be numeric")
+    parameters["flow_id"] = flow_id
+    parameters["flow_token"] = _validate_identifier(
+        parameters.get("flow_token"),
+        FLOW_TOKEN_MAX,
+        "flow token",
+    )
+    parameters["flow_cta"] = _truncate_text(
+        parameters.get("flow_cta"),
+        FLOW_CTA_MAX,
+        "flow call to action",
+    )
+    mode = str(parameters.get("mode") or "published").strip().lower()
+    if mode not in {"draft", "published"}:
+        raise WhatsAppValidationError("flow mode must be draft or published")
+    if mode == "draft":
+        parameters["mode"] = "draft"
+    else:
+        parameters.pop("mode", None)
+    payload = parameters.get("flow_action_payload")
+    if not isinstance(payload, dict):
+        raise WhatsAppValidationError("flow action payload is required")
+    screen = _validate_identifier(
+        payload.get("screen"),
+        FLOW_SCREEN_MAX,
+        "flow screen",
+    )
+    if not re.fullmatch(r"[A-Z][A-Z0-9_]*", screen):
+        raise WhatsAppValidationError("invalid flow screen")
+    payload["screen"] = screen
+    data = payload.get("data", {})
+    if not isinstance(data, dict) or len(data) > 20:
+        raise WhatsAppValidationError("invalid flow action data")
+    payload["data"] = data
+    try:
+        json.dumps(data)
+    except (TypeError, ValueError) as exc:
+        raise WhatsAppValidationError(
+            "flow action data must be JSON serializable"
+        ) from exc
+
+
 def _validate_payload(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise WhatsAppValidationError("payload must be an object")
@@ -325,6 +412,8 @@ def _validate_payload(payload: dict) -> dict:
             _validate_button_message(interactive)
         elif interactive_type == "list":
             _validate_list_message(interactive)
+        elif interactive_type == "flow":
+            _validate_flow_message(interactive)
         else:
             raise WhatsAppValidationError(
                 f"unsupported interactive message type: {interactive_type}"
@@ -578,6 +667,50 @@ def send_list_picker(
                             ],
                         }
                     ],
+                },
+            },
+        }
+    )
+
+
+def send_flow(
+    wa_id: str,
+    *,
+    flow_id: str,
+    flow_token: str,
+    screen: str,
+    body: str,
+    cta: str = "Open secure form",
+    header: str = "Draft Studio",
+    footer: str = "You can leave and resume later.",
+    mode: str = "published",
+):
+    """Open one Meta-hosted Flow backed by our encrypted endpoint."""
+
+    return _send(
+        {
+            "messaging_product": "whatsapp",
+            "to": wa_id,
+            "type": "interactive",
+            "interactive": {
+                "type": "flow",
+                "header": {"type": "text", "text": header},
+                "body": {"text": body},
+                "footer": {"text": footer},
+                "action": {
+                    "name": "flow",
+                    "parameters": {
+                        "flow_message_version": "3",
+                        "flow_token": flow_token,
+                        "flow_id": flow_id,
+                        "flow_cta": cta,
+                        "flow_action": "navigate",
+                        "mode": mode,
+                        "flow_action_payload": {
+                            "screen": screen,
+                            "data": {},
+                        },
+                    },
                 },
             },
         }

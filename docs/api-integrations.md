@@ -74,6 +74,28 @@ Common outcomes are `200` for handled, ignored, maintenance, duplicate,
 invalid JSON; `403` for invalid signatures; `413` for an oversized body; and
 `503` for retryable processing, terminal-state persistence, or batch-drain work.
 
+### `POST /whatsapp/flows/cheque-notice`
+
+This is the separate Meta WhatsApp Flow data-exchange endpoint for RC19's
+synthetic cheque-notice staging intake. It returns `404` unless
+`ENV=staging` and `CHEQUE_NOTICE_STAGING_UAT_ENABLED=true`.
+
+The endpoint accepts Meta's encrypted envelope, decrypts the one-time AES key
+with the configured RSA private key using OAEP/SHA-256, authenticates the JSON
+with AES-GCM, validates an expiring order/product/schema-bound Flow token, and
+encrypts the response with the same AES key and inverted IV. It applies the
+global request bound and never logs decrypted facts or cryptographic material.
+This endpoint follows Meta's encrypted Flow endpoint contract; the ordinary
+`POST /webhook` continues to require `X-Hub-Signature-256` independently.
+
+The Flow uses six server-validated sections and saves after each data exchange.
+Final submission creates one immutable answer revision and stops at
+`EVIDENCE_PENDING` or `ROUTED_OUT`. This slice cannot create evidence,
+an advocate quote, payment entitlement, issued notice or dispatch record.
+Malformed/tampered envelopes return `400`, unusable configured key material
+returns `421`, invalid/expired Flow capabilities return encrypted `427`, and a
+rate-limited request returns `429`.
+
 ### `POST /payment/webhook`
 
 This endpoint accepts Razorpay `payment_link.paid` events for consultation

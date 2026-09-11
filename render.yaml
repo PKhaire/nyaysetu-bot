@@ -131,6 +131,18 @@ services:
         sync: false
       - key: WHATSAPP_APP_SECRET_PREVIOUS
         sync: false
+      # Phase E cheque-notice Flow stays disabled in this production
+      # blueprint. Its encrypted endpoint is exercised only in staging.
+      - key: CHEQUE_NOTICE_STAGING_UAT_ENABLED
+        value: "false"
+      - key: WHATSAPP_CHEQUE_NOTICE_FLOW_ID
+        value: ""
+      - key: WHATSAPP_CHEQUE_NOTICE_FLOW_MODE
+        value: draft
+      - key: WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY
+        value: ""
+      - key: WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY_PASSPHRASE
+        value: ""
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET

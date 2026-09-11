@@ -1,6 +1,6 @@
 # Multi-Product Draft Studio Implementation Plan
 
-**Status:** Phases A-D implemented locally; Phase E has not started  
+**Status:** Phases A-D implemented; Phase E intake slice implemented locally  
 **Sequence:** preserve RC14, complete the catalogue foundation, then build the
 advocate-issued cheque-notice product through separate gated phases
 
@@ -405,3 +405,19 @@ Phase D does not add the cheque product to the global allowlist or WhatsApp
 intake, collect a payment, select a production malware scanner, create an
 advocate portal, sign a notice or record a real dispatch. Those are explicit
 Phase E staging and launch-decision gates.
+
+## Phase E intake-slice result
+
+RC19 adds only the first synthetic staging slice: an encrypted Meta WhatsApp
+Flow that renders the existing approved 18-response questionnaire as six
+shorter sections, saves after each section, resumes safely, and creates one
+immutable confirmed revision. It then stops at `EVIDENCE_PENDING` or
+`ROUTED_OUT`; no evidence upload, quote, payment, advocate decision, notice,
+signature or dispatch is available.
+
+The slice is disabled by default and the endpoint is staging-only. Staging
+readiness requires the explicit feature switch, numeric Flow ID and valid RSA
+private key whenever the cheque product is globally allowlisted. Production
+readiness deliberately fails if this incomplete slice is allowlisted. The
+residential-only production allowlist and approved legal package hashes remain
+unchanged.

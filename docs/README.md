@@ -8,6 +8,9 @@ from external rollout work and future product ideas.
 
 Start with:
 
+- [RC19 Phase E staging intake slice](RELEASE_NOTES_2026-09-11_RC19.md)
+  - encrypted, resumable six-section synthetic WhatsApp intake with explicit
+    staging/production fail-closed gates; it stops before evidence and payment.
 - [RC18 private cheque-notice package](RELEASE_NOTES_2026-09-11_RC18.md)
   - privately registers one conservative personal-loan/single-cheque package,
     a bounded intake validator, factual-summary and notice-review PDFs, and a

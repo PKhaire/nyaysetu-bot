@@ -2,7 +2,7 @@
 
 Updated: 11 September 2026
 
-Release candidate: RC18 (integrated checklist filename retained for continuity)
+Release candidate: RC19 (integrated checklist filename retained for continuity)
 
 Decision rule: NyaySetu Bot and Draft Studio launch together. There is no
 base-bot-only production path in this checklist. Any unchecked mandatory gate
@@ -10,9 +10,10 @@ keeps the release at **NO-GO**.
 
 ## Current verdict
 
-**NO-GO for production.** The Phase D cheque-notice package is implemented
-locally but remains outside the global allowlist. Its exact deployed hashes,
-production scanner, advocate interface, translations, real-user/advocate UAT,
+**NO-GO for production.** The Phase D cheque-notice package is deployed and
+approved but remains outside the global allowlist. RC19 implements only its
+local staging fact-intake slice. Meta Flow validation, production scanner,
+evidence journey, advocate interface, translations, real-user/advocate UAT,
 restore proof, final regression, staffing/policy evidence, and a recorded GO
 decision remain mandatory.
 
@@ -27,11 +28,13 @@ Verified baseline:
   `20260908_01`, updated SBOM, and the configured coverage gate.
 - [x] RC17 Phase C has a single deployed Alembic head `20260910_01`; CI,
   staging migration, private gate and synthetic cron evidence are green.
-- [ ] RC18 Phase D has a single local Alembic head `20260911_01`; upload, CI,
-  staging migration and exact cheque-package approval are still required.
+- [x] RC18 Phase D has a single deployed Alembic head `20260911_01`; upload,
+  CI, staging migration and exact cheque-package approval are verified.
 - [x] RC18 local full regression passes: 443 tests, 71.63% coverage, Ruff,
   compilation, dependency consistency, SBOM, single-head, diff-integrity and
   live dependency-audit gates are green.
+- [x] RC19 local Phase E intake regression passes: 466 tests and 71.60%
+  coverage; the cheque product remains production-prohibited and hidden.
 - [x] Draft Studio is globally available when enabled, not a test-user or
   cohort feature.
 - [ ] All mandatory gates below are complete and supported by saved evidence.
@@ -101,8 +104,13 @@ health responses. Never store secret values in evidence.
   PDF-only delivery, dispatch proof, legal hold and audited failure paths.
 - [x] Implement Phase D's exact private cheque-notice schema, clauses,
   template, validators and supported/boundary/decline golden artifacts.
-- [ ] Deploy and authenticate the exact Phase D package hashes. Discovery-pack
+- [x] Deploy and authenticate the exact Phase D package hashes. Discovery-pack
   or source-review approval alone is insufficient.
+- [x] Implement RC19's disabled-by-default encrypted six-section staging fact
+  intake, server-side section save/resume, final immutable revision and
+  pre-evidence/pre-payment route-out.
+- [ ] Upload the RC19 Flow JSON to Meta, bind the staging endpoint/public key,
+  validate all six screens on real devices, and retain sanitized evidence.
 - [ ] Select and validate the production malware/file scanner and approve the
   evidence type/size, access, retention, incident and legal-hold procedures.
 - [ ] Build and security-test the dedicated scoped advocate interface; never

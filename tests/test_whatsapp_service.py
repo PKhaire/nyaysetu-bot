@@ -93,6 +93,67 @@ def test_list_picker_uses_the_supplied_localized_action_title(monkeypatch):
     assert payload["interactive"]["action"]["button"] == "निवडा"
 
 
+def test_flow_message_uses_meta_navigate_contract(monkeypatch):
+    _configure_transport(monkeypatch)
+    request = MagicMock(return_value=_response(200, {"messages": [{"id": "1"}]}))
+    monkeypatch.setattr(whatsapp._HTTP_CLIENT, "request", request)
+
+    result = whatsapp.send_flow(
+        "919876543210",
+        flow_id="123456789012345",
+        flow_token="synthetic-signed-flow-token",
+        screen="SUITABILITY",
+        body="Complete the secure fact form.",
+        cta="Open fact form",
+        mode="draft",
+    )
+
+    assert result["ok"] is True
+    payload = request.call_args.kwargs["json"]
+    parameters = payload["interactive"]["action"]["parameters"]
+    assert payload["interactive"]["type"] == "flow"
+    assert parameters == {
+        "flow_message_version": "3",
+        "flow_token": "synthetic-signed-flow-token",
+        "flow_id": "123456789012345",
+        "flow_cta": "Open fact form",
+        "flow_action": "navigate",
+        "mode": "draft",
+        "flow_action_payload": {"screen": "SUITABILITY", "data": {}},
+    }
+
+
+@pytest.mark.parametrize(
+    ("flow_id", "mode", "screen"),
+    (
+        ("not-numeric", "draft", "SUITABILITY"),
+        ("123456789012345", "unexpected", "SUITABILITY"),
+        ("123456789012345", "draft", "not-uppercase"),
+    ),
+)
+def test_invalid_flow_message_fails_before_network_io(
+    monkeypatch,
+    flow_id,
+    mode,
+    screen,
+):
+    _configure_transport(monkeypatch)
+    request = MagicMock()
+    monkeypatch.setattr(whatsapp._HTTP_CLIENT, "request", request)
+
+    with pytest.raises(whatsapp.WhatsAppValidationError):
+        whatsapp.send_flow(
+            "919876543210",
+            flow_id=flow_id,
+            flow_token="synthetic-signed-flow-token",
+            screen=screen,
+            body="Complete the secure fact form.",
+            mode=mode,
+        )
+
+    request.assert_not_called()
+
+
 @pytest.mark.parametrize(
     "send",
     [

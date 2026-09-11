@@ -189,6 +189,25 @@ commit:
 6. Connect only staging provider webhooks and synthetic test users. Never use
    the production domain, number, keys, recipients or database.
 
+For the RC19 cheque-notice intake exercise, keep the product out of the
+allowlist until Meta accepts
+`docs/document-studio/flows/cheque-notice-intake-v1.json` and the encrypted
+endpoint health check succeeds. In staging secret storage only, set:
+
+```text
+CHEQUE_NOTICE_STAGING_UAT_ENABLED=true
+WHATSAPP_CHEQUE_NOTICE_FLOW_ID=<numeric Meta Flow ID>
+WHATSAPP_CHEQUE_NOTICE_FLOW_MODE=draft
+WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY=<matching RSA private PEM>
+WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY_PASSPHRASE=<only if encrypted>
+```
+
+Then add the cheque product to the single staging global allowlist for the
+planned synthetic test window. Never print the private key/passphrase, place
+them in Git, or reuse the Flask/admin keys. Remove the cheque product from the
+allowlist and turn the switch off after UAT. Production readiness intentionally
+rejects this incomplete slice even if an operator changes its allowlist.
+
 After staging acceptance, deploy the committed production Blueprint separately
 with live-only values and the approved legal-content review pair.
 

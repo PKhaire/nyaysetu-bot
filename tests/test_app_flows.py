@@ -32,8 +32,21 @@ def _whatsapp_payload(
     wa_id="919911112222",
     text=None,
     interactive_id=None,
+    flow_response=None,
 ):
-    if interactive_id is not None:
+    if flow_response is not None:
+        message = {
+            "from": wa_id,
+            "id": message_id,
+            "type": "interactive",
+            "interactive": {
+                "type": "nfm_reply",
+                "nfm_reply": {
+                    "response_json": json.dumps(flow_response),
+                },
+            },
+        }
+    elif interactive_id is not None:
         message = {
             "from": wa_id,
             "id": message_id,
@@ -265,6 +278,219 @@ def test_document_studio_whatsapp_flow_starts_for_every_open_user(
         assert db.query(Booking).count() == 0
     finally:
         db.close()
+
+
+def test_cheque_notice_start_opens_only_the_staging_fact_flow(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+):
+    from services import cheque_notice_intake_service
+    from services import document_catalogue
+    from services.document_release_service import (
+        record_approval,
+        release_manifest,
+    )
+
+    _secure_whatsapp_route(monkeypatch, app_module)
+    monkeypatch.setattr(app_module, "ENV", "staging")
+    monkeypatch.setattr(
+        app_module,
+        "CHEQUE_NOTICE_STAGING_UAT_ENABLED",
+        True,
+    )
+    monkeypatch.setattr(
+        app_module,
+        "WHATSAPP_CHEQUE_NOTICE_FLOW_ID",
+        "123456789012345",
+    )
+    monkeypatch.setattr(
+        app_module,
+        "WHATSAPP_CHEQUE_NOTICE_FLOW_MODE",
+        "draft",
+    )
+    monkeypatch.setattr(
+        cheque_notice_intake_service,
+        "SECRET_KEY",
+        "s" * 64,
+    )
+    monkeypatch.setattr(
+        cheque_notice_intake_service,
+        "ENV",
+        "staging",
+    )
+    monkeypatch.setattr(
+        cheque_notice_intake_service,
+        "CHEQUE_NOTICE_STAGING_UAT_ENABLED",
+        True,
+    )
+    monkeypatch.setattr(
+        app_module,
+        "document_studio_available",
+        lambda _user=None: True,
+    )
+    monkeypatch.setattr(document_catalogue, "DOCUMENT_STUDIO_ENABLED", True)
+    monkeypatch.setattr(document_catalogue, "DOCUMENT_STUDIO_PRICE_INR", 299)
+    monkeypatch.setattr(
+        document_catalogue,
+        "DOCUMENT_STUDIO_PRODUCT_ALLOWLIST",
+        frozenset(
+            {
+                document_catalogue.PRODUCT_CODE,
+                document_catalogue.CHEQUE_NOTICE_PRODUCT_CODE,
+            }
+        ),
+    )
+    user_id = _create_user(isolated_app_db, flow_state=app_module.NORMAL)
+    db = isolated_app_db()
+    try:
+        manifest = release_manifest(document_catalogue.CHEQUE_NOTICE_PRODUCT_CODE)
+        now = datetime.now(timezone.utc)
+        record_approval(
+            db,
+            {
+                "reviewer_name": "Synthetic Verified Advocate",
+                "reviewer_enrolment_ref": "SYNTHETIC-REVIEW-REF",
+                "authority_statement": "Approved exact synthetic package",
+                "authenticated_method": "NAMED_MFA_AND_SIGNED_RECORD",
+                "authenticated_at": (now - timedelta(minutes=1)).isoformat(),
+                "next_review_at": (now + timedelta(days=30)).isoformat(),
+                "decision": "APPROVED",
+                "template_aggregate_hash": manifest[
+                    "template_aggregate_hash"
+                ],
+                "golden_artifact_hashes": manifest[
+                    "golden_artifact_hashes"
+                ],
+            },
+            recorded_by="phase-e-test-operator",
+            product_code=document_catalogue.CHEQUE_NOTICE_PRODUCT_CODE,
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = _signed_whatsapp_post(
+        client,
+        _whatsapp_payload(
+            message_id="wamid.cheque-notice.start",
+            interactive_id=(
+                "doc_start::" + document_catalogue.CHEQUE_NOTICE_PRODUCT_CODE
+            ),
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "cheque_notice_flow_sent"
+    db = isolated_app_db()
+    try:
+        user = db.get(User, user_id)
+        order = db.query(DocumentOrder).one()
+        assert user.flow_state == app_module.DOCUMENT_NOTICE_FLOW_PENDING
+        assert order.product_code == document_catalogue.CHEQUE_NOTICE_PRODUCT_CODE
+        assert order.output_classification == "ADVOCATE_ISSUED_NOTICE"
+        assert order.state == "INTAKE"
+        assert order.uat_only is True
+        assert order.price_minor is None
+        assert order.payment_processed is False
+        assert db.query(DocumentCapacityReservation).count() == 0
+    finally:
+        db.close()
+    flow_call = transport_spies["flow"].call_args
+    assert flow_call.args == ("919911112222",)
+    assert flow_call.kwargs["flow_id"] == "123456789012345"
+    assert flow_call.kwargs["screen"] == "SUITABILITY"
+    assert flow_call.kwargs["mode"] == "draft"
+
+
+def test_cheque_notice_completion_acknowledges_saved_facts_without_payment(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+):
+    from services import cheque_notice_intake_service
+    from services import document_catalogue
+
+    _secure_whatsapp_route(monkeypatch, app_module)
+    monkeypatch.setattr(
+        cheque_notice_intake_service,
+        "SECRET_KEY",
+        "s" * 64,
+    )
+    monkeypatch.setattr(
+        cheque_notice_intake_service,
+        "ENV",
+        "staging",
+    )
+    monkeypatch.setattr(
+        cheque_notice_intake_service,
+        "CHEQUE_NOTICE_STAGING_UAT_ENABLED",
+        True,
+    )
+    user_id = _create_user(
+        isolated_app_db,
+        flow_state=app_module.DOCUMENT_NOTICE_FLOW_PENDING,
+    )
+    db = isolated_app_db()
+    try:
+        product = document_catalogue.resolve_product(
+            document_catalogue.CHEQUE_NOTICE_PRODUCT_CODE
+        )
+        order = DocumentOrder(
+            public_ref="DS-PHASEE-WEBHOOK",
+            user_id=user_id,
+            product_code=product.code,
+            template_version=product.template_version,
+            state="EVIDENCE_PENDING",
+            current_step="evidence_validation",
+            draft_answers_json="{}",
+            output_classification=product.output_classification,
+            uat_only=True,
+            schema_hash=product.schema_hash,
+            template_hash=product.template_hash,
+            currency="INR",
+            payment_processed=False,
+        )
+        db.add(order)
+        db.flush()
+        token = cheque_notice_intake_service.issue_notice_flow_token(order)
+        order_ref = order.public_ref
+        db.commit()
+    finally:
+        db.close()
+
+    response = _signed_whatsapp_post(
+        client,
+        _whatsapp_payload(
+            message_id="wamid.cheque-notice.complete",
+            flow_response={
+                "flow_token": token,
+                "order_ref": order_ref,
+                "status": "EVIDENCE_PENDING",
+            },
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "cheque_notice_intake_saved"
+    db = isolated_app_db()
+    try:
+        user = db.get(User, user_id)
+        order = db.query(DocumentOrder).one()
+        assert user.flow_state == app_module.NORMAL
+        assert order.state == "EVIDENCE_PENDING"
+        assert order.payment_processed is False
+        assert order.razorpay_payment_link_id is None
+    finally:
+        db.close()
+    message = transport_spies["text"].call_args.args[1].lower()
+    assert "no payment" in message
+    assert "no notice" in message
+    transport_spies["home"].assert_called_once()
 
 
 def test_document_studio_capacity_exhaustion_creates_no_draft_or_payment(

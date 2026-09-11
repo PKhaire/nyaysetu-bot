@@ -21,11 +21,14 @@ manipulative retention patterns or imply a lawyer-client relationship.
   PDF/DOCX delivery. Preview, payment and release fail closed unless the exact
   template package has authenticated advocate approval and private storage is
   ready.
-- A privately registered, non-visible cheque-notice package for Phase D. It
+- A privately registered cheque-notice package with a disabled-by-default,
+  staging-only Phase E fact-intake slice. It
   supports only a narrow personal-loan/single-cheque fact pattern, routes
   uncertainty to an advocate, uses a matter-specific quote and binds release
-  approval to a factual-summary PDF plus an internal notice-review PDF. Phase E
-  must complete the customer journey and staging gates before global release.
+  approval to a factual-summary PDF plus an internal notice-review PDF. Its
+  encrypted six-section WhatsApp Flow stops before evidence, quote, payment,
+  notice creation or dispatch; the remaining Phase E gates must pass before
+  global release.
 - Consent-gated AI information with deterministic safety checks and local
   fallback content.
 - Guided legal category, district, date, and capacity-aware slot selection.

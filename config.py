@@ -376,6 +376,32 @@ WHATSAPP_APP_SECRET = env_str("WHATSAPP_APP_SECRET")
 WHATSAPP_APP_SECRET_PREVIOUS = env_str("WHATSAPP_APP_SECRET_PREVIOUS")
 ALLOW_INSECURE_WEBHOOKS = env_bool("ALLOW_INSECURE_WEBHOOKS", False)
 
+# Phase E cheque-notice intake remains an explicit staging-only switch.  A
+# Flow ID without the switch (or the switch without the encrypted endpoint
+# key) cannot publish the intake accidentally.
+CHEQUE_NOTICE_STAGING_UAT_ENABLED = env_bool(
+    "CHEQUE_NOTICE_STAGING_UAT_ENABLED",
+    False,
+)
+WHATSAPP_CHEQUE_NOTICE_FLOW_ID = env_str(
+    "WHATSAPP_CHEQUE_NOTICE_FLOW_ID"
+)
+WHATSAPP_CHEQUE_NOTICE_FLOW_MODE = env_str(
+    "WHATSAPP_CHEQUE_NOTICE_FLOW_MODE",
+    "draft",
+    allow_empty=False,
+).lower()
+if WHATSAPP_CHEQUE_NOTICE_FLOW_MODE not in {"draft", "published"}:
+    raise ValueError(
+        "WHATSAPP_CHEQUE_NOTICE_FLOW_MODE must be draft or published"
+    )
+WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY = env_str(
+    "WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY"
+)
+WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY_PASSPHRASE = env_str(
+    "WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY_PASSPHRASE"
+)
+
 # Consultation reminders are disabled unless both values for a specific
 # reminder/language pair are populated with an approved Meta template. There
 # is deliberately no cross-language fallback: sending an English template to a

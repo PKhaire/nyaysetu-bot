@@ -54,6 +54,17 @@ def test_email_notifications_are_disabled_by_default(monkeypatch):
     assert config["EMAIL_NOTIFICATIONS_ENABLED"] is False
 
 
+def test_cheque_notice_flow_mode_is_strict(monkeypatch):
+    monkeypatch.setenv("ENV", "test")
+    monkeypatch.setenv("WHATSAPP_CHEQUE_NOTICE_FLOW_MODE", "unexpected")
+
+    with pytest.raises(
+        ValueError,
+        match="WHATSAPP_CHEQUE_NOTICE_FLOW_MODE must be draft or published",
+    ):
+        runpy.run_path(str(PROJECT_ROOT / "config.py"))
+
+
 def test_document_studio_daily_capacity_must_be_positive(monkeypatch):
     monkeypatch.setenv("ENV", "test")
     monkeypatch.setenv("DOCUMENT_STUDIO_DAILY_CAPACITY", "0")
@@ -153,6 +164,12 @@ def test_deployment_commands_and_render_release_controls_exist():
         in blueprint
     )
     assert "- key: DOCUMENT_STUDIO_S3_BUCKET" in blueprint
+    assert (
+        '- key: CHEQUE_NOTICE_STAGING_UAT_ENABLED\n        value: "false"'
+        in blueprint
+    )
+    assert "- key: WHATSAPP_CHEQUE_NOTICE_FLOW_ID" in blueprint
+    assert "- key: WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY" in blueprint
 
 
 def test_render_only_schedules_existing_operational_modules():
@@ -171,6 +188,103 @@ def test_render_only_schedules_existing_operational_modules():
     assert "python -m jobs.consultation_reminders" in blueprint
     assert 'schedule: "*/5 * * * *"' in blueprint
     assert 'schedule: "*/10 * * * *"' in blueprint
+
+
+def test_cheque_notice_first_slice_cannot_be_enabled_in_production(
+    monkeypatch,
+    app_module,
+):
+    configured = SimpleNamespace(
+        ok=True,
+        reason_code="CONFIGURED",
+        enabled_product_codes=(app_module.CHEQUE_NOTICE_PRODUCT_CODE,),
+    )
+    monkeypatch.setattr(
+        app_module,
+        "catalogue_configuration",
+        lambda **_kwargs: configured,
+    )
+    monkeypatch.setattr(app_module, "DOCUMENT_STUDIO_ENABLED", True)
+    monkeypatch.setattr(
+        app_module,
+        "DOCUMENT_STUDIO_CONSENT_VERSION",
+        "synthetic-consent-v1",
+    )
+    monkeypatch.setattr(app_module, "DOCUMENT_STUDIO_DAILY_CAPACITY", 10)
+    monkeypatch.setattr(app_module, "DOCUMENT_STUDIO_S3_BUCKET", "synthetic")
+    monkeypatch.setattr(
+        app_module,
+        "DOCUMENT_STUDIO_S3_ACCESS_KEY_ID",
+        "A" * 16,
+    )
+    monkeypatch.setattr(
+        app_module,
+        "DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY",
+        "s" * 32,
+    )
+    monkeypatch.setattr(
+        app_module,
+        "_deployment_configuration_is_valid",
+        lambda **_kwargs: True,
+    )
+
+    assert app_module._production_configuration_is_valid() is False
+
+
+def test_cheque_notice_staging_gate_requires_flow_configuration(
+    monkeypatch,
+    app_module,
+):
+    configured = SimpleNamespace(
+        ok=True,
+        reason_code="CONFIGURED",
+        enabled_product_codes=(app_module.CHEQUE_NOTICE_PRODUCT_CODE,),
+    )
+    monkeypatch.setattr(
+        app_module,
+        "catalogue_configuration",
+        lambda **_kwargs: configured,
+    )
+    monkeypatch.setattr(app_module, "DOCUMENT_STUDIO_ENABLED", True)
+    monkeypatch.setattr(
+        app_module,
+        "DOCUMENT_STUDIO_CONSENT_VERSION",
+        "synthetic-consent-v1",
+    )
+    monkeypatch.setattr(app_module, "DOCUMENT_STUDIO_DAILY_CAPACITY", 10)
+    monkeypatch.setattr(
+        app_module,
+        "_deployment_configuration_is_valid",
+        lambda **_kwargs: True,
+    )
+    monkeypatch.setattr(
+        app_module,
+        "flow_private_key_is_valid",
+        lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setattr(
+        app_module,
+        "CHEQUE_NOTICE_STAGING_UAT_ENABLED",
+        False,
+    )
+    monkeypatch.setattr(
+        app_module,
+        "WHATSAPP_CHEQUE_NOTICE_FLOW_ID",
+        "123456789012345",
+    )
+    assert app_module._staging_configuration_is_valid() is False
+
+    monkeypatch.setattr(
+        app_module,
+        "CHEQUE_NOTICE_STAGING_UAT_ENABLED",
+        True,
+    )
+    monkeypatch.setattr(
+        app_module,
+        "WHATSAPP_CHEQUE_NOTICE_FLOW_MODE",
+        "draft",
+    )
+    assert app_module._staging_configuration_is_valid() is True
 
 
 def test_multi_product_price_map_is_strict_and_immutable(monkeypatch):

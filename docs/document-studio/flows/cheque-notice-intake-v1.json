@@ -1,0 +1,710 @@
+{
+  "version": "7.3",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "SUITABILITY": ["PEOPLE_ADDRESSES"],
+    "PEOPLE_ADDRESSES": ["DEBT_CHEQUE"],
+    "DEBT_CHEQUE": ["DISHONOUR"],
+    "DISHONOUR": ["EVIDENCE_CHANGES"],
+    "EVIDENCE_CHANGES": ["REVIEW_HANDOVER"],
+    "REVIEW_HANDOVER": [
+      "SUITABILITY",
+      "PEOPLE_ADDRESSES",
+      "DEBT_CHEQUE",
+      "DISHONOUR",
+      "EVIDENCE_CHANGES",
+      "SUCCESS"
+    ],
+    "SUCCESS": []
+  },
+  "screens": [
+    {
+      "id": "SUITABILITY",
+      "title": "1 of 6 - Suitability",
+      "data": {
+        "claimant_scope": {"type": "string", "__example__": ""},
+        "instrument_scope": {"type": "string", "__example__": ""},
+        "liability_scope": {"type": "string", "__example__": ""},
+        "conflict_scope": {"type": "string", "__example__": ""},
+        "has_error": {"type": "boolean", "__example__": false},
+        "error_message": {"type": "string", "__example__": ""}
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form",
+            "init-values": {
+              "claimant_scope": "${data.claimant_scope}",
+              "instrument_scope": "${data.instrument_scope}",
+              "liability_scope": "${data.liability_scope}",
+              "conflict_scope": "${data.conflict_scope}"
+            },
+            "children": [
+              {
+                "type": "TextBody",
+                "text": "${data.error_message}",
+                "visible": "${data.has_error}"
+              },
+              {
+                "type": "TextBody",
+                "text": "Confirm: you are the individual named payee acting for yourself, and the drawer is one living adult individual acting personally."
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "claimant_scope",
+                "label": "Does this match?",
+                "required": true,
+                "data-source": [
+                  {"id": "YES", "title": "Yes"},
+                  {"id": "NO", "title": "No"},
+                  {"id": "UNSURE", "title": "Unsure"}
+                ]
+              },
+              {
+                "type": "TextBody",
+                "text": "Confirm: this request concerns one cheque, one return event and no earlier statutory notice for that dishonour."
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "instrument_scope",
+                "label": "Does this match?",
+                "required": true,
+                "data-source": [
+                  {"id": "YES", "title": "Yes"},
+                  {"id": "NO", "title": "No"},
+                  {"id": "UNSURE", "title": "Unsure"}
+                ]
+              },
+              {
+                "type": "TextBody",
+                "text": "Confirm: the cheque was issued for a real legally payable debt or liability, not a gift or an uncertain security arrangement."
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "liability_scope",
+                "label": "Does this match?",
+                "required": true,
+                "data-source": [
+                  {"id": "YES", "title": "Yes"},
+                  {"id": "NO", "title": "No"},
+                  {"id": "UNSURE", "title": "Unsure"}
+                ]
+              },
+              {
+                "type": "TextBody",
+                "text": "Confirm: there has been no part-payment, settlement, replacement cheque, insolvency or existing proceeding for this demand."
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "conflict_scope",
+                "label": "Does this match?",
+                "required": true,
+                "data-source": [
+                  {"id": "YES", "title": "Yes"},
+                  {"id": "NO", "title": "No"},
+                  {"id": "UNSURE", "title": "Unsure"}
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Save and continue",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "claimant_scope": "${form.claimant_scope}",
+                    "instrument_scope": "${form.instrument_scope}",
+                    "liability_scope": "${form.liability_scope}",
+                    "conflict_scope": "${form.conflict_scope}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "PEOPLE_ADDRESSES",
+      "title": "2 of 6 - People and addresses",
+      "data": {
+        "payee_full_name": {"type": "string", "__example__": ""},
+        "payee_notice_address": {"type": "string", "__example__": ""},
+        "drawer_full_name": {"type": "string", "__example__": ""},
+        "drawer_service_address": {"type": "string", "__example__": ""},
+        "drawer_alternate_address_present": {"type": "string", "__example__": ""},
+        "drawer_alternate_address": {"type": "string", "__example__": ""},
+        "has_error": {"type": "boolean", "__example__": false},
+        "error_message": {"type": "string", "__example__": ""}
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form",
+            "init-values": {
+              "payee_full_name": "${data.payee_full_name}",
+              "payee_notice_address": "${data.payee_notice_address}",
+              "drawer_full_name": "${data.drawer_full_name}",
+              "drawer_service_address": "${data.drawer_service_address}",
+              "drawer_alternate_address_present": "${data.drawer_alternate_address_present}",
+              "drawer_alternate_address": "${data.drawer_alternate_address}"
+            },
+            "children": [
+              {
+                "type": "TextBody",
+                "text": "${data.error_message}",
+                "visible": "${data.has_error}"
+              },
+              {
+                "type": "TextBody",
+                "text": "Enter the payee's full name exactly as it should be reviewed."
+              },
+              {
+                "type": "TextInput",
+                "name": "payee_full_name",
+                "label": "Payee full name",
+                "required": true
+              },
+              {
+                "type": "TextBody",
+                "text": "Enter and confirm the payee's complete notice address with PIN."
+              },
+              {
+                "type": "TextArea",
+                "name": "payee_notice_address",
+                "label": "Payee notice address",
+                "required": true
+              },
+              {
+                "type": "TextBody",
+                "text": "Enter the drawer's full name exactly as shown in the records."
+              },
+              {
+                "type": "TextInput",
+                "name": "drawer_full_name",
+                "label": "Drawer full name",
+                "required": true
+              },
+              {
+                "type": "TextBody",
+                "text": "Enter and confirm the drawer's primary service address with PIN and whether another address is known."
+              },
+              {
+                "type": "TextArea",
+                "name": "drawer_service_address",
+                "label": "Primary service address",
+                "required": true
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "drawer_alternate_address_present",
+                "label": "Another address known?",
+                "required": true,
+                "data-source": [
+                  {"id": "YES", "title": "Yes"},
+                  {"id": "NO", "title": "No"}
+                ]
+              },
+              {
+                "type": "TextBody",
+                "text": "Enter the second known service address for advocate review."
+              },
+              {
+                "type": "TextArea",
+                "name": "drawer_alternate_address",
+                "label": "Second address, if known",
+                "required": false
+              },
+              {
+                "type": "Footer",
+                "label": "Save and continue",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "payee_full_name": "${form.payee_full_name}",
+                    "payee_notice_address": "${form.payee_notice_address}",
+                    "drawer_full_name": "${form.drawer_full_name}",
+                    "drawer_service_address": "${form.drawer_service_address}",
+                    "drawer_alternate_address_present": "${form.drawer_alternate_address_present}",
+                    "drawer_alternate_address": "${form.drawer_alternate_address}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "DEBT_CHEQUE",
+      "title": "3 of 6 - Debt and cheque",
+      "data": {
+        "liability_category": {"type": "string", "__example__": ""},
+        "liability_due_date": {"type": "string", "__example__": ""},
+        "liability_summary": {"type": "string", "__example__": ""},
+        "cheque_number": {"type": "string", "__example__": ""},
+        "cheque_date": {"type": "string", "__example__": ""},
+        "cheque_amount_inr": {"type": "string", "__example__": ""},
+        "payee_name_on_cheque": {"type": "string", "__example__": ""},
+        "drawer_bank_name": {"type": "string", "__example__": ""},
+        "drawer_bank_branch": {"type": "string", "__example__": ""},
+        "has_error": {"type": "boolean", "__example__": false},
+        "error_message": {"type": "string", "__example__": ""}
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form",
+            "init-values": {
+              "liability_category": "${data.liability_category}",
+              "liability_due_date": "${data.liability_due_date}",
+              "liability_summary": "${data.liability_summary}",
+              "cheque_number": "${data.cheque_number}",
+              "cheque_date": "${data.cheque_date}",
+              "cheque_amount_inr": "${data.cheque_amount_inr}",
+              "payee_name_on_cheque": "${data.payee_name_on_cheque}",
+              "drawer_bank_name": "${data.drawer_bank_name}",
+              "drawer_bank_branch": "${data.drawer_bank_branch}"
+            },
+            "children": [
+              {
+                "type": "TextBody",
+                "text": "${data.error_message}",
+                "visible": "${data.has_error}"
+              },
+              {
+                "type": "TextBody",
+                "text": "Provide the liability category, due date and a short factual summary."
+              },
+              {
+                "type": "Dropdown",
+                "name": "liability_category",
+                "label": "Liability category",
+                "required": true,
+                "data-source": [
+                  {"id": "PERSONAL_LOAN", "title": "Personal loan"},
+                  {"id": "GOODS", "title": "Goods"},
+                  {"id": "SERVICES", "title": "Services"},
+                  {"id": "RENT_FEE", "title": "Rent or fee"},
+                  {"id": "REFUND", "title": "Refund"},
+                  {"id": "OTHER", "title": "Other"}
+                ]
+              },
+              {
+                "type": "DatePicker",
+                "name": "liability_due_date",
+                "label": "Liability due date",
+                "required": true
+              },
+              {
+                "type": "TextArea",
+                "name": "liability_summary",
+                "label": "Short factual summary",
+                "required": true
+              },
+              {
+                "type": "TextBody",
+                "text": "Provide the cheque number, date, amount, payee text, bank and branch."
+              },
+              {
+                "type": "TextInput",
+                "name": "cheque_number",
+                "label": "Cheque number",
+                "required": true
+              },
+              {
+                "type": "DatePicker",
+                "name": "cheque_date",
+                "label": "Cheque date",
+                "required": true
+              },
+              {
+                "type": "TextInput",
+                "name": "cheque_amount_inr",
+                "label": "Cheque amount in INR",
+                "input-type": "number",
+                "required": true
+              },
+              {
+                "type": "TextInput",
+                "name": "payee_name_on_cheque",
+                "label": "Payee text on cheque",
+                "required": true
+              },
+              {
+                "type": "TextInput",
+                "name": "drawer_bank_name",
+                "label": "Drawer bank name",
+                "required": true
+              },
+              {
+                "type": "TextInput",
+                "name": "drawer_bank_branch",
+                "label": "Drawer bank branch",
+                "required": true
+              },
+              {
+                "type": "Footer",
+                "label": "Save and continue",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "liability_category": "${form.liability_category}",
+                    "liability_due_date": "${form.liability_due_date}",
+                    "liability_summary": "${form.liability_summary}",
+                    "cheque_number": "${form.cheque_number}",
+                    "cheque_date": "${form.cheque_date}",
+                    "cheque_amount_inr": "${form.cheque_amount_inr}",
+                    "payee_name_on_cheque": "${form.payee_name_on_cheque}",
+                    "drawer_bank_name": "${form.drawer_bank_name}",
+                    "drawer_bank_branch": "${form.drawer_bank_branch}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "DISHONOUR",
+      "title": "4 of 6 - Dishonour",
+      "data": {
+        "presented_on": {"type": "string", "__example__": ""},
+        "return_memo_date": {"type": "string", "__example__": ""},
+        "dishonour_information_received_on": {"type": "string", "__example__": ""},
+        "return_reason_exact": {"type": "string", "__example__": ""},
+        "return_bank_name": {"type": "string", "__example__": ""},
+        "has_error": {"type": "boolean", "__example__": false},
+        "error_message": {"type": "string", "__example__": ""}
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form",
+            "init-values": {
+              "presented_on": "${data.presented_on}",
+              "return_memo_date": "${data.return_memo_date}",
+              "dishonour_information_received_on": "${data.dishonour_information_received_on}",
+              "return_reason_exact": "${data.return_reason_exact}",
+              "return_bank_name": "${data.return_bank_name}"
+            },
+            "children": [
+              {
+                "type": "TextBody",
+                "text": "${data.error_message}",
+                "visible": "${data.has_error}"
+              },
+              {
+                "type": "TextBody",
+                "text": "Provide presentation date, memo date, date you received bank information, exact return reason and communicating bank."
+              },
+              {
+                "type": "DatePicker",
+                "name": "presented_on",
+                "label": "Date presented",
+                "required": true
+              },
+              {
+                "type": "DatePicker",
+                "name": "return_memo_date",
+                "label": "Return memo date",
+                "required": true
+              },
+              {
+                "type": "DatePicker",
+                "name": "dishonour_information_received_on",
+                "label": "Date bank information received",
+                "required": true
+              },
+              {
+                "type": "TextInput",
+                "name": "return_reason_exact",
+                "label": "Exact return reason",
+                "required": true
+              },
+              {
+                "type": "TextInput",
+                "name": "return_bank_name",
+                "label": "Communicating bank",
+                "required": true
+              },
+              {
+                "type": "Footer",
+                "label": "Save and continue",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "presented_on": "${form.presented_on}",
+                    "return_memo_date": "${form.return_memo_date}",
+                    "dishonour_information_received_on": "${form.dishonour_information_received_on}",
+                    "return_reason_exact": "${form.return_reason_exact}",
+                    "return_bank_name": "${form.return_bank_name}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "EVIDENCE_CHANGES",
+      "title": "5 of 6 - Evidence and changes",
+      "data": {
+        "evidence_checklist": {"type": "string", "__example__": ""},
+        "post_issue_change": {"type": "string", "__example__": ""},
+        "prior_demand_or_notice": {"type": "string", "__example__": ""},
+        "existing_proceeding": {"type": "string", "__example__": ""},
+        "has_error": {"type": "boolean", "__example__": false},
+        "error_message": {"type": "string", "__example__": ""}
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form",
+            "init-values": {
+              "evidence_checklist": "${data.evidence_checklist}",
+              "post_issue_change": "${data.post_issue_change}",
+              "prior_demand_or_notice": "${data.prior_demand_or_notice}",
+              "existing_proceeding": "${data.existing_proceeding}"
+            },
+            "children": [
+              {
+                "type": "TextBody",
+                "text": "${data.error_message}",
+                "visible": "${data.has_error}"
+              },
+              {
+                "type": "TextBody",
+                "text": "Confirm you can provide the cheque front, return memo and debt support. Uploads are scanned and reviewed separately."
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "evidence_checklist",
+                "label": "Can you provide all three?",
+                "required": true,
+                "data-source": [
+                  {"id": "YES", "title": "Yes"},
+                  {"id": "NO", "title": "No"},
+                  {"id": "UNSURE", "title": "Unsure"}
+                ]
+              },
+              {
+                "type": "TextBody",
+                "text": "Has any payment, settlement, set-off, replacement instrument or written adjustment occurred after cheque issue?"
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "post_issue_change",
+                "label": "Any change after issue?",
+                "required": true,
+                "data-source": [
+                  {"id": "NO", "title": "No"},
+                  {"id": "YES", "title": "Yes"},
+                  {"id": "UNSURE", "title": "Unsure"}
+                ]
+              },
+              {
+                "type": "TextBody",
+                "text": "Was any earlier demand or statutory notice sent for this cheque?"
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "prior_demand_or_notice",
+                "label": "Earlier demand or notice?",
+                "required": true,
+                "data-source": [
+                  {"id": "NO", "title": "No"},
+                  {"id": "YES", "title": "Yes"},
+                  {"id": "UNSURE", "title": "Unsure"}
+                ]
+              },
+              {
+                "type": "TextBody",
+                "text": "Is any complaint, suit, arbitration, insolvency or police proceeding already pending for this demand?"
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "existing_proceeding",
+                "label": "Any existing proceeding?",
+                "required": true,
+                "data-source": [
+                  {"id": "NO", "title": "No"},
+                  {"id": "YES", "title": "Yes"},
+                  {"id": "UNSURE", "title": "Unsure"}
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Save and continue",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "evidence_checklist": "${form.evidence_checklist}",
+                    "post_issue_change": "${form.post_issue_change}",
+                    "prior_demand_or_notice": "${form.prior_demand_or_notice}",
+                    "existing_proceeding": "${form.existing_proceeding}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "REVIEW_HANDOVER",
+      "title": "6 of 6 - Review and handover",
+      "data": {
+        "cheque_amount_confirmation_inr": {"type": "string", "__example__": ""},
+        "facts_confirmed": {"type": "string", "__example__": ""},
+        "review_consent": {"type": "string", "__example__": ""},
+        "contact_permission": {"type": "string", "__example__": ""},
+        "review_summary": {"type": "string", "__example__": "Summary"},
+        "has_error": {"type": "boolean", "__example__": false},
+        "error_message": {"type": "string", "__example__": ""}
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form",
+            "init-values": {
+              "cheque_amount_confirmation_inr": "${data.cheque_amount_confirmation_inr}",
+              "facts_confirmed": "${data.facts_confirmed}",
+              "review_consent": "${data.review_consent}",
+              "contact_permission": "${data.contact_permission}"
+            },
+            "children": [
+              {
+                "type": "TextBody",
+                "text": "${data.error_message}",
+                "visible": "${data.has_error}"
+              },
+              {
+                "type": "TextBody",
+                "text": "${data.review_summary}"
+              },
+              {
+                "type": "TextBody",
+                "text": "Re-enter the cheque amount and confirm the complete factual summary."
+              },
+              {
+                "type": "TextInput",
+                "name": "cheque_amount_confirmation_inr",
+                "label": "Confirm cheque amount in INR",
+                "input-type": "number",
+                "required": true
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "facts_confirmed",
+                "label": "Are all displayed facts correct?",
+                "required": true,
+                "data-source": [
+                  {"id": "CONFIRM", "title": "Confirm"},
+                  {"id": "EDIT", "title": "Edit a section"}
+                ]
+              },
+              {
+                "type": "Dropdown",
+                "name": "edit_section",
+                "label": "Section to edit, only if selected",
+                "required": false,
+                "data-source": [
+                  {"id": "SUITABILITY", "title": "Suitability"},
+                  {"id": "PEOPLE_ADDRESSES", "title": "People and addresses"},
+                  {"id": "DEBT_CHEQUE", "title": "Debt and cheque"},
+                  {"id": "DISHONOUR", "title": "Dishonour"},
+                  {"id": "EVIDENCE_CHANGES", "title": "Evidence and changes"}
+                ]
+              },
+              {
+                "type": "TextBody",
+                "text": "Permit the assigned advocate to review these facts and evidence for this request under the displayed consent notice."
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "review_consent",
+                "label": "Allow advocate review?",
+                "required": true,
+                "data-source": [
+                  {"id": "YES", "title": "Yes"},
+                  {"id": "NO", "title": "No"}
+                ]
+              },
+              {
+                "type": "TextBody",
+                "text": "Choose how the advocate or operator may contact you about missing facts, scope and quote."
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "contact_permission",
+                "label": "Contact method",
+                "required": true,
+                "data-source": [
+                  {"id": "WHATSAPP", "title": "WhatsApp"},
+                  {"id": "PHONE", "title": "Phone"},
+                  {"id": "BOTH", "title": "Both"}
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Submit facts",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "cheque_amount_confirmation_inr": "${form.cheque_amount_confirmation_inr}",
+                    "facts_confirmed": "${form.facts_confirmed}",
+                    "edit_section": "${form.edit_section}",
+                    "review_consent": "${form.review_consent}",
+                    "contact_permission": "${form.contact_permission}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "SUCCESS",
+      "title": "Facts saved",
+      "terminal": true,
+      "success": true,
+      "data": {},
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Synthetic staging intake saved"
+          },
+          {
+            "type": "TextBody",
+            "text": "This test stops before evidence handling. No payment is available and no notice has been created or issued."
+          },
+          {
+            "type": "Footer",
+            "label": "Return to WhatsApp",
+            "on-click-action": {
+              "name": "complete",
+              "payload": {}
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -369,6 +369,24 @@ This evidence does not activate the product or replace authenticated exact-hash
 advocate approval, production scanner/interface security tests, translations,
 provider staging UAT or the Phase E global launch decision.
 
+### RC19 Phase E intake-slice local automation evidence
+
+- Complete regression with the repository coverage gate: 466 passed; total
+  coverage 71.60%.
+- The encrypted Flow endpoint round trip and inverted-IV response contract,
+  tamper/wrong-key rejection, bounded send payload, and endpoint rate guard
+  pass.
+- The six-screen Flow asset is mechanically bound to the existing approved
+  18-response schema; section save/resume, final immutable confirmation,
+  unsupported routing, stale/cross-user sequence denial and no-payment/no-
+  evidence boundaries pass.
+- Production readiness rejects the incomplete cheque slice. Staging readiness
+  requires its explicit switch, numeric Flow ID and valid RSA private key.
+
+This local evidence does not prove Meta accepts the Flow JSON, mobile usability
+or endpoint/public-key configuration. Those require an uploaded draft Flow and
+synthetic real-device staging UAT before the next Phase E slice.
+
 Code gates:
 
 - Compile/static checks pass.
