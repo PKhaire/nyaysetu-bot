@@ -6,6 +6,7 @@ import hmac
 import json
 import time
 from datetime import datetime, timedelta
+from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy.dialects import postgresql
@@ -15,6 +16,7 @@ from models import (
     Booking,
     BookingStatus,
     DocumentOrder,
+    DocumentQuote,
     OutboxJob,
     PaymentReconciliation,
     User,
@@ -139,6 +141,37 @@ def _create_pending_document_order(session_factory):
         db.add(order)
         db.commit()
         return order.id
+    finally:
+        db.close()
+
+
+def _create_pending_advocate_notice(session_factory):
+    order_id = _create_pending_document_order(session_factory)
+    db = session_factory()
+    try:
+        order = db.get(DocumentOrder, order_id)
+        order.product_code = "synthetic_advocate_notice"
+        order.template_version = "synthetic-notice-v1"
+        order.output_classification = "ADVOCATE_ISSUED_NOTICE"
+        order.preview_manifest_hash = None
+        quote = DocumentQuote(
+            document_order_id=order.id,
+            matter_review_id=1,
+            quote_version=1,
+            amount_minor=order.price_minor,
+            currency=order.currency,
+            scope_version="synthetic-scope-v1",
+            scope_hash="e" * 64,
+            scope_json='{"synthetic":true}',
+            status="ACCEPTED",
+            expires_at=utc_now() + timedelta(days=1),
+            created_by_advocate_id=1,
+            created_by_identity_id=1,
+            accepted_at=utc_now(),
+        )
+        db.add(quote)
+        db.commit()
+        return order.id, quote.id
     finally:
         db.close()
 
@@ -470,6 +503,90 @@ def test_document_payment_webhook_commits_durable_delivery_before_fast_path(
         assert job.kind == "document_final_delivery"
         assert json.loads(job.payload_json) == {"document_order_id": order.id}
         assert deferred_threads == [job.id]
+        assert event.status == "DONE"
+    finally:
+        db.close()
+
+
+def test_advocate_notice_webhook_starts_drafting_without_final_delivery(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+    deferred_threads,
+):
+    _configure_payment_route(monkeypatch, app_module)
+    order_id, quote_id = _create_pending_advocate_notice(isolated_app_db)
+    payment_id = "pay_AdvocateNotice1"
+    payment_link_id = "plink_DocumentOps1"
+    current_link = {
+        "id": payment_link_id,
+        "entity": "payment_link",
+        "status": "paid",
+        "accept_partial": False,
+        "amount": 29_900,
+        "amount_paid": 29_900,
+        "currency": "INR",
+        "reference_id": "document-webhook-token",
+        "notes": {
+            "document_order_ref": "DS-WEBHOOK1234",
+            "revision_number": "1",
+            "product_code": "synthetic_advocate_notice",
+            "quote_id": str(quote_id),
+            "quote_version": "1",
+            "quote_scope_hash": "e" * 64,
+        },
+        "payments": [
+            {
+                "payment_id": payment_id,
+                "status": "captured",
+                "amount": 29_900,
+            }
+        ],
+    }
+    current_payment = {
+        "id": payment_id,
+        "entity": "payment",
+        "status": "captured",
+        "captured": True,
+        "amount": 29_900,
+        "currency": "INR",
+        "amount_refunded": 0,
+        "refund_status": None,
+    }
+    monkeypatch.setattr(
+        app_module,
+        "fetch_current_razorpay_capture",
+        lambda *_args: (current_link, current_payment),
+    )
+    self_service_release = MagicMock()
+    monkeypatch.setattr(
+        app_module,
+        "apply_verified_document_payment",
+        self_service_release,
+    )
+
+    response = _signed_payment_post(
+        client,
+        _payment_payload(
+            payment_id=payment_id,
+            payment_link_id=payment_link_id,
+            amount=29_900,
+        ),
+    )
+
+    assert response.status_code == 200
+    assert deferred_threads == []
+    self_service_release.assert_not_called()
+    db = isolated_app_db()
+    try:
+        order = db.get(DocumentOrder, order_id)
+        event = db.query(WebhookEvent).one()
+        assert order.state == "ADVOCATE_DRAFTING"
+        assert order.payment_processed is True
+        assert order.razorpay_payment_id == payment_id
+        assert db.query(OutboxJob).count() == 0
         assert event.status == "DONE"
     finally:
         db.close()

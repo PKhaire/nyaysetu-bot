@@ -80,7 +80,7 @@ def test_fresh_database_upgrade_builds_current_schema(tmp_path):
                 connection.execute(
                     sa.text("SELECT version_num FROM alembic_version")
                 ).scalar_one()
-                == "20260908_01"
+                == "20260910_01"
             )
         assert {
             "admin_operators",
@@ -89,7 +89,33 @@ def test_fresh_database_upgrade_builds_current_schema(tmp_path):
             "document_answer_revisions",
             "document_audit_events",
             "document_capacity_reservations",
+            "document_advocate_assignments",
+            "document_dispatch_events",
+            "document_evidence_artifacts",
+            "document_issue_approvals",
+            "document_legal_holds",
+            "document_matter_reviews",
+            "document_quotes",
         }.issubset(inspector.get_table_names())
+        advocate_columns = {
+            column["name"] for column in inspector.get_columns("advocates")
+        }
+        assert {
+            "verification_status",
+            "verification_ref",
+            "verified_at",
+            "authority_scope_json",
+        }.issubset(advocate_columns)
+        admin_columns = {
+            column["name"]
+            for column in inspector.get_columns("admin_operators")
+        }
+        assert "advocate_id" in admin_columns
+        access_columns = {
+            column["name"]
+            for column in inspector.get_columns("document_access_events")
+        }
+        assert "document_evidence_artifact_id" in access_columns
     finally:
         engine.dispose()
 

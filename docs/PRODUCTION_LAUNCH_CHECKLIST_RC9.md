@@ -25,6 +25,8 @@ Verified baseline:
   PDF/DOCX flow have staging evidence.
 - [x] Local RC14 final validation passes with a single Alembic head
   `20260908_01`, updated SBOM, and the configured coverage gate.
+- [ ] RC17 Phase C has a single local Alembic head `20260910_01`; complete
+  regression, CI, staging migration and synthetic evidence are still required.
 - [x] Draft Studio is globally available when enabled, not a test-user or
   cohort feature.
 - [ ] All mandatory gates below are complete and supported by saved evidence.
@@ -62,7 +64,7 @@ Evidence: Git SHA, reviewed manifest, CI URL, test report, and SBOM.
 - [ ] Set `ENV=production`, `FLASK_ENV=production`, and `DEBUG=false` only in
   production.
 - [ ] Confirm `RESET_DB=false` and destructive reset behavior is disabled.
-- [ ] Run Alembic and confirm schema `20260908_01` is applied.
+- [ ] Run Alembic and confirm schema `20260910_01` is applied.
 - [ ] Confirm `/health/live` and `/health/ready` return HTTP 200.
 
 Evidence: sanitized environment inventory, service IDs, migration log, and
@@ -88,6 +90,20 @@ health responses. Never store secret values in evidence.
   court acceptance, representation, or a guaranteed outcome.
 - [ ] Do not display an advocate signature unless that identified advocate has
   actually reviewed and signed that exact output.
+- [x] Implement the Phase C advocate-issued workflow foundation with synthetic
+  matters only: linked advocate MFA, assignment/conflict/acceptance, immutable
+  quote, exact payment, scanned private evidence, per-order issue approval,
+  PDF-only delivery, dispatch proof, legal hold and audited failure paths.
+- [ ] Complete Phase D's exact cheque-notice schema, clauses, template,
+  validators, supported/boundary/decline golden artifacts and authenticated
+  package approval. Discovery-pack approval alone is insufficient.
+- [ ] Select and validate the production malware/file scanner and approve the
+  evidence type/size, access, retention, incident and legal-hold procedures.
+- [ ] Build and security-test the dedicated scoped advocate interface; never
+  grant an advocate the general operations console or let an operator make a
+  legal decision.
+- [ ] Approve quote scope, expiry, tax/receipt/refund wording, advocate SLA,
+  signing method and dispatch procedure before enabling payment.
 
 Evidence: advocate decision record and approved template hashes.
 
@@ -120,6 +136,9 @@ Evidence: tests, staging concurrency result, configuration, and metrics view.
 - [ ] Require owner authorization and short-lived signed download URLs; test URL
   expiry and cross-user denial.
 - [ ] Test upload/download failure, orphan cleanup, expiry, and deletion requests.
+- [ ] For advocate-issued evidence, prove clean-scan enforcement, assignment
+  revocation, superseded-revision denial, active legal-hold preservation and
+  post-hold deletion with synthetic files before accepting real evidence.
 
 Evidence: sanitized storage/IAM settings, access tests, lifecycle rule, and
 cleanup result.
@@ -246,6 +265,8 @@ registry review.
 
 - [x] Put Draft Studio final-link delivery in the durable outbox; create
   short-lived URLs only during sending and scrub the order ID after acceptance.
+- [x] Keep advocate-issued durable delivery PDF-only and require the exact
+  current per-order approval before each fresh link/redelivery.
 - [ ] Deploy web and every cron/worker from the same Git SHA.
 - [ ] Verify outbox, reconciliation, reminders (if enabled), and maintenance/
   retention jobs individually.
@@ -273,6 +294,10 @@ drill notes.
 - [ ] Complete consultation booking, test payment, webhook confirmation, case
   brief, admin assignment, manual handover, and outcome.
 - [ ] Complete every eligible Draft Studio path through paid PDF/DOCX download.
+- [ ] Complete every supported cheque-notice path through assignment, evidence,
+  quote, test payment, advocate draft, customer fact confirmation, exact issue,
+  locked-PDF download and simulated dispatch. Exercise conflict, decline,
+  unsupported, quote expiry, refund, scanner failure and legal-hold paths.
 - [ ] Test ineligible/ambiguous matters, exhausted capacity, abandoned/expired
   drafts, invalid consent, failed/duplicate payment, generation/S3 failure,
   expired URL, cross-user access, refund, and deletion.
@@ -306,7 +331,7 @@ Run only after a recorded GO decision:
 1. Announce the release window and freeze unrelated changes.
 2. Confirm backup, rollback target, support cover, and provider dashboards.
 3. Deploy the approved SHA with maintenance mode enabled.
-4. Apply/verify migration `20260908_01`.
+4. Apply/verify migration `20260910_01`.
 5. Verify production configuration without printing secret values.
 6. Verify `/health/live` and `/health/ready` internally.
 7. Confirm private S3, jobs, alerts, admin identity, Meta webhook, and Razorpay

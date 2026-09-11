@@ -36,7 +36,12 @@ def _parser() -> argparse.ArgumentParser:
     enroll.add_argument(
         "--role",
         required=True,
-        choices=("ADMIN", "OPERATOR", "VIEWER"),
+        choices=("ADMIN", "OPERATOR", "VIEWER", "ADVOCATE"),
+    )
+    enroll.add_argument(
+        "--advocate-id",
+        type=int,
+        help="Verified advocate record required for the ADVOCATE role.",
     )
 
     activate = commands.add_parser(
@@ -119,6 +124,7 @@ def _enroll(args: argparse.Namespace) -> int:
             operator_id=args.operator_id,
             display_name=args.display_name,
             role=args.role,
+            advocate_id=args.advocate_id,
             password=password,
             encryption_key=ADMIN_MFA_ENCRYPTION_KEY,
         )

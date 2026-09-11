@@ -20,7 +20,13 @@ from config import (
 
 
 _SAFE_REF = re.compile(r"^[A-Z0-9-]{6,32}$")
-_KINDS = {"PREVIEW_PDF": "pdf", "FINAL_PDF": "pdf", "FINAL_DOCX": "docx"}
+_KINDS = {
+    "PREVIEW_PDF": "pdf",
+    "FINAL_PDF": "pdf",
+    "FINAL_DOCX": "docx",
+    "NOTICE_DRAFT_PDF": "pdf",
+    "ISSUED_PDF": "pdf",
+}
 
 
 @dataclass(frozen=True)

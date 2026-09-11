@@ -17,6 +17,7 @@ from models import (
     DocumentAnswerRevision,
     DocumentAuditEvent,
     DocumentOrder,
+    DocumentQuote,
     OutboxJob,
     User,
     utc_now,
@@ -29,6 +30,7 @@ from services import (
 from services.document_artifact_vault import MemoryArtifactVault
 from services.document_operations_service import (
     enqueue_final_delivery,
+    queue_final_redelivery,
     reconcile_document_order,
     reconcile_recent_document_payments,
     request_refund_review,
@@ -36,6 +38,7 @@ from services.document_operations_service import (
 from services.document_release_service import record_approval, release_manifest
 from services.document_renderer import golden_answers
 from services.document_workflow import WorkflowResult
+from services.advocate_issued_workflow import NoticeWorkflowResult
 
 
 @pytest.fixture
@@ -176,6 +179,45 @@ def _payment(order: DocumentOrder) -> dict:
         "amount_refunded": 0,
         "refund_status": None,
     }
+
+
+def _advocate_quote_order(db):
+    order, user = _order(db, state="PAYMENT_PENDING")
+    order.product_code = "synthetic_advocate_notice"
+    order.template_version = "synthetic-notice-v1"
+    order.output_classification = "ADVOCATE_ISSUED_NOTICE"
+    order.preview_manifest_hash = None
+    quote = DocumentQuote(
+        document_order_id=order.id,
+        matter_review_id=1,
+        quote_version=1,
+        amount_minor=order.price_minor,
+        currency=order.currency,
+        scope_version="synthetic-scope-v1",
+        scope_hash="e" * 64,
+        scope_json='{"synthetic":true}',
+        status="ACCEPTED",
+        expires_at=utc_now() + timedelta(days=1),
+        created_by_advocate_id=1,
+        created_by_identity_id=1,
+        accepted_at=utc_now(),
+    )
+    db.add(quote)
+    db.commit()
+    return order, user, quote
+
+
+def _advocate_link(order: DocumentOrder, quote: DocumentQuote) -> dict:
+    payload = _link(order)
+    payload["notes"] = {
+        "document_order_ref": order.public_ref,
+        "revision_number": str(order.active_revision_number),
+        "product_code": order.product_code,
+        "quote_id": str(quote.id),
+        "quote_version": str(quote.quote_version),
+        "quote_scope_hash": quote.scope_hash,
+    }
+    return payload
 
 
 class _Response:
@@ -334,6 +376,73 @@ def test_refund_review_requires_explicit_reason_and_exact_refund(operations_db):
         db.close()
 
 
+def test_advocate_quote_payment_reconciliation_starts_drafting_only(
+    operations_db,
+):
+    db = operations_db()
+    try:
+        order, _, quote = _advocate_quote_order(db)
+        provider = _ProviderClient(
+            _advocate_link(order, quote),
+            _payment(order),
+        )
+
+        result = reconcile_document_order(db, order.id, client=provider)
+
+        assert result.ok is True
+        assert result.outcome == "recovered"
+        assert result.reason_code == "DOCUMENT_NOTICE_PAYMENT_RECOVERED"
+        db.expire_all()
+        recovered = db.get(DocumentOrder, order.id)
+        assert recovered.state == "ADVOCATE_DRAFTING"
+        assert recovered.payment_processed is True
+        assert recovered.razorpay_payment_id == "pay_document_ops_1"
+        assert db.query(OutboxJob).count() == 0
+    finally:
+        db.close()
+
+
+def test_paid_advocate_notice_can_enter_and_complete_refund_review(
+    operations_db,
+):
+    db = operations_db()
+    try:
+        order, _, quote = _advocate_quote_order(db)
+        order.state = "ADVOCATE_DRAFTING"
+        order.payment_processed = True
+        order.razorpay_payment_id = "pay_document_ops_1"
+        db.commit()
+
+        requested = request_refund_review(
+            db,
+            order,
+            actor_ref="ops@example.test",
+            reason="Synthetic delivery failure requires a complete refund.",
+        )
+        db.commit()
+        assert requested.ok is True
+        assert order.state == "REFUND_REVIEW"
+
+        payment = _payment(order)
+        payment.update(
+            {
+                "status": "refunded",
+                "captured": False,
+                "amount_refunded": order.price_minor,
+                "refund_status": "full",
+            }
+        )
+        provider = _ProviderClient(_advocate_link(order, quote), payment)
+
+        result = reconcile_document_order(db, order.id, client=provider)
+
+        assert result.outcome == "refund_confirmed"
+        db.expire_all()
+        assert db.get(DocumentOrder, order.id).state == "REFUNDED"
+    finally:
+        db.close()
+
+
 def test_bounded_scan_reports_release_failure_without_accepting_payment(
     monkeypatch,
     operations_db,
@@ -422,6 +531,91 @@ def test_final_delivery_keeps_links_out_of_durable_payload(
             .count()
             == 1
         )
+    finally:
+        db.close()
+
+
+def test_advocate_issued_delivery_sends_only_locked_pdf(
+    monkeypatch,
+    operations_db,
+):
+    db = operations_db()
+    try:
+        order, user = _order(db, state="FINAL_AVAILABLE")
+        order.output_classification = "ADVOCATE_ISSUED_NOTICE"
+        order.state = "ISSUED"
+        order.payment_processed = True
+        order.final_available_until = utc_now() + timedelta(days=30)
+        job = outbox_service.enqueue_job(
+            db,
+            outbox_service.DOCUMENT_FINAL_DELIVERY_KIND,
+            {"document_order_id": order.id},
+            dedupe_key="synthetic-issued-delivery",
+        )
+        db.commit()
+        job_id = job.id
+        send = MagicMock(return_value={"ok": True})
+        issue_link = MagicMock(
+            return_value=NoticeWorkflowResult(
+                True,
+                "ISSUED_ARTIFACT_LINK_READY",
+                {
+                    "artifact_kind": "ISSUED_PDF",
+                    "download_url": "https://private.example/issued.pdf",
+                },
+            )
+        )
+        monkeypatch.setattr(outbox_service, "send_text", send)
+        monkeypatch.setattr(
+            outbox_service,
+            "execute_notice_command",
+            issue_link,
+        )
+    finally:
+        db.close()
+
+    assert outbox_service.process_job(job_id) is True
+
+    db = operations_db()
+    try:
+        job = db.get(OutboxJob, job_id)
+        assert job.status == "COMPLETED"
+        assert "private.example" not in job.payload_json
+        sent_to, message = send.call_args.args
+        assert sent_to == user.whatsapp_id
+        assert "issued.pdf" in message
+        assert "DOCX" not in message
+        issue_link.assert_called_once()
+    finally:
+        db.close()
+
+
+def test_advocate_issued_document_can_be_queued_for_redelivery(
+    operations_db,
+):
+    db = operations_db()
+    try:
+        order, _, _ = _advocate_quote_order(db)
+        order.state = "ISSUED"
+        order.payment_processed = True
+        order.razorpay_payment_id = "pay_document_ops_1"
+        order.final_available_until = utc_now() + timedelta(days=30)
+
+        result = queue_final_redelivery(
+            db,
+            order,
+            actor_ref="synthetic-operator",
+            reason="Customer requested a fresh short-lived issued PDF link.",
+            idempotency_key="synthetic-issued-redelivery-1",
+        )
+        db.commit()
+
+        assert result.ok is True
+        assert result.reason_code == "DOCUMENT_FINAL_REDELIVERY_QUEUED"
+        assert db.query(OutboxJob).count() == 1
+        assert json.loads(db.query(OutboxJob).one().payload_json) == {
+            "document_order_id": order.id
+        }
     finally:
         db.close()
 

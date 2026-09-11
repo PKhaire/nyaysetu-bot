@@ -421,7 +421,7 @@ SQLite data:
 ## Legacy SQLite import contingency (not authorised for this launch)
 
 Production uses baseline revision `20260729_01` and current head
-`20260908_01`; automatic `create_all()` is disabled and `/health/ready`
+`20260910_01`; automatic `create_all()` is disabled and `/health/ready`
 requires the expected head. The baseline is additive and contains
 compatibility/backfill logic for pre-Alembic databases.
 The following utility is retained only for a separately approved future
@@ -439,7 +439,7 @@ not a recurring sync:
   retain an untouched restore copy.
 - Prepare a separate working backup at Alembic head, then create the frozen
   import artifact from that working copy with the SQLite backup mechanism.
-  The utility requires the source and target to have revision `20260908_01`
+  The utility requires the source and target to have revision `20260910_01`
   and the full current table/column shape.
 - The source must be a regular non-symlink file with no adjacent `-wal`,
   `-journal`, or `-shm` sidecar. It is opened immutable/read-only and checked
@@ -569,7 +569,8 @@ explicit consistency design.
 Every later schema-changing release must add a frozen, reviewed Alembic
 revision and rehearse upgrade, compatibility rollback, and re-upgrade. Never
 edit any applied revision, including `20260729_01`, `20260818_01`,
-`20260819_01`, `20260827_01`, `20260903_01`, or `20260908_01`, after it has reached a shared
+`20260819_01`, `20260827_01`, `20260903_01`, `20260908_01`, or
+`20260910_01`, after it has reached a shared
 environment.
 
 ## Webhook configuration
@@ -1265,7 +1266,7 @@ Before enabling the switch:
    blocks preview/payment/final release.
 3. Set the approved price and the matching Razorpay test keys/webhook secret.
 4. Apply Alembic head and require `/health/ready` to report `ok=true`,
-   PostgreSQL and schema `20260908_01`.
+   PostgreSQL and schema `20260910_01`.
 
 The per-product release section must identify every allowlisted product. For
 the current single-product staging deployment the expected shape is:
@@ -1315,13 +1316,16 @@ captured; enabling staging does not authorize production publication.
   ledger, and `20260827_01` adds the controlled RC9 payment, approval,
   artifact and access-audit model. Revision `20260903_01` adds global daily
   capacity reservations; `20260908_01` adds named administrator identity,
-  MFA recovery, lockout, and session-invalidation state. Do not rewrite
+  MFA recovery, lockout, and session-invalidation state; `20260910_01` adds
+  private advocate assignment, review, quote, evidence, issue, dispatch and
+  legal-hold records. Do not rewrite
   applied revision files.
 - Per-user/global limits cover early menu, support, media, and paid-flow
   branches and deduplicate notices, but their state and some other abuse
   controls remain process-local.
-- Maintenance deliberately covers only a narrow approved retention scope; it
-  is not a legal-hold, privacy-request, or universal deletion system.
+- Maintenance deliberately covers only a narrow approved retention scope. It
+  honours active Draft Studio legal holds, but is not a privacy-request or
+  universal deletion system.
 - Consultation and Draft Studio payment reconciliation is scheduled, but it
   is a bounded safety net rather than settlement/refund accounting and still
   requires staffed review. Document final delivery is durable, while Meta can

@@ -8,7 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from db import Base
-from models import AdminOperator
+from models import AdminOperator, Advocate
 from services.admin_identity_service import (
     admin_identity_readiness,
     authenticate_operator,
@@ -210,6 +210,77 @@ def test_identity_readiness_ignores_active_rows_without_valid_mfa_and_role(
     readiness = admin_identity_readiness(identity_db)
 
     assert readiness == {
+        "mode": "named_mfa",
+        "active_named_operators": 0,
+        "active_admins": 0,
+        "production_compatible": False,
+    }
+
+
+def test_advocate_identity_requires_verified_link_and_not_admin_readiness(
+    identity_db,
+):
+    now = datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)
+    advocate = Advocate(
+        name="Synthetic Verified Advocate",
+        email="verified.advocate@example.com",
+        category="banking",
+        district="Mumbai",
+        active=True,
+        verification_status="VERIFIED",
+        verification_ref="synthetic-identity-check",
+        verified_at=now.replace(tzinfo=None),
+        authority_scope_json=(
+            '{"version":"synthetic-v1",'
+            '"product_codes":["synthetic_advocate_notice"]}'
+        ),
+    )
+    identity_db.add(advocate)
+    identity_db.flush()
+
+    with pytest.raises(ValueError, match="verified_advocate_link_required"):
+        begin_operator_enrollment(
+            identity_db,
+            operator_id="unlinked.advocate@example.com",
+            display_name="Unlinked Advocate",
+            role="ADVOCATE",
+            password="correct horse battery staple",
+            encryption_key=MFA_KEY,
+            now=now,
+        )
+
+    enrollment = begin_operator_enrollment(
+        identity_db,
+        operator_id="verified.advocate@example.com",
+        display_name="Synthetic Verified Advocate",
+        role="ADVOCATE",
+        advocate_id=advocate.id,
+        password="correct horse battery staple",
+        encryption_key=MFA_KEY,
+        now=now,
+    )
+    confirm_operator_enrollment(
+        identity_db,
+        operator_id=enrollment.operator_id,
+        verification_code=totp_code(enrollment.secret, timestamp=now),
+        encryption_key=MFA_KEY,
+        now=now,
+    )
+
+    identity = identity_db.query(AdminOperator).one()
+    authenticated = authenticate_operator(
+        identity_db,
+        operator_id=enrollment.operator_id,
+        password="correct horse battery staple",
+        second_factor=totp_code(enrollment.secret, timestamp=now),
+        encryption_key=MFA_KEY,
+        now=now,
+    )
+
+    assert identity.advocate_id == advocate.id
+    assert authenticated.authenticated is True
+    assert authenticated.role == "ADVOCATE"
+    assert admin_identity_readiness(identity_db) == {
         "mode": "named_mfa",
         "active_named_operators": 0,
         "active_admins": 0,

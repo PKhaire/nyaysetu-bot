@@ -37,6 +37,11 @@ from models import (
     utc_now,
 )
 from services.document_workflow import download_links_for_user
+from services.advocate_issued_workflow import (
+    IssueIssuedArtifactLink,
+    WorkflowActor,
+    execute_notice_command,
+)
 from services.consultation_reminder_policy import (
     REMINDER_ELIGIBLE_FULFILLMENT_STATUSES,
     REMINDER_HORIZONS,
@@ -599,24 +604,39 @@ def _handle_document_final_delivery(
     order = db.get(DocumentOrder, document_order_id)
     if not order:
         raise DeliveryFailure("document_final_delivery_order_not_found")
-    if order.state != "FINAL_AVAILABLE" or not order.payment_processed:
-        raise DeliveryFailure("document_final_delivery_not_available")
     user = db.get(User, order.user_id)
     if not user:
         raise DeliveryFailure("document_final_delivery_user_not_found")
 
-    links_result = download_links_for_user(db, order, user)
-    if not links_result.ok:
-        if links_result.reason_code == "FINAL_NOT_AVAILABLE":
+    if order.output_classification == "ADVOCATE_ISSUED_NOTICE":
+        link_result = execute_notice_command(
+            db,
+            order,
+            actor=WorkflowActor("SYSTEM", user.id),
+            command=IssueIssuedArtifactLink(),
+        )
+        if not link_result.ok or not link_result.snapshot:
             raise DeliveryFailure("document_final_delivery_not_available")
-        raise DeliveryFailure("document_final_links_unavailable")
-    links = links_result.value
-    message = (
-        "Payment confirmed. Your Draft Studio final files are available "
-        "for 30 days.\n"
-        f"PDF: {links['FINAL_PDF']}\n"
-        f"Editable DOCX: {links['FINAL_DOCX']}"
-    )
+        message = (
+            "Your advocate-issued Draft Studio final PDF is available "
+            "for a limited time.\n"
+            f"PDF: {link_result.snapshot['download_url']}"
+        )
+    else:
+        if order.state != "FINAL_AVAILABLE" or not order.payment_processed:
+            raise DeliveryFailure("document_final_delivery_not_available")
+        links_result = download_links_for_user(db, order, user)
+        if not links_result.ok:
+            if links_result.reason_code == "FINAL_NOT_AVAILABLE":
+                raise DeliveryFailure("document_final_delivery_not_available")
+            raise DeliveryFailure("document_final_links_unavailable")
+        links = links_result.value
+        message = (
+            "Payment confirmed. Your Draft Studio final files are available "
+            "for 30 days.\n"
+            f"PDF: {links['FINAL_PDF']}\n"
+            f"Editable DOCX: {links['FINAL_DOCX']}"
+        )
     result = send_text(user.whatsapp_id, message)
     if is_ambiguous_delivery_failure(result):
         raise DeliveryFailure("document_final_delivery_ambiguous")

@@ -8,7 +8,7 @@ application. SQLite enables foreign keys, WAL, a busy timeout, and normal
 synchronous mode for local compatibility.
 
 Managed PostgreSQL is the required production target. Revision `20260729_01`
-is the original baseline and `20260908_01` is the current schema head.
+is the original baseline and `20260910_01` is the current schema head.
 Production disables automatic
 `Base.metadata.create_all()` by default. Render applies
 `python -m alembic -c alembic.ini upgrade head` before a web release;
@@ -442,7 +442,8 @@ Revision `20260819_01` introduced the resumable ledger. Revision
 `20260827_01` extends it into the RC9 controlled drafting, payment, artifact
 and release model; `20260903_01` adds auditable global daily-capacity
 reservations. Revision `20260908_01` adds named administrator identity and MFA
-tables without changing Draft Studio order semantics:
+tables without changing Draft Studio order semantics. Revision `20260910_01`
+adds the private advocate-issued workflow foundation:
 
 - `document_orders` is the aggregate root. It records a random public
   reference; owner; product, questionnaire, template and renderer versions;
@@ -472,8 +473,21 @@ tables without changing Draft Studio order semantics:
   PDF/DOCX bytes live only in the private object vault.
 - `document_access_events` records successful/denied/expired download
   authorization decisions without storing the resulting presigned URL.
+- `document_advocate_assignments` binds one verified advocate identity,
+  authority-scope hash, conflict state and SLA to one order.
+- `document_matter_reviews` records the advocate's immutable decision for one
+  exact intake revision; `document_quotes` records the separately accepted,
+  expiring amount and service-scope snapshot.
+- `document_evidence_artifacts` stores only private-object metadata, type/size
+  and malware-scan result. Evidence bytes remain in the private vault.
+- `document_issue_approvals` binds the authenticated advocate, confirmed
+  revision, candidate artifact and exact issued-PDF hash. No reusable
+  signature image is stored.
+- `document_dispatch_events` records dispatch method, reference and proof
+  without inferring service; `document_legal_holds` records an administrator
+  retention override and its audited closure.
 
-The first product collects structured facts needed to draft the supported
+The first public product collects structured facts needed to draft the supported
 agreement, but no Aadhaar, PAN, bank credential, signature image,
 identity-document or evidence upload. Generated preview/final artifacts use a
 private S3 bucket with Block Public Access and short-lived owner-authorized
@@ -482,6 +496,10 @@ seven-day window; final artifacts become unavailable and are deleted after the
 configured 30-day window, subject to an approved legal hold. Minimal audit and
 separately required finance evidence follow their own reviewed schedules.
 
+The Phase C advocate-issued records are exercised with synthetic data only.
+They do not register or publish a cheque-notice product and do not authorize
+real evidence ingestion, payment, issuance or dispatch.
+
 The protected admin ledger exposes operational metadata, release state and
 artifact status, not draft text, answer JSON, object credentials, download
 URLs or unnecessary user/contact identity.
@@ -489,11 +507,10 @@ URLs or unnecessary user/contact identity.
 ## Future schema work
 
 - Booking status-transition/audit history.
-- Automated advocate matching, eligibility/conflict evidence, and user
-  notification.
+- Automated advocate matching and user notification.
 - User-requested reschedule/cancellation and controlled provider refund,
   settlement, and chargeback workflows.
 - Support comments and stronger external/tamper-resistant audit retention.
 - Data-subject requests and deletion/anonymisation ledger.
-- Extend reviewed retention to additional categories with legal holds.
+- Extend reviewed legal-hold policy beyond Draft Studio artifacts/evidence.
 - Strong foreign keys where migration analysis confirms safe relationships.

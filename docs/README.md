@@ -8,6 +8,10 @@ from external rollout work and future product ideas.
 
 Start with:
 
+- [RC17 advocate-issued workflow foundation](RELEASE_NOTES_2026-09-10_RC17.md)
+  - private synthetic assignment, quote, evidence, issue, PDF-only delivery,
+    dispatch, legal-hold and operations behavior; no cheque-notice legal
+    package or customer availability.
 - [RC16 multi-product catalogue notes](RELEASE_NOTES_2026-09-10_RC16.md)
   - strict global catalogue/pricing validation, per-product readiness and
     product-filtered operations with only the agreement registered at runtime.
@@ -40,8 +44,8 @@ Start with:
   implementation, conservative V1 legal-drafting decisions, exact candidate
   template and advocate-authentication contracts.
   The package also contains a discovery-only cheque-notice product pack and
-  the implemented Phase A-B multi-product catalogue plan; the cheque product
-  is not implemented, offered or approved for payment.
+  the implemented Phase A-C multi-product/advocate-workflow plan. The legal
+  cheque-notice product is not registered, offered or approved for payment.
 
 Then continue with the established repository documentation:
 
@@ -108,7 +112,9 @@ assistant with:
   verified advocate assignment, contact reveal/manual handover,
   reconciliation, outbox, availability, and metrics operations. Human browser
   access uses named password-plus-TOTP identities with `ADMIN`, `OPERATOR`, and
-  read-only `VIEWER` roles; the machine bearer token remains separate.
+  read-only `VIEWER` roles. Phase C also defines a linked `ADVOCATE` identity
+  for scoped legal decisions, but intentionally exposes no advocate portal or
+  general operations access. The machine bearer token remains separate.
 
 Operators can assign an active advocate or named fulfiller and manage the
 fulfilment lifecycle, but the product does not automatically select an
@@ -194,6 +200,10 @@ Implemented in the repository:
   answer revisions, deterministic rendering, exact-payment binding, private
   artifact vault, short-lived downloads, maintenance and append-only template
   release decisions.
+- RC17 private advocate-issued workflow foundations for synthetic tests,
+  including exact quote/payment binding, scanned evidence, per-order issue
+  approval, locked-PDF delivery, dispatch proof and legal holds. No second
+  runtime product or real legal content is included.
 
 Still required before production cutover:
 

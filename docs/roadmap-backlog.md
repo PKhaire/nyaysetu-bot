@@ -130,9 +130,9 @@ These items are “implemented,” not automatically “deployed” or “operat
 
 - Preserve the existing residential leave-and-license product identity,
   approved hashes and behavior while introducing a product registry.
-- Complete Phase A characterization and order-bound product resolution from
-  the [multi-product catalogue plan](document-studio/22-multi-product-catalogue-implementation-plan.md)
-  before registering a second product.
+- Preserve the completed Phase A-B registry/catalogue and Phase C synthetic
+  advocate-issued workflow boundaries from the
+  [multi-product catalogue plan](document-studio/22-multi-product-catalogue-implementation-plan.md).
 - Obtain an authenticated advocate decision of
   `APPROVED_FOR_TEMPLATE_DRAFTING` against the
   [cheque-notice review pack](document-studio/21-cheque-bounce-notice-advocate-review-pack.md)

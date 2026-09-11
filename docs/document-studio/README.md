@@ -1,6 +1,6 @@
 # NyaySetu Draft Studio
 
-Status: RC16 multi-product catalogue candidate implemented in the repository.
+Status: RC17 private advocate-issued workflow foundation implemented locally.
 Global menu visibility, one conditional questionnaire, PIN assistance,
 deterministic rendering, exact payment, private artifact storage, short-lived
 downloads, retention controls, strict per-product pricing and per-product
@@ -12,8 +12,10 @@ release-gate, regression/UAT and operational evidence.
 
 NyaySetu will build a controlled document-preparation workflow using
 advocate-approved, versioned templates. The first release will not use a
-generative model to invent legal clauses and will not accept customer evidence
-uploads. PostgreSQL stores structured workflow metadata; a private Amazon S3
+generative model to invent legal clauses. Its current public self-service
+product does not accept customer evidence uploads; Phase C accepts only
+synthetic scanned evidence through the private workflow seam. PostgreSQL stores
+structured workflow metadata; a private Amazon S3
 bucket in `ap-south-1` stores generated artifacts. Downloads are authorized by
 NyaySetu and delivered through short-lived presigned URLs.
 
@@ -71,6 +73,7 @@ Choose product
 | [Cheque-notice advocate review pack](21-cheque-bounce-notice-advocate-review-pack.md) | Blank discovery and exact-release decisions for an authenticated reviewing advocate |
 | [Multi-product catalogue plan](22-multi-product-catalogue-implementation-plan.md) | Product-registry and separate self-service/advocate-issued workflow plan with phased acceptance criteria |
 | [ADR 0001](../adr/0001-document-studio-publication-and-artifact-contract.md) | Universal publication and preview/payment/final binding decision |
+| [ADR 0002](../adr/0002-advocate-identity-and-legal-decision-boundary.md) | Named advocate identity and operator/legal-decision separation |
 
 ## Non-negotiable launch principles
 

@@ -371,6 +371,72 @@ def test_named_non_admin_can_read_but_cannot_change_admin_only_data(
     assert forbidden.get_json()["error"] == "insufficient_role"
 
 
+def test_advocate_identity_cannot_enter_general_operations_dashboard(
+    client,
+    admin_db,
+):
+    now = datetime.now(timezone.utc)
+    db = admin_db()
+    try:
+        advocate = Advocate(
+            name="Synthetic Portal Advocate",
+            email="portal.advocate@example.com",
+            category="banking",
+            district="Mumbai",
+            active=True,
+            verification_status="VERIFIED",
+            verification_ref="synthetic-portal-verification",
+            verified_at=now.replace(tzinfo=None),
+            authority_scope_json=(
+                '{"version":"synthetic-v1",'
+                '"product_codes":["synthetic_advocate_notice"]}'
+            ),
+        )
+        db.add(advocate)
+        db.flush()
+        enrollment = begin_operator_enrollment(
+            db,
+            operator_id="portal.advocate@example.com",
+            display_name="Synthetic Portal Advocate",
+            role="ADVOCATE",
+            advocate_id=advocate.id,
+            password="advocate password is long enough",
+            encryption_key=ADMIN_MFA_KEY,
+            now=now,
+        )
+        confirm_operator_enrollment(
+            db,
+            operator_id=enrollment.operator_id,
+            verification_code=totp_code(enrollment.secret, timestamp=now),
+            encryption_key=ADMIN_MFA_KEY,
+            now=now,
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    client.get("/admin/login")
+    with client.session_transaction() as browser_session:
+        csrf_token = browser_session["admin_csrf_token"]
+    login = client.post(
+        "/admin/login",
+        data={
+            "operator_id": enrollment.operator_id,
+            "password": "advocate password is long enough",
+            "verification_code": totp_code(
+                enrollment.secret,
+                timestamp=datetime.now(timezone.utc),
+            ),
+            "csrf_token": csrf_token,
+        },
+    )
+
+    assert login.status_code == 302
+    forbidden = client.get("/admin/document-orders")
+    assert forbidden.status_code == 403
+    assert forbidden.get_json() == {"error": "insufficient_role"}
+
+
 def test_named_admin_audit_actor_cannot_be_overridden_by_request_header(
     client,
     admin_db,

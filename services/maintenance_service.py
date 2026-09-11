@@ -30,8 +30,11 @@ from models import (
     BookingStatus,
     CaseBrief,
     DocumentAccessEvent,
+    DocumentAdvocateAssignment,
     DocumentAnswerRevision,
     DocumentArtifact,
+    DocumentEvidenceArtifact,
+    DocumentLegalHold,
     DocumentOrder,
     InboundMessageEvent,
     OutboxJob,
@@ -43,6 +46,7 @@ from models import (
 )
 from services.document_artifact_vault import S3ArtifactVault
 from services.document_capacity_service import release_capacity
+from services.document_evidence_vault import S3EvidenceVault
 
 
 DEFAULT_BATCH_SIZE = 500
@@ -179,6 +183,13 @@ def _operational_risks(db, current: datetime) -> dict[str, Any]:
         PaymentReconciliation.created_at
         < current - timedelta(days=PAYMENT_RECONCILIATION_LOOKBACK_DAYS),
     )
+    notice_assignment_overdue = _risk_metric(
+        db,
+        DocumentAdvocateAssignment,
+        DocumentAdvocateAssignment.sla_due_at,
+        DocumentAdvocateAssignment.status.in_(("ASSIGNED", "ACCEPTED")),
+        DocumentAdvocateAssignment.sla_due_at < current,
+    )
 
     actionable = sum(
         metric["count"]
@@ -188,6 +199,7 @@ def _operational_risks(db, current: datetime) -> dict[str, Any]:
             support_overdue,
             support_without_sla,
             reconciliation_stale,
+            notice_assignment_overdue,
         )
     )
     return {
@@ -205,6 +217,9 @@ def _operational_risks(db, current: datetime) -> dict[str, Any]:
             "open_older_than_lookback": reconciliation_stale,
             "lookback_days": PAYMENT_RECONCILIATION_LOOKBACK_DAYS,
         },
+        "document_notice": {
+            "overdue_assignments": notice_assignment_overdue,
+        },
         "summary": {
             "actionable_signals": actionable,
             "alert_required": actionable > 0,
@@ -220,6 +235,7 @@ def run_maintenance(
     now: datetime | None = None,
     session_factory: Callable[[], Any] | None = None,
     artifact_vault_factory: Callable[[], Any] | None = None,
+    evidence_vault_factory: Callable[[], Any] | None = None,
 ) -> dict[str, Any]:
     """Run one bounded maintenance transaction and return a PII-free report."""
 
@@ -383,11 +399,15 @@ def run_maintenance(
             retention_source="DOCUMENT_STUDIO_DRAFT_TTL_DAYS",
         )
 
+        held_order_ids = db.query(DocumentLegalHold.document_order_id).filter(
+            DocumentLegalHold.status == "ACTIVE"
+        )
         document_artifact_query = (
             db.query(DocumentArtifact)
             .filter(
                 DocumentArtifact.state == "AVAILABLE",
                 DocumentArtifact.expires_at <= current,
+                DocumentArtifact.document_order_id.not_in(held_order_ids),
             )
             .order_by(
                 DocumentArtifact.expires_at.asc(),
@@ -435,6 +455,66 @@ def run_maintenance(
             affected=document_artifacts_affected,
             action="delete_private_object_and_tombstone",
             retention_source="DocumentArtifact.expires_at",
+        )
+
+        document_evidence_query = (
+            db.query(DocumentEvidenceArtifact)
+            .filter(
+                DocumentEvidenceArtifact.state == "AVAILABLE",
+                DocumentEvidenceArtifact.expires_at <= current,
+                DocumentEvidenceArtifact.document_order_id.not_in(
+                    held_order_ids
+                ),
+            )
+            .order_by(
+                DocumentEvidenceArtifact.expires_at.asc(),
+                DocumentEvidenceArtifact.id.asc(),
+            )
+        )
+        document_evidence_ids, document_evidence_more = _bounded_ids(
+            document_evidence_query,
+            DocumentEvidenceArtifact.id,
+            batch_size,
+        )
+        document_evidence_affected = 0
+        if document_evidence_ids and not dry_run:
+            evidence_vault = (evidence_vault_factory or S3EvidenceVault)()
+            evidence_artifacts = (
+                db.query(DocumentEvidenceArtifact)
+                .filter(
+                    DocumentEvidenceArtifact.id.in_(document_evidence_ids),
+                    DocumentEvidenceArtifact.state == "AVAILABLE",
+                    DocumentEvidenceArtifact.expires_at <= current,
+                    DocumentEvidenceArtifact.document_order_id.not_in(
+                        held_order_ids
+                    ),
+                )
+                .order_by(DocumentEvidenceArtifact.id.asc())
+                .all()
+            )
+            for evidence in evidence_artifacts:
+                evidence_vault.delete(evidence.object_key)
+                evidence.state = "DELETED"
+                evidence.deleted_at = current
+                db.add(
+                    DocumentAccessEvent(
+                        document_order_id=evidence.document_order_id,
+                        document_evidence_artifact_id=evidence.id,
+                        actor_type="SYSTEM",
+                        actor_ref="maintenance",
+                        action="EVIDENCE_DELETE",
+                        decision="ALLOWED",
+                        reason_code="RETENTION_EXPIRED",
+                    )
+                )
+                document_evidence_affected += 1
+        categories["document_studio_expired_evidence"] = _category_report(
+            eligible_ids=document_evidence_ids,
+            more_remaining=document_evidence_more,
+            dry_run=dry_run,
+            affected=document_evidence_affected,
+            action="delete_private_object_and_tombstone",
+            retention_source="DocumentEvidenceArtifact.expires_at",
         )
 
         webhook_query = (
@@ -617,6 +697,7 @@ def run_maintenance(
                 "document_studio_paid_order_evidence",
                 "document_studio_audit_events",
                 "document_studio_access_events",
+                "document_studio_active_legal_holds",
                 "dead_or_failed_outbox_jobs",
                 "failed_or_unmatched_webhook_events",
                 "nonterminal_inbound_message_events",

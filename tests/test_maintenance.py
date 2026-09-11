@@ -12,6 +12,8 @@ from config import WEBHOOK_EVENT_TTL_DAYS
 from db import Base
 from jobs import maintenance as maintenance_command
 from models import (
+    AdminOperator,
+    Advocate,
     AnalyticsEvent,
     Booking,
     BookingFulfillment,
@@ -19,9 +21,12 @@ from models import (
     CaseBrief,
     Conversation,
     DocumentAccessEvent,
+    DocumentAdvocateAssignment,
     DocumentAnswerRevision,
     DocumentArtifact,
     DocumentCapacityReservation,
+    DocumentEvidenceArtifact,
+    DocumentLegalHold,
     DocumentOrder,
     Feedback,
     InboundMessageEvent,
@@ -727,6 +732,245 @@ def test_document_studio_retention_redacts_unpaid_drafts_and_deletes_objects(
     finally:
         db.close()
 
+
+def test_legal_hold_preserves_expired_notice_artifacts_and_evidence(
+    maintenance_db,
+):
+    now = datetime(2026, 9, 10, 12, 0, 0)
+    vault = MemoryArtifactVault()
+    artifact_key = "document-studio/DS-HOLD01/1/issued.pdf"
+    evidence_key = "document-evidence/DS-HOLD01/DE-HOLD01/cheque.pdf"
+    vault.objects[artifact_key] = b"synthetic issued notice"
+    vault.objects[evidence_key] = b"synthetic cheque evidence"
+
+    db = maintenance_db()
+    try:
+        user = User(
+            whatsapp_id="phase-c-held-client",
+            case_id="NS-PHASEC-HOLD",
+        )
+        admin = AdminOperator(
+            operator_id="retention-admin@example.com",
+            display_name="Retention Administrator",
+            role="ADMIN",
+            password_hash="test",
+            totp_secret_ciphertext="test",
+            active=True,
+            mfa_enrolled_at=now,
+        )
+        db.add_all([user, admin])
+        db.flush()
+        order = DocumentOrder(
+            public_ref="DS-HOLD01",
+            user_id=user.id,
+            product_code="synthetic_advocate_notice",
+            template_version="synthetic-notice-v1",
+            state="ISSUED",
+            current_step="issued",
+            output_classification="ADVOCATE_ISSUED_NOTICE",
+            payment_processed=True,
+            active_revision_number=1,
+        )
+        db.add(order)
+        db.flush()
+        artifact = DocumentArtifact(
+            public_ref="DA-HOLD01",
+            document_order_id=order.id,
+            revision_number=1,
+            artifact_kind="ISSUED_PDF",
+            state="AVAILABLE",
+            storage_provider="MEMORY",
+            bucket=vault.bucket,
+            object_key=artifact_key,
+            content_type="application/pdf",
+            size_bytes=len(vault.objects[artifact_key]),
+            content_hash="a" * 64,
+            manifest_hash="b" * 64,
+            renderer_version="advocate-offline-upload-v1",
+            expires_at=now - timedelta(seconds=1),
+        )
+        evidence = DocumentEvidenceArtifact(
+            public_ref="DE-HOLD01",
+            document_order_id=order.id,
+            revision_number=1,
+            evidence_kind="CHEQUE_FRONT",
+            state="AVAILABLE",
+            storage_provider="MEMORY",
+            bucket=vault.bucket,
+            object_key=evidence_key,
+            content_type="application/pdf",
+            size_bytes=len(vault.objects[evidence_key]),
+            content_hash="c" * 64,
+            scan_status="CLEAN",
+            review_status="ACCEPTED",
+            uploaded_by_type="CLIENT",
+            uploaded_by_ref=str(user.id),
+            expires_at=now - timedelta(seconds=1),
+        )
+        hold = DocumentLegalHold(
+            document_order_id=order.id,
+            status="ACTIVE",
+            reason_code="SYNTHETIC_DISPUTE",
+            authority_statement="Synthetic Phase C retention exercise.",
+            opened_by_identity_id=admin.id,
+        )
+        db.add_all([artifact, evidence, hold])
+        db.commit()
+        artifact_id = artifact.id
+        evidence_id = evidence.id
+        hold_id = hold.id
+    finally:
+        db.close()
+
+
+    held_report = maintenance_service.run_maintenance(
+        batch_size=25,
+        now=now,
+        session_factory=maintenance_db,
+        artifact_vault_factory=lambda: vault,
+        evidence_vault_factory=lambda: vault,
+    )
+
+    assert held_report["categories"]["document_studio_expired_artifacts"][
+        "affected"
+    ] == 0
+    assert held_report["categories"]["document_studio_expired_evidence"][
+        "affected"
+    ] == 0
+    assert artifact_key in vault.objects
+    assert evidence_key in vault.objects
+
+    db = maintenance_db()
+    try:
+        hold = db.get(DocumentLegalHold, hold_id)
+        hold.status = "CLOSED"
+        hold.closed_by_identity_id = hold.opened_by_identity_id
+        hold.closed_at = now
+        hold.closure_reason = "Synthetic retention exercise completed."
+        db.commit()
+    finally:
+        db.close()
+
+    released_report = maintenance_service.run_maintenance(
+        batch_size=25,
+        now=now,
+        session_factory=maintenance_db,
+        artifact_vault_factory=lambda: vault,
+        evidence_vault_factory=lambda: vault,
+    )
+
+    assert released_report["categories"][
+        "document_studio_expired_artifacts"
+    ]["affected"] == 1
+    assert released_report["categories"]["document_studio_expired_evidence"][
+        "affected"
+    ] == 1
+    assert artifact_key not in vault.objects
+    assert evidence_key not in vault.objects
+    db = maintenance_db()
+    try:
+        assert db.get(DocumentArtifact, artifact_id).state == "DELETED"
+        assert db.get(DocumentEvidenceArtifact, evidence_id).state == "DELETED"
+    finally:
+        db.close()
+
+
+def test_overdue_advocate_assignment_is_an_actionable_signal(maintenance_db):
+    now = datetime(2026, 9, 10, 12, 0, 0)
+    db = maintenance_db()
+    try:
+        user = User(whatsapp_id="phase-c-sla", case_id="NS-PHASEC-SLA")
+        operator = AdminOperator(
+            operator_id="sla-operator@example.com",
+            display_name="SLA Operator",
+            role="OPERATOR",
+            password_hash="test",
+            totp_secret_ciphertext="test",
+            active=True,
+            mfa_enrolled_at=now,
+        )
+        advocate = Advocate(
+            name="Synthetic SLA Advocate",
+            email="sla-advocate@example.com",
+            category="banking",
+            district="Mumbai",
+            active=True,
+            verification_status="VERIFIED",
+            verification_ref="synthetic-sla-verification",
+            verified_at=now,
+            authority_scope_json='{"version":"synthetic-v1"}',
+        )
+        db.add_all([user, operator, advocate])
+        db.flush()
+        identity = AdminOperator(
+            operator_id="sla-advocate-identity@example.com",
+            display_name=advocate.name,
+            role="ADVOCATE",
+            advocate_id=advocate.id,
+            password_hash="test",
+            totp_secret_ciphertext="test",
+            active=True,
+            mfa_enrolled_at=now,
+        )
+        order = DocumentOrder(
+            public_ref="DS-PHASEC-SLA",
+            user_id=user.id,
+            product_code="synthetic_advocate_notice",
+            template_version="synthetic-notice-v1",
+            state="ADVOCATE_TRIAGE",
+            current_step="advocate_review",
+            output_classification="ADVOCATE_ISSUED_NOTICE",
+        )
+        db.add_all([identity, order])
+        db.flush()
+        assignment = DocumentAdvocateAssignment(
+            document_order_id=order.id,
+            advocate_id=advocate.id,
+            advocate_identity_id=identity.id,
+            assigned_by_operator_id=operator.id,
+            status="ASSIGNED",
+            conflict_status="PENDING",
+            authority_scope_version="synthetic-v1",
+            authority_scope_hash="a" * 64,
+            authority_scope_json='{"version":"synthetic-v1"}',
+            sla_due_at=now - timedelta(minutes=1),
+        )
+        db.add(assignment)
+        db.commit()
+        assignment_id = assignment.id
+    finally:
+        db.close()
+
+    overdue = maintenance_service.run_maintenance(
+        dry_run=True,
+        now=now,
+        session_factory=maintenance_db,
+    )
+
+    assert overdue["operational_risks"]["document_notice"] == {
+        "overdue_assignments": {
+            "count": 1,
+            "oldest_at": "2026-09-10T11:59:00Z",
+        }
+    }
+    assert overdue["operational_risks"]["summary"][
+        "actionable_signals"
+    ] == 1
+
+    db = maintenance_db()
+    try:
+        db.get(DocumentAdvocateAssignment, assignment_id).status = "ISSUED"
+        db.commit()
+    finally:
+        db.close()
+    resolved = maintenance_service.run_maintenance(
+        dry_run=True,
+        now=now,
+        session_factory=maintenance_db,
+    )
+    assert resolved["operational_risks"]["document_notice"][
+        "overdue_assignments"
+    ]["count"] == 0
 
 def test_failed_commit_rolls_back_all_categories(maintenance_db):
     now = datetime(2026, 7, 29, 12, 0, 0)

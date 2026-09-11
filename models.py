@@ -213,6 +213,10 @@ class Advocate(Base):
     district = Column(String, nullable=False)
     operator_notes = Column(Text, nullable=True)
     active = Column(Boolean, default=True)
+    verification_status = Column(String(24), nullable=False, default="PENDING")
+    verification_ref = Column(String(160), nullable=True)
+    verified_at = Column(DateTime, nullable=True)
+    authority_scope_json = Column(Text, nullable=False, default="{}")
     created_at = Column(DateTime, nullable=False, default=utc_now)
     updated_at = Column(
         DateTime,
@@ -667,12 +671,355 @@ class DocumentAccessEvent(Base):
         nullable=True,
         index=True,
     )
+    document_evidence_artifact_id = Column(
+        Integer,
+        ForeignKey("document_evidence_artifacts.id"),
+        nullable=True,
+        index=True,
+    )
     actor_type = Column(String(24), nullable=False)
     actor_ref = Column(String(120), nullable=False)
     action = Column(String(48), nullable=False)
     decision = Column(String(24), nullable=False)
     reason_code = Column(String(64), nullable=False)
     created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+class DocumentAdvocateAssignment(Base):
+    """Authority snapshot for the advocate assigned to one document order."""
+
+    __tablename__ = "document_advocate_assignments"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "document_order_id",
+            name="uq_document_advocate_assignment_order",
+        ),
+        Index(
+            "idx_document_advocate_assignment_advocate_status",
+            "advocate_id",
+            "status",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    document_order_id = Column(
+        Integer,
+        ForeignKey("document_orders.id"),
+        nullable=False,
+        index=True,
+    )
+    advocate_id = Column(
+        Integer,
+        ForeignKey("advocates.id"),
+        nullable=False,
+        index=True,
+    )
+    advocate_identity_id = Column(
+        Integer,
+        ForeignKey("admin_operators.id"),
+        nullable=False,
+        index=True,
+    )
+    assigned_by_operator_id = Column(
+        Integer,
+        ForeignKey("admin_operators.id"),
+        nullable=False,
+    )
+    status = Column(String(24), nullable=False, default="ASSIGNED")
+    conflict_status = Column(String(24), nullable=False, default="PENDING")
+    authority_scope_version = Column(String(64), nullable=False)
+    authority_scope_hash = Column(String(64), nullable=False)
+    authority_scope_json = Column(Text, nullable=False)
+    sla_due_at = Column(DateTime, nullable=False)
+    assigned_at = Column(DateTime, nullable=False, default=utc_now)
+    accepted_at = Column(DateTime, nullable=True)
+    declined_at = Column(DateTime, nullable=True)
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+
+class DocumentMatterReview(Base):
+    """Immutable advocate decision about one confirmed intake revision."""
+
+    __tablename__ = "document_matter_reviews"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "document_order_id",
+            "intake_revision_number",
+            name="uq_document_matter_review_order_revision",
+        ),
+        Index(
+            "idx_document_matter_review_order_created",
+            "document_order_id",
+            "created_at",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    document_order_id = Column(
+        Integer,
+        ForeignKey("document_orders.id"),
+        nullable=False,
+        index=True,
+    )
+    assignment_id = Column(
+        Integer,
+        ForeignKey("document_advocate_assignments.id"),
+        nullable=False,
+    )
+    intake_revision_number = Column(Integer, nullable=False)
+    intake_content_hash = Column(String(64), nullable=False)
+    decision = Column(String(24), nullable=False)
+    reason_codes_json = Column(Text, nullable=False, default="[]")
+    conditions = Column(Text, nullable=True)
+    reviewer_advocate_id = Column(
+        Integer,
+        ForeignKey("advocates.id"),
+        nullable=False,
+    )
+    reviewer_identity_id = Column(
+        Integer,
+        ForeignKey("admin_operators.id"),
+        nullable=False,
+    )
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+class DocumentQuote(Base):
+    """Immutable commercial scope offered after advocate matter acceptance."""
+
+    __tablename__ = "document_quotes"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "document_order_id",
+            "quote_version",
+            name="uq_document_quote_order_version",
+        ),
+        Index(
+            "idx_document_quote_order_status",
+            "document_order_id",
+            "status",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    document_order_id = Column(
+        Integer,
+        ForeignKey("document_orders.id"),
+        nullable=False,
+        index=True,
+    )
+    matter_review_id = Column(
+        Integer,
+        ForeignKey("document_matter_reviews.id"),
+        nullable=False,
+    )
+    quote_version = Column(Integer, nullable=False)
+    amount_minor = Column(Integer, nullable=False)
+    currency = Column(String(3), nullable=False, default="INR")
+    scope_version = Column(String(64), nullable=False)
+    scope_hash = Column(String(64), nullable=False)
+    scope_json = Column(Text, nullable=False)
+    status = Column(String(24), nullable=False, default="OFFERED")
+    expires_at = Column(DateTime, nullable=False)
+    created_by_advocate_id = Column(
+        Integer,
+        ForeignKey("advocates.id"),
+        nullable=False,
+    )
+    created_by_identity_id = Column(
+        Integer,
+        ForeignKey("admin_operators.id"),
+        nullable=False,
+    )
+    offered_at = Column(DateTime, nullable=False, default=utc_now)
+    accepted_at = Column(DateTime, nullable=True)
+    superseded_at = Column(DateTime, nullable=True)
+
+
+class DocumentEvidenceArtifact(Base):
+    """Validated private evidence metadata without customer document content."""
+
+    __tablename__ = "document_evidence_artifacts"
+
+    __table_args__ = (
+        Index(
+            "idx_document_evidence_order_status",
+            "document_order_id",
+            "review_status",
+        ),
+        Index("idx_document_evidence_expiry", "state", "expires_at"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    public_ref = Column(String(32), nullable=False, unique=True, index=True)
+    document_order_id = Column(
+        Integer,
+        ForeignKey("document_orders.id"),
+        nullable=False,
+        index=True,
+    )
+    revision_number = Column(Integer, nullable=False)
+    evidence_kind = Column(String(40), nullable=False)
+    state = Column(String(24), nullable=False, default="AVAILABLE")
+    storage_provider = Column(String(24), nullable=False, default="S3")
+    bucket = Column(String(255), nullable=False)
+    object_key = Column(String(700), nullable=False, unique=True)
+    content_type = Column(String(120), nullable=False)
+    size_bytes = Column(Integer, nullable=False)
+    content_hash = Column(String(64), nullable=False)
+    scan_status = Column(String(24), nullable=False)
+    review_status = Column(String(24), nullable=False, default="PENDING")
+    uploaded_by_type = Column(String(24), nullable=False)
+    uploaded_by_ref = Column(String(120), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    deleted_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+class DocumentIssueApproval(Base):
+    """Per-order approval of one exact advocate-issued artifact."""
+
+    __tablename__ = "document_issue_approvals"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "issued_artifact_id",
+            name="uq_document_issue_approval_artifact",
+        ),
+        Index(
+            "idx_document_issue_approval_order_revision",
+            "document_order_id",
+            "revision_number",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    document_order_id = Column(
+        Integer,
+        ForeignKey("document_orders.id"),
+        nullable=False,
+        index=True,
+    )
+    assignment_id = Column(
+        Integer,
+        ForeignKey("document_advocate_assignments.id"),
+        nullable=False,
+    )
+    revision_number = Column(Integer, nullable=False)
+    candidate_artifact_id = Column(
+        Integer,
+        ForeignKey("document_artifacts.id"),
+        nullable=False,
+    )
+    issued_artifact_id = Column(
+        Integer,
+        ForeignKey("document_artifacts.id"),
+        nullable=False,
+    )
+    artifact_hash = Column(String(64), nullable=False)
+    template_version = Column(String(64), nullable=False)
+    decision = Column(String(24), nullable=False)
+    advocate_id = Column(
+        Integer,
+        ForeignKey("advocates.id"),
+        nullable=False,
+    )
+    advocate_identity_id = Column(
+        Integer,
+        ForeignKey("admin_operators.id"),
+        nullable=False,
+    )
+    signing_method = Column(String(80), nullable=False)
+    conditions = Column(Text, nullable=True)
+    authenticated_at = Column(DateTime, nullable=False, default=utc_now)
+    revoked_at = Column(DateTime, nullable=True)
+
+
+class DocumentDispatchEvent(Base):
+    """Immutable dispatch evidence; it is not a legal-service conclusion."""
+
+    __tablename__ = "document_dispatch_events"
+
+    __table_args__ = (
+        Index(
+            "idx_document_dispatch_order_created",
+            "document_order_id",
+            "created_at",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    document_order_id = Column(
+        Integer,
+        ForeignKey("document_orders.id"),
+        nullable=False,
+        index=True,
+    )
+    issue_approval_id = Column(
+        Integer,
+        ForeignKey("document_issue_approvals.id"),
+        nullable=False,
+    )
+    method = Column(String(40), nullable=False)
+    tracking_reference = Column(String(120), nullable=False)
+    tracking_reference_hash = Column(String(64), nullable=False)
+    address_snapshot_hash = Column(String(64), nullable=False)
+    status = Column(String(24), nullable=False)
+    proof_evidence_artifact_id = Column(
+        Integer,
+        ForeignKey("document_evidence_artifacts.id"),
+        nullable=False,
+    )
+    recorded_by_type = Column(String(24), nullable=False)
+    recorded_by_ref = Column(String(120), nullable=False)
+    occurred_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+class DocumentLegalHold(Base):
+    """Administrator-controlled retention override for one document order."""
+
+    __tablename__ = "document_legal_holds"
+
+    __table_args__ = (
+        Index(
+            "idx_document_legal_hold_order_status",
+            "document_order_id",
+            "status",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    document_order_id = Column(
+        Integer,
+        ForeignKey("document_orders.id"),
+        nullable=False,
+        index=True,
+    )
+    status = Column(String(24), nullable=False, default="ACTIVE")
+    reason_code = Column(String(64), nullable=False)
+    authority_statement = Column(Text, nullable=False)
+    opened_by_identity_id = Column(
+        Integer,
+        ForeignKey("admin_operators.id"),
+        nullable=False,
+    )
+    opened_at = Column(DateTime, nullable=False, default=utc_now)
+    closed_by_identity_id = Column(
+        Integer,
+        ForeignKey("admin_operators.id"),
+        nullable=True,
+    )
+    closed_at = Column(DateTime, nullable=True)
+    closure_reason = Column(Text, nullable=True)
 
 
 # =========================================================
@@ -913,6 +1260,13 @@ class AdminOperator(Base):
     operator_id = Column(String(120), nullable=False, unique=True, index=True)
     display_name = Column(String(160), nullable=False)
     role = Column(String(32), nullable=False, default="OPERATOR")
+    advocate_id = Column(
+        Integer,
+        ForeignKey("advocates.id"),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
     password_hash = Column(String(512), nullable=False)
     totp_secret_ciphertext = Column(Text, nullable=False)
     active = Column(Boolean, nullable=False, default=False)

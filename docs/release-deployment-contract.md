@@ -72,7 +72,8 @@ Render regions cannot be changed on an existing service, so moving an existing
 service to Singapore requires a separately rehearsed service migration.
 
 RC12 adds a pre-production identity bootstrap contract. Generate and store one
-durable `ADMIN_MFA_ENCRYPTION_KEY`, deploy/migrate `20260908_01` while the
+durable `ADMIN_MFA_ENCRYPTION_KEY`, deploy/migrate the current Alembic head
+(`20260910_01`) while the
 current service remains `ENV=staging`, then enroll and activate at least two
 named MFA identities including one `ADMIN` from the protected service shell.
 Only after `/health/ready` reports named-MFA production compatibility may the

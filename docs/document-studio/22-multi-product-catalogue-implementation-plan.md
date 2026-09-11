@@ -1,6 +1,6 @@
 # Multi-Product Draft Studio Implementation Plan
 
-**Status:** Phases A-B implemented locally through RC16; Phases C-E have not started  
+**Status:** Phases A-C implemented locally through RC17; Phases D-E have not started  
 **Sequence:** preserve RC14, complete the catalogue foundation, then build the
 advocate-issued cheque-notice product through separate gated phases
 
@@ -359,11 +359,33 @@ from the runtime registry and cannot be deployed or shown to customers.
 
 The existing Maharashtra residential agreement remains the only runtime
 product. Its legal/package identity and golden artifacts remain unchanged.
-No cheque-notice content, payment, evidence upload, migration or customer
-visibility is included.
+
+## Phase C implementation result
+
+RC17 adds the private advocate-issued workflow foundation and migration using
+only a synthetic non-legal product in automated tests. The synthetic product
+is not registered, allowlisted, priced for customers or visible in WhatsApp.
+
+The foundation now enforces named MFA advocate identity linked to a verified
+advocate, assignment authority and SLA, conflict and matter decisions bound to
+an exact intake revision, immutable expiring quotes, exact Razorpay quote
+evidence, and payment-to-advocate-drafting transitions. Webhook and
+reconciliation recovery never auto-generate an advocate-issued final.
+
+Private scanned evidence, candidate fact-check PDFs, per-order signed-PDF
+approval, owner-authorized short-lived download, PDF-only durable delivery,
+operator redelivery, dispatch proof and administrator legal holds are audited.
+Expired, cross-user and superseded-revision access fails closed. Maintenance
+honours active holds, deletes expired private evidence and reports overdue
+advocate assignments.
+
+Phase C does not add legal wording, a real cheque-notice schema, an advocate
+portal, a production file-scanner dependency, public payment or dispatch. Those
+remain Phase D/E gates.
 
 ## Immediate next implementation ticket
 
-After RC16 is uploaded and CI is green, start **Phase C only**: implement the
-advocate-issued workflow foundation using synthetic matters and no real legal
-content or public product registration.
+After RC17 completes full local regression, start **Phase D only**: turn the
+authenticated advocate discovery decisions into an exact cheque-notice schema,
+clause catalogue and candidate template. Do not register or expose the product
+until its exact package and infrastructure dependencies pass Phase D/E gates.

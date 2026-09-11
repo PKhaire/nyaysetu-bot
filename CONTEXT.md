@@ -29,9 +29,33 @@ documentation. It describes the domain, not the implementation.
   Artifact after payment evidence and order state have been verified.
 - **Artifact Availability Window**: The 30-day period during which a customer
   may re-download Final Artifacts before scheduled deletion.
-- **Advocate Review**: A future, separately described and priced service in
-  which a named advocate reviews a specific matter. It is not included in the
-  first self-service product.
+- **Advocate-Issued Notice**: A separately priced service in which a Verified
+  Advocate accepts one matter, approves an immutable quote, reviews the
+  customer's evidence and issues one exact locked PDF. Phase C exercises this
+  workflow with synthetic data only; it is not a published Document Product.
+- **Verified Advocate**: An active advocate whose enrolment evidence and
+  product authority scope have been recorded before assignment.
+- **Advocate Identity**: A named password-plus-TOTP identity linked one-to-one
+  to a Verified Advocate. It can make only advocate-authorized matter
+  decisions and cannot use the general operations console.
+- **Advocate Assignment**: The immutable authority snapshot and SLA that bind
+  one Advocate Identity to one Document Order.
+- **Matter Review**: The assigned advocate's conflict result and acceptance,
+  decline or unsupported decision for one exact intake revision.
+- **Quote**: An immutable INR amount and service-scope snapshot created only
+  after advocate acceptance and explicitly accepted by the customer before
+  payment can be requested.
+- **Issue Approval**: The per-order advocate decision binding one confirmed
+  fact revision, candidate draft and exact issued-PDF hash. It is not a
+  reusable signature or general template approval.
+- **Dispatch Record**: Evidence that an issued notice was handed to the
+  configured dispatch channel. It does not prove legal service or receipt.
+- **Legal Hold**: An active administrator-authorized retention override that
+  prevents scheduled deletion of the order's artifacts and evidence until an
+  audited closure.
+- **Operator**: A named operations identity that may assign work, reconcile
+  payment, coordinate redelivery and record dispatch, but cannot decide a
+  conflict, accept legal scope, create an advocate quote or issue a notice.
 - **Execution**: Party signature and related completion acts. NyaySetu's first
   product prepares a draft; it does not execute it.
 - **Registration**: The statutory submission and registration process outside

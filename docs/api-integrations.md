@@ -112,11 +112,15 @@ The current implementation:
     cases acknowledged with `202`; none marks the booking paid.
 11. For a consultation, atomically marks the booking paid, updates the user,
     completes the webhook event, creates the fulfilment work item, and inserts
-    separate outbox jobs. For a document order, atomically records payment,
-    renders and stores the exact final PDF/DOCX artifacts, completes the event,
-    and inserts a durable final-delivery job. That job creates short-lived owner
-    links only in memory immediately before WhatsApp delivery; URLs and message
-    text are never stored in the outbox.
+    separate outbox jobs. For a self-service document order, atomically records
+    payment, renders and stores the exact final PDF/DOCX artifacts, completes
+    the event, and inserts a durable final-delivery job. For a synthetic
+    advocate-issued order, the exact accepted quote is also required and
+    payment only enters `ADVOCATE_DRAFTING`; it never invokes the self-service
+    renderer or queues a final. After exact per-order advocate issue approval,
+    a durable delivery job creates one short-lived locked-PDF owner link in
+    memory immediately before WhatsApp delivery. URLs and message text are
+    never stored in the outbox.
 
 Duplicate completed events return `200` and do not repeat payment mutation or
 outbox insertion. A signed but non-final event returns `409`; payment conflicts
@@ -213,7 +217,9 @@ consultations. `PAYMENT_PENDING`, `NEEDS_ATTENTION`, and `REFUND_REVIEW` orders
 are checked from current Payment Link and Payment resources. An exact capture
 can recover a missed/previously reviewed final release; an unpaid link is a
 no-op; ambiguous, partial, mismatched or non-final evidence stays quarantined.
-An exact full refund changes a refund-review order to `REFUNDED`. The refund
+For an advocate-issued order, exact accepted-quote notes are mandatory and
+recovery enters advocate drafting without final generation. An exact full
+refund changes a refund-review order to `REFUNDED`. The refund
 review endpoint records an operating decision only: staff must execute the
 refund in Razorpay and let current provider evidence confirm it.
 

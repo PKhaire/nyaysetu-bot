@@ -86,7 +86,8 @@ from services.document_release_service import (
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 _OPERATOR_PATTERN = re.compile(r"^[A-Za-z0-9._@+-]{2,120}$")
-_NAMED_ROLES = frozenset({"ADMIN", "OPERATOR", "VIEWER"})
+_NAMED_ROLES = frozenset({"ADMIN", "OPERATOR", "VIEWER", "ADVOCATE"})
+_ADVOCATE_ENDPOINTS = frozenset({"admin.logout"})
 _LOGIN_ATTEMPT_LIMIT = 5
 _LOGIN_ATTEMPT_WINDOW_SECONDS = 15 * 60
 _login_attempts: dict[str, deque[float]] = defaultdict(deque)
@@ -347,6 +348,13 @@ def protect_admin_routes():
             401,
             {"WWW-Authenticate": "Bearer"},
         )
+    if _session_authorized() and not _token_authorized():
+        identity = _session_operator() or {}
+        if (
+            identity.get("role") == "ADVOCATE"
+            and request.endpoint not in _ADVOCATE_ENDPOINTS
+        ):
+            return jsonify({"error": "insufficient_role"}), 403
     if request.method not in {"GET", "HEAD", "OPTIONS"}:
         if not _operator_id():
             error = (

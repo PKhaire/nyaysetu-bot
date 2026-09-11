@@ -232,6 +232,9 @@ or production rollout.
 18. Apply `20260908_01`, enroll two named MFA identities, prove role denials,
     lock/recovery/session invalidation, and confirm production-compatible admin
     readiness while the shared-password bootstrap is unavailable.
+19. Apply `20260910_01` and exercise the synthetic advocate-issued workflow:
+    exact assignment/review/quote/payment, private evidence, revision-bound
+    issue, PDF-only delivery/redelivery, dispatch, legal hold and maintenance.
 
 Never run destructive, refund, or load scenarios against real user data.
 

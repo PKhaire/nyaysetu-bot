@@ -16,7 +16,7 @@ from config import (
     RAZORPAY_KEY_ID,
     RAZORPAY_KEY_SECRET,
 )
-from models import DocumentOrder, User
+from models import DocumentOrder, DocumentQuote, User
 from services.document_catalogue import (
     DocumentProduct,
     product_availability,
@@ -53,6 +53,8 @@ def validate_current_document_capture(
     payment_id: str,
     payment_link_entity: dict[str, Any],
     payment_entity: dict[str, Any],
+    *,
+    quote: DocumentQuote | None = None,
 ) -> str | None:
     """Validate current Razorpay evidence against the immutable order."""
 
@@ -80,12 +82,30 @@ def validate_current_document_capture(
     notes = payment_link_entity.get("notes")
     if not isinstance(notes, dict):
         return "DOCUMENT_PAYMENT_NOTES_MISSING"
-    expected_notes = {
-        "document_order_ref": order.public_ref,
-        "revision_number": str(order.active_revision_number),
-        "preview_manifest_hash": order.preview_manifest_hash,
-        "product_code": order.product_code,
-    }
+    if order.output_classification == "ADVOCATE_ISSUED_NOTICE":
+        if (
+            quote is None
+            or quote.document_order_id != order.id
+            or quote.status != "ACCEPTED"
+            or quote.amount_minor != order.price_minor
+            or quote.currency != order.currency
+        ):
+            return "DOCUMENT_ACCEPTED_QUOTE_MISSING"
+        expected_notes = {
+            "document_order_ref": order.public_ref,
+            "revision_number": str(order.active_revision_number),
+            "product_code": order.product_code,
+            "quote_id": str(quote.id),
+            "quote_version": str(quote.quote_version),
+            "quote_scope_hash": quote.scope_hash,
+        }
+    else:
+        expected_notes = {
+            "document_order_ref": order.public_ref,
+            "revision_number": str(order.active_revision_number),
+            "preview_manifest_hash": order.preview_manifest_hash,
+            "product_code": order.product_code,
+        }
     if any(str(notes.get(key) or "") != str(value or "") for key, value in expected_notes.items()):
         return "DOCUMENT_PAYMENT_NOTES_MISMATCH"
 
@@ -129,6 +149,8 @@ def is_full_document_refund(
     payment_id: str,
     payment_link_entity: dict[str, Any],
     payment_entity: dict[str, Any],
+    *,
+    quote: DocumentQuote | None = None,
 ) -> bool:
     """Return true only for exact order evidence and a complete refund."""
 
@@ -137,6 +159,7 @@ def is_full_document_refund(
         payment_id,
         payment_link_entity,
         payment_entity,
+        quote=quote,
     )
     if validation_error not in {
         "DOCUMENT_PAYMENT_ALREADY_REFUNDED",
@@ -288,6 +311,79 @@ def create_document_payment_link(
     finally:
         if owns_client:
             client.close()
+    if not isinstance(data, dict):
+        raise RuntimeError("razorpay_document_link_invalid_response")
+    link_id = str(data.get("id") or "")
+    short_url = str(data.get("short_url") or "")
+    if not link_id.startswith("plink_") or not short_url.startswith("https://"):
+        raise RuntimeError("razorpay_document_link_missing_fields")
+    order.razorpay_payment_link_id = link_id
+    order.state = "PAYMENT_PENDING"
+    return short_url
+
+
+def create_advocate_quote_payment_link(
+    order: DocumentOrder,
+    quote: DocumentQuote,
+    user: User,
+    *,
+    client: httpx.Client | None = None,
+) -> str:
+    """Create one exact-amount link for an accepted advocate quote."""
+
+    if (
+        order.output_classification != "ADVOCATE_ISSUED_NOTICE"
+        or order.state != "QUOTE_ACCEPTED"
+        or quote.document_order_id != order.id
+        or quote.status != "ACCEPTED"
+        or quote.accepted_at is None
+        or quote.expires_at <= datetime.now(timezone.utc).replace(tzinfo=None)
+    ):
+        raise ValueError("document_quote_not_accepted")
+    if (
+        order.price_minor != quote.amount_minor
+        or order.currency != quote.currency
+        or not order.active_revision_number
+    ):
+        raise ValueError("document_quote_snapshot_mismatch")
+    if order.razorpay_payment_link_id:
+        raise ValueError("document_payment_link_already_exists")
+    current_token = str(order.payment_token or "")
+    if not current_token or len(current_token) > _RAZORPAY_REFERENCE_ID_MAX_LENGTH:
+        order.payment_token = secrets.token_urlsafe(_PAYMENT_TOKEN_BYTES)
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        minutes=PAYMENT_LINK_TTL_MINUTES
+    )
+    payload = {
+        "amount": quote.amount_minor,
+        "currency": quote.currency,
+        "accept_partial": False,
+        "expire_by": int(expires_at.timestamp()),
+        "reference_id": order.payment_token,
+        "description": "Advocate-issued document review and preparation",
+        "customer": {
+            "name": str(user.name or "NyaySetu customer")[:120],
+            "contact": str(user.whatsapp_id),
+        },
+        "notify": {"sms": False, "email": False},
+        "notes": {
+            "document_order_ref": order.public_ref,
+            "revision_number": str(order.active_revision_number),
+            "product_code": order.product_code,
+            "quote_id": str(quote.id),
+            "quote_version": str(quote.quote_version),
+            "quote_scope_hash": quote.scope_hash,
+        },
+    }
+    owns_client = client is None
+    active_client = client or build_document_payment_client()
+    try:
+        response = active_client.post("/v1/payment_links", json=payload)
+        response.raise_for_status()
+        data = response.json()
+    finally:
+        if owns_client:
+            active_client.close()
     if not isinstance(data, dict):
         raise RuntimeError("razorpay_document_link_invalid_response")
     link_id = str(data.get("id") or "")

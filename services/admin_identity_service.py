@@ -16,11 +16,12 @@ from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import func
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from models import AdminOperator, AdminRecoveryCode
+from models import AdminOperator, AdminRecoveryCode, Advocate
 
 
 _OPERATOR_PATTERN = re.compile(r"^[A-Za-z0-9._@+-]{2,120}$")
-_ROLES = frozenset({"ADMIN", "OPERATOR", "VIEWER"})
+_ROLES = frozenset({"ADMIN", "OPERATOR", "VIEWER", "ADVOCATE"})
+_OPERATIONAL_ROLES = frozenset({"ADMIN", "OPERATOR", "VIEWER"})
 _RECOVERY_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
 _DUMMY_PASSWORD_HASH = generate_password_hash(
     "not-a-real-operator-password",
@@ -163,6 +164,7 @@ def begin_operator_enrollment(
     operator_id: str,
     display_name: str,
     role: str,
+    advocate_id: int | None = None,
     password: str,
     encryption_key: str,
     now: datetime | None = None,
@@ -176,6 +178,31 @@ def begin_operator_enrollment(
         raise ValueError("invalid_display_name")
     if normalized_role not in _ROLES:
         raise ValueError("invalid_operator_role")
+    linked_advocate = None
+    if normalized_role == "ADVOCATE":
+        linked_advocate = (
+            db.get(Advocate, advocate_id)
+            if isinstance(advocate_id, int)
+            and not isinstance(advocate_id, bool)
+            else None
+        )
+        if (
+            linked_advocate is None
+            or not linked_advocate.active
+            or linked_advocate.verification_status != "VERIFIED"
+            or not linked_advocate.verification_ref
+            or linked_advocate.verified_at is None
+        ):
+            raise ValueError("verified_advocate_link_required")
+        if (
+            db.query(AdminOperator.id)
+            .filter(AdminOperator.advocate_id == linked_advocate.id)
+            .first()
+            is not None
+        ):
+            raise ValueError("advocate_identity_exists")
+    elif advocate_id is not None:
+        raise ValueError("advocate_link_role_invalid")
     if not 16 <= len(password or "") <= 128 or "\x00" in password:
         raise ValueError("invalid_operator_password")
     if (
@@ -195,6 +222,7 @@ def begin_operator_enrollment(
         operator_id=normalized_id,
         display_name=normalized_name,
         role=normalized_role,
+        advocate_id=(linked_advocate.id if linked_advocate else None),
         password_hash=generate_password_hash(password, method="scrypt"),
         totp_secret_ciphertext=encrypted_secret,
         active=False,
@@ -441,7 +469,7 @@ def admin_identity_readiness(db) -> dict[str, object]:
         .filter(
             AdminOperator.active.is_(True),
             AdminOperator.mfa_enrolled_at.is_not(None),
-            AdminOperator.role.in_(_ROLES),
+            AdminOperator.role.in_(_OPERATIONAL_ROLES),
         )
         .scalar()
         or 0

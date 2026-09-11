@@ -14,7 +14,18 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from config import PAYMENT_RECONCILIATION_LOOKBACK_DAYS
-from models import DocumentAuditEvent, DocumentOrder, OutboxJob, utc_now
+from models import (
+    DocumentAuditEvent,
+    DocumentOrder,
+    DocumentQuote,
+    OutboxJob,
+    utc_now,
+)
+from services.advocate_issued_workflow import (
+    RecordVerifiedPayment,
+    WorkflowActor,
+    execute_notice_command,
+)
 from services.document_payment_service import (
     DocumentPaymentEvidence,
     build_document_payment_client,
@@ -102,8 +113,15 @@ def enqueue_final_delivery(
 ) -> OutboxJob:
     """Queue delivery by order identity; create short-lived URLs only later."""
 
+    final_state_available = (
+        order.state == "FINAL_AVAILABLE"
+        or (
+            order.output_classification == "ADVOCATE_ISSUED_NOTICE"
+            and order.state in {"ISSUED", "DISPATCH_RECORDED"}
+        )
+    )
     if (
-        order.state != "FINAL_AVAILABLE"
+        not final_state_available
         or not order.payment_processed
         or not order.final_available_until
         or order.final_available_until <= utc_now()
@@ -193,6 +211,11 @@ def request_refund_review(
             order.public_ref,
         )
     if not order.razorpay_payment_link_id or order.state not in {
+        "ADVOCATE_DRAFTING",
+        "ADVOCATE_FINAL_APPROVAL",
+        "CUSTOMER_FACT_CHECK",
+        "DISPATCH_RECORDED",
+        "ISSUED",
         "NEEDS_ATTENTION",
         "FINAL_AVAILABLE",
         "REFUND_REVIEW",
@@ -295,7 +318,14 @@ def reconcile_document_order(
             False, "not_found", "DOCUMENT_ORDER_NOT_FOUND"
         )
     payment_link_id, order_ref, snapshot_state, snapshot_processed = snapshot
-    if snapshot_processed and snapshot_state == "FINAL_AVAILABLE":
+    if snapshot_processed and snapshot_state in {
+        "ADVOCATE_DRAFTING",
+        "ADVOCATE_FINAL_APPROVAL",
+        "CUSTOMER_FACT_CHECK",
+        "DISPATCH_RECORDED",
+        "FINAL_AVAILABLE",
+        "ISSUED",
+    }:
         return DocumentOperationResult(
             True,
             "already_processed",
@@ -365,6 +395,18 @@ def reconcile_document_order(
             order.public_ref,
         )
 
+    accepted_quote = None
+    if order.output_classification == "ADVOCATE_ISSUED_NOTICE":
+        accepted_quote = (
+            db.query(DocumentQuote)
+            .filter(
+                DocumentQuote.document_order_id == order.id,
+                DocumentQuote.status == "ACCEPTED",
+            )
+            .order_by(DocumentQuote.quote_version.desc())
+            .first()
+        )
+
     if not evidence.payment_id or not evidence.payment:
         if not _contains_payment_evidence(evidence):
             db.rollback()
@@ -389,6 +431,7 @@ def reconcile_document_order(
         payment_id,
         evidence.payment_link,
         evidence.payment,
+        quote=accepted_quote,
     ):
         previous = order.state
         order.state = "REFUNDED"
@@ -416,6 +459,7 @@ def reconcile_document_order(
         payment_id,
         evidence.payment_link,
         evidence.payment,
+        quote=accepted_quote,
     )
     if validation_error:
         return _record_review(
@@ -434,6 +478,44 @@ def reconcile_document_order(
             actor_type=actor_type,
             actor_ref=actor_ref,
             payment_id=payment_id,
+        )
+
+    if order.output_classification == "ADVOCATE_ISSUED_NOTICE":
+        result = execute_notice_command(
+            db,
+            order,
+            actor=WorkflowActor("SYSTEM", 0),
+            command=RecordVerifiedPayment(
+                payment_id=payment_id,
+                amount_minor=int(evidence.payment["amount"]),
+                currency=str(evidence.payment["currency"]).upper(),
+            ),
+        )
+        if not result.ok:
+            return _record_review(
+                db,
+                order,
+                result.code,
+                actor_type=actor_type,
+                actor_ref=actor_ref,
+                payment_id=payment_id,
+            )
+        _audit(
+            db,
+            order,
+            "DOCUMENT_NOTICE_PAYMENT_RECONCILED",
+            actor_type=actor_type,
+            actor_ref=actor_ref,
+            from_state="PAYMENT_PENDING",
+            to_state=order.state,
+            details={"payment_id_hash": _payment_hash(payment_id)},
+        )
+        db.commit()
+        return DocumentOperationResult(
+            True,
+            "recovered",
+            "DOCUMENT_NOTICE_PAYMENT_RECOVERED",
+            order.public_ref,
         )
 
     try:

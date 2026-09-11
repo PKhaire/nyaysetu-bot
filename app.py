@@ -94,6 +94,7 @@ from models import (
     BookingStatus,
     CaseBrief,
     DocumentOrder,
+    DocumentQuote,
     Feedback,
     InboundMessageEvent,
     PaymentReconciliation,
@@ -198,6 +199,11 @@ from services.document_capacity_service import DocumentStudioCapacityExhausted
 from services.document_release_service import release_readiness
 from services.document_payment_service import validate_current_document_capture
 from services.document_operations_service import enqueue_final_delivery
+from services.advocate_issued_workflow import (
+    RecordVerifiedPayment,
+    WorkflowActor,
+    execute_notice_command,
+)
 from services.document_workflow import (
     apply_verified_payment as apply_verified_document_payment,
     build_preview as build_document_preview,
@@ -5357,7 +5363,11 @@ def payment_webhook():
             if document_order.payment_processed:
                 if (
                     document_order.razorpay_payment_id == payment_id
-                    and document_order.state == "FINAL_AVAILABLE"
+                    and (
+                        document_order.state == "FINAL_AVAILABLE"
+                        or document_order.output_classification
+                        == "ADVOCATE_ISSUED_NOTICE"
+                    )
                 ):
                     if not existing_event:
                         existing_event = WebhookEvent(
@@ -5397,11 +5407,28 @@ def payment_webhook():
                 )
                 return "Provider verification unavailable", 503
 
+            accepted_quote = None
+            if (
+                document_order.output_classification
+                == "ADVOCATE_ISSUED_NOTICE"
+            ):
+                accepted_quote = (
+                    db.query(DocumentQuote)
+                    .filter(
+                        DocumentQuote.document_order_id
+                        == document_order.id,
+                        DocumentQuote.status == "ACCEPTED",
+                    )
+                    .order_by(DocumentQuote.quote_version.desc())
+                    .first()
+                )
+
             document_payment_error = validate_current_document_capture(
                 document_order,
                 payment_id,
                 current_link,
                 current_payment,
+                quote=accepted_quote,
             )
             if (
                 document_payment_error is None
@@ -5465,23 +5492,41 @@ def payment_webhook():
                 )
                 return "Accepted for review", 202
 
-            document_result = apply_verified_document_payment(
-                db,
-                document_order,
-                payment_id=payment_id,
-                payment_amount=paid_amount,
-                payment_currency=paid_currency,
+            advocate_issued = (
+                document_order.output_classification
+                == "ADVOCATE_ISSUED_NOTICE"
             )
+            if advocate_issued:
+                document_result = execute_notice_command(
+                    db,
+                    document_order,
+                    actor=WorkflowActor("PROVIDER", 0),
+                    command=RecordVerifiedPayment(
+                        payment_id=payment_id,
+                        amount_minor=paid_amount,
+                        currency=paid_currency,
+                    ),
+                )
+                document_result_reason = document_result.code
+            else:
+                document_result = apply_verified_document_payment(
+                    db,
+                    document_order,
+                    payment_id=payment_id,
+                    payment_amount=paid_amount,
+                    payment_currency=paid_currency,
+                )
+                document_result_reason = document_result.reason_code
             if not document_result.ok:
                 existing_event.status = "REVIEW"
-                existing_event.last_error = document_result.reason_code[:500]
+                existing_event.last_error = document_result_reason[:500]
                 existing_event.processed_at = now
                 db.commit()
                 logger.critical(
                     "Paid document release requires review | order_ref=%s | "
                     "reason=%s",
                     document_order.public_ref,
-                    document_result.reason_code,
+                    document_result_reason,
                 )
                 return "Accepted for review", 202
 
@@ -5490,13 +5535,15 @@ def payment_webhook():
                 .filter(User.id == document_order.user_id)
                 .one()
             )
-            delivery_job = enqueue_final_delivery(
-                db,
-                document_order,
-                dedupe_key=(
-                    f"document-payment:{payment_id}:final-delivery"
-                ),
-            )
+            delivery_job = None
+            if not advocate_issued:
+                delivery_job = enqueue_final_delivery(
+                    db,
+                    document_order,
+                    dedupe_key=(
+                        f"document-payment:{payment_id}:final-delivery"
+                    ),
+                )
             existing_event.status = "DONE"
             existing_event.processed_at = now
             existing_event.last_error = None
@@ -5504,7 +5551,8 @@ def payment_webhook():
                 days=WEBHOOK_EVENT_TTL_DAYS
             )
             db.commit()
-            submit_outbox_job(delivery_job.id)
+            if delivery_job is not None:
+                submit_outbox_job(delivery_job.id)
             record_event(
                 "document_studio_payment_confirmed",
                 {

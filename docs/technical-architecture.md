@@ -154,6 +154,17 @@ user. The daily maintenance process inherits the same S3 identity, deletes
 expired objects, tombstones their rows and appends access events; unpaid draft
 answers are redacted after their configured retention period.
 
+The Phase C advocate-issued workflow is a separate state machine behind the
+same order coordinator. An operator assigns a verified advocate, but only the
+linked named MFA advocate identity can clear conflict, accept a matter, quote
+it, submit a candidate and approve the exact issued PDF. Exact quote evidence
+allows webhook or reconciliation processing to enter advocate drafting; it
+never invokes the self-service renderer. Evidence and signed PDFs require a
+clean scanner decision before private storage. Customer/advocate access,
+revision supersession, PDF-only durable delivery, redelivery, dispatch proof,
+legal holds and overdue assignment SLAs are fail-closed and audited. The
+synthetic Phase C product is not in the runtime catalogue.
+
 ## Booking and capacity lifecycle
 
 All user-facing date/slot calculations are timezone-aware for Asia/Kolkata.
@@ -314,8 +325,11 @@ Limitations:
 Core tables are `users`, `bookings`, `category_analytics`, `conversations`, and
 `advocates`. Draft Studio uses `document_orders`, immutable
 `document_answer_revisions`, `document_capacity_reservations`,
-`document_artifacts`, append-only
-`document_access_events`, and append-only `document_template_approvals`.
+`document_artifacts`, `document_evidence_artifacts`,
+`document_advocate_assignments`, `document_matter_reviews`, `document_quotes`,
+`document_issue_approvals`, `document_dispatch_events`,
+`document_legal_holds`, append-only `document_access_events`, and append-only
+`document_template_approvals`.
 Operational tables include `inbound_message_events`,
 `processed_messages` (legacy), `user_consents`, `case_briefs`, `feedback`,
 `support_requests`, `analytics_events`, `webhook_events`, `outbox_jobs`,
@@ -323,14 +337,16 @@ Operational tables include `inbound_message_events`,
 blackouts/overrides, `admin_operators`, `admin_recovery_codes`, and
 `admin_audit_events`.
 
-Alembic revision `20260729_01` is the production baseline and `20260908_01` is
+Alembic revision `20260729_01` is the production baseline and `20260910_01` is
 the current production head. Revisions `20260818_01` and `20260819_01` add the
 case-brief and initial Draft Studio ledgers; `20260827_01` adds the
 governed RC9 revision, artifact, access-event, and exact release-approval
 controls; `20260903_01` adds global daily-capacity evidence. On an empty database
 it creates the application and reliability/operations schema; `20260908_01`
 adds named administrator identities, one-use recovery-code digests, persistent
-lockout state, and session invalidation counters. The migration chain retains
+lockout state, and session invalidation counters; `20260910_01` adds the
+advocate-issued assignment, review, quote, evidence, issue, dispatch and legal
+hold ledgers. The migration chain retains
 compatibility steps for selected legacy columns/constraints and backfills, but
 those paths are not exercised by the current fresh release. Render runs
 `python -m alembic -c alembic.ini upgrade head` before the web release;

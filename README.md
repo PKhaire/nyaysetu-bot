@@ -302,7 +302,7 @@ untested working tree.
 ## Fresh database release gate
 
 The repository includes production baseline `20260729_01` and current head
-`20260908_01`. Render runs
+`20260910_01`. Render runs
 `python -m alembic -c alembic.ini upgrade head` before the web release, and
 staging and production readiness require the current head. Automatic
 `create_all()` is disabled by default in both environments and remains only a
