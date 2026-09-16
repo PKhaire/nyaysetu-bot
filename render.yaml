@@ -66,10 +66,14 @@ services:
       # Release, price and private-storage gates remain fail-closed.
       - key: DOCUMENT_STUDIO_ENABLED
         value: "false"
+      # Safe default for the first release: questionnaires and feedback only.
+      # No document artifact, payment or advocate workflow is available.
+      - key: DOCUMENT_STUDIO_CUSTOMER_MODE
+        value: "beta"
       - key: DOCUMENT_STUDIO_CONSENT_VERSION
         value: document-studio-self-service-2026-08
       - key: DOCUMENT_STUDIO_PRODUCT_ALLOWLIST
-        value: mh_residential_leave_licence_11m_self_service
+        value: mh_residential_leave_licence_11m_self_service,in_ni138_single_cheque_individual_advocate_issued
       - key: DOCUMENT_STUDIO_DRAFT_TTL_DAYS
         value: "7"
       - key: DOCUMENT_STUDIO_DAILY_CAPACITY
@@ -131,8 +135,9 @@ services:
         sync: false
       - key: WHATSAPP_APP_SECRET_PREVIOUS
         sync: false
-      # Phase E cheque-notice Flow stays disabled in this production
-      # blueprint. Its encrypted endpoint is exercised only in staging.
+      # The staging switch remains false in production. Public cheque beta is
+      # controlled by DOCUMENT_STUDIO_CUSTOMER_MODE and requires a published
+      # Flow, encrypted endpoint key and an enabled global product allowlist.
       - key: CHEQUE_NOTICE_STAGING_UAT_ENABLED
         value: "false"
       - key: WHATSAPP_CHEQUE_NOTICE_FLOW_ID

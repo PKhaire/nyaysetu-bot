@@ -8,6 +8,9 @@ from external rollout work and future product ideas.
 
 Start with:
 
+- [RC20 first-release customer beta boundary](RELEASE_NOTES_2026-09-16_RC20.md)
+  - keeps Booking Consultation as the only live paid service while exposing
+    residential and cheque questionnaires as non-commercial beta feedback.
 - [RC19 Phase E staging intake slice](RELEASE_NOTES_2026-09-11_RC19.md)
   - encrypted, resumable six-section synthetic WhatsApp intake with explicit
     staging/production fail-closed gates; it stops before evidence and payment.
@@ -40,8 +43,8 @@ Start with:
   - Draft Studio reconciliation, audited refund review, durable final-link
     delivery and idempotent operator redelivery.
 - [Integrated RC9 production launch checklist](PRODUCTION_LAUNCH_CHECKLIST_RC9.md)
-  - mandatory go/no-go gates for launching NyaySetu Bot and Draft Studio
-  together as one production release.
+  - retained filename with the RC20 scope override: Booking Consultation is
+    live; document products are customer betas without payment or delivery.
 
 - [RC9 release notes](RELEASE_NOTES_2026-08-27_RC9.md) — the implemented
   globally visible, fail-closed Draft Studio questionnaire, deterministic
@@ -52,8 +55,9 @@ Start with:
   implementation, conservative V1 legal-drafting decisions, exact candidate
   template and advocate-authentication contracts.
   The package also contains the implemented Phase A-D multi-product and
-  advocate-issued workflow plan. The legal cheque-notice package is privately
-  registered but is not offered, globally allowlisted or connected to payment.
+  advocate-issued workflow plan. Its cheque questionnaire is globally visible
+  only as Customer Beta; the advocate-issued service remains unpublished and
+  unconnected to payment.
 
 Then continue with the established repository documentation:
 
@@ -106,11 +110,11 @@ assistant with:
   feedback.
 - IST-aware, capacity-filtered booking and review before payment.
 - Consent-based structured case briefs with no identity/evidence file upload.
-- A globally visible Draft Studio entry when enabled, with bounded
-  eligibility, deterministic drafting, a watermarked preview, exact Razorpay
-  payment verification, private final PDF/DOCX storage and short-lived
-  owner-authorized downloads. Release remains blocked unless exact advocate
-  approval, price and storage gates pass.
+- A globally visible Draft Studio entry when enabled. For the first release,
+  the residential and cheque questionnaires operate only as Customer Betas:
+  users may save, resume, review and confirm facts, but cannot create payment,
+  artifact, advocate-work or legal-service entitlement. The implemented paid
+  document paths remain fail closed for a future explicit live release.
 - Razorpay stored-price verification through a signed, idempotent webhook.
 - PostgreSQL-capable persistence, a lease-aware inbound inbox, and a durable
   external-delivery outbox.
@@ -213,7 +217,11 @@ Implemented in the repository:
   approval, locked-PDF delivery, dispatch proof and legal holds.
 - RC18 private cheque-notice package registration, 18-response intake schema,
   conservative routing, exact two-PDF review artifacts and generic release
-  evidence. It is not customer-visible and creates no payment entitlement.
+  evidence. RC20 exposes only its non-commercial Customer Beta questionnaire;
+  the advocate-issued service remains unpublished.
+- RC20 Customer Beta enforcement for both questionnaires, including
+  fail-closed payment/artifact/advocate boundaries, retention and consistent
+  pre/post-flow disclosures.
 
 Still required before production cutover:
 
@@ -230,10 +238,10 @@ Still required before production cutover:
   cancellation, privacy, AI, retention, and incident policies.
 - Activate monitoring for webhook failures, unmatched payments, readiness,
   queue age, and dead jobs.
-- Authenticate the exact Draft Studio questionnaire/template/renderer and
-  golden artifact hashes with a licensed Maharashtra advocate; configure and
-  prove private S3, retention/deletion, staging payment and cross-user access
-  evidence before enabling its production switch.
+- Publish and health-check the exact RC20 cheque Flow, verify both beta
+  questionnaires on supported devices, prove retention/deletion, and confirm
+  that preview, payment, artifacts and advocate work remain unreachable. Paid
+  document storage/payment testing is deferred until an explicit live release.
 
 Future work includes automated advocate matching/user notification, controlled
 Razorpay refund execution, delegated identity administration,

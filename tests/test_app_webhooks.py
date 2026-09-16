@@ -24,6 +24,7 @@ from models import (
     utc_now,
 )
 from services.document_workflow import WorkflowResult
+from services import document_customer_release
 
 
 RAZORPAY_SECRET = "test-razorpay-secret"
@@ -183,6 +184,11 @@ def time_to_date():
 
 
 def _configure_payment_route(monkeypatch, app_module):
+    monkeypatch.setattr(
+        document_customer_release,
+        "DOCUMENT_STUDIO_CUSTOMER_MODE",
+        "live",
+    )
     monkeypatch.setattr(
         app_module,
         "RAZORPAY_WEBHOOK_SECRET",
@@ -504,6 +510,92 @@ def test_document_payment_webhook_commits_durable_delivery_before_fast_path(
         assert json.loads(job.payload_json) == {"document_order_id": order.id}
         assert deferred_threads == [job.id]
         assert event.status == "DONE"
+    finally:
+        db.close()
+
+
+def test_document_payment_webhook_quarantines_legacy_order_in_beta_mode(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+    deferred_threads,
+):
+    _configure_payment_route(monkeypatch, app_module)
+    monkeypatch.setattr(
+        document_customer_release,
+        "DOCUMENT_STUDIO_CUSTOMER_MODE",
+        "beta",
+    )
+    order_id = _create_pending_document_order(isolated_app_db)
+    payment_id = "pay_BetaLegacy1"
+    payment_link_id = "plink_DocumentOps1"
+    current_link = {
+        "id": payment_link_id,
+        "status": "paid",
+        "accept_partial": False,
+        "amount": 29_900,
+        "amount_paid": 29_900,
+        "currency": "INR",
+        "reference_id": "document-webhook-token",
+        "notes": {
+            "document_order_ref": "DS-WEBHOOK1234",
+            "revision_number": "1",
+            "preview_manifest_hash": "a" * 64,
+            "product_code": "mh_residential_leave_licence_11m_self_service",
+        },
+        "payments": [
+            {
+                "payment_id": payment_id,
+                "status": "captured",
+                "amount": 29_900,
+            }
+        ],
+    }
+    current_payment = {
+        "id": payment_id,
+        "status": "captured",
+        "captured": True,
+        "amount": 29_900,
+        "currency": "INR",
+        "amount_refunded": 0,
+        "refund_status": None,
+    }
+    monkeypatch.setattr(
+        app_module,
+        "fetch_current_razorpay_capture",
+        lambda *_args: (current_link, current_payment),
+    )
+    release_document = MagicMock()
+    monkeypatch.setattr(
+        app_module,
+        "apply_verified_document_payment",
+        release_document,
+    )
+
+    response = _signed_payment_post(
+        client,
+        _payment_payload(
+            payment_id=payment_id,
+            payment_link_id=payment_link_id,
+            amount=29_900,
+        ),
+    )
+
+    assert response.status_code == 202
+    release_document.assert_not_called()
+    assert deferred_threads == []
+    transport_spies["text"].assert_not_called()
+    db = isolated_app_db()
+    try:
+        order = db.get(DocumentOrder, order_id)
+        event = db.query(WebhookEvent).one()
+        assert order.payment_processed is False
+        assert order.state == "NEEDS_ATTENTION"
+        assert order.exception_code == "BETA_COMMERCE_DISABLED"
+        assert event.status == "REVIEW"
+        assert db.query(OutboxJob).count() == 0
     finally:
         db.close()
 

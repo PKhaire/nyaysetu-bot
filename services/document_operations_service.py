@@ -33,6 +33,7 @@ from services.document_payment_service import (
     is_full_document_refund,
     validate_current_document_capture,
 )
+from services.document_customer_release import document_commerce_disabled
 from services.document_workflow import recover_verified_payment
 from services.outbox_service import DOCUMENT_FINAL_DELIVERY_KIND, enqueue_job
 
@@ -113,6 +114,8 @@ def enqueue_final_delivery(
 ) -> OutboxJob:
     """Queue delivery by order identity; create short-lived URLs only later."""
 
+    if document_commerce_disabled(order):
+        raise ValueError("beta_commerce_disabled")
     final_state_available = (
         order.state == "FINAL_AVAILABLE"
         or (
@@ -452,6 +455,16 @@ def reconcile_document_order(
             "refund_confirmed",
             "DOCUMENT_PAYMENT_REFUND_CONFIRMED",
             order.public_ref,
+        )
+
+    if document_commerce_disabled(order):
+        return _record_review(
+            db,
+            order,
+            "BETA_COMMERCE_DISABLED",
+            actor_type=actor_type,
+            actor_ref=actor_ref,
+            payment_id=payment_id,
         )
 
     validation_error = validate_current_document_capture(

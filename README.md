@@ -13,22 +13,16 @@ manipulative retention patterns or imply a lawyer-client relationship.
 
 - Multilingual WhatsApp onboarding and a persistent home menu.
 - A globally visible Draft Studio entry when the product switch is enabled;
-  it never samples users or depends on tester phone numbers. The first product
-  is selected through a data-driven, strictly priced and independently
-  release-gated catalogue. It uses an atomic global daily capacity, bounded
-  eligibility checks, a deterministic questionnaire, a
-  watermarked preview, exact Razorpay payment verification, and private final
-  PDF/DOCX delivery. Preview, payment and release fail closed unless the exact
-  template package has authenticated advocate approval and private storage is
-  ready.
-- A privately registered cheque-notice package with a disabled-by-default,
-  staging-only Phase E fact-intake slice. It
-  supports only a narrow personal-loan/single-cheque fact pattern, routes
-  uncertainty to an advocate, uses a matter-specific quote and binds release
-  approval to a factual-summary PDF plus an internal notice-review PDF. Its
-  encrypted six-section WhatsApp Flow stops before evidence, quote, payment,
-  notice creation or dispatch; the remaining Phase E gates must pass before
-  global release.
+  it never samples users or depends on tester phone numbers. In the first
+  production release, its residential questionnaire is a Customer Beta:
+  users may save, resume, review and confirm facts, but cannot create a
+  preview, payment, artifact or legal-service entitlement. The implemented
+  paid-artifact path remains fail closed for a future explicit live release.
+- A narrow personal-loan/single-cheque questionnaire delivered through an
+  encrypted six-section WhatsApp Flow. In the first release it is also a
+  Customer Beta and stops at saved feedback before evidence, advocate work,
+  quote, payment, notice creation, signing or dispatch. The implemented
+  advocate-issued workflow remains unpublished.
 - Consent-gated AI information with deterministic safety checks and local
   fallback content.
 - Guided legal category, district, date, and capacity-aware slot selection.
@@ -138,7 +132,7 @@ critical:
 | Internal email | V1: `EMAIL_NOTIFICATIONS_ENABLED=false`; SES settings are optional and required only for a separately tested email-enabled release |
 | User trust | reviewed `SUPPORT_*`, `PRIVACY_*`, policy URLs, and consent/terms versions |
 | Operations | long random `ADMIN_TOKEN`, `SECRET_KEY`, and `AI_SAFETY_IDENTIFIER_SECRET`; a durable generated `ADMIN_MFA_ENCRYPTION_KEY`; `ADMIN_PASSWORD` only for the one-time non-production bootstrap |
-| Draft Studio | global allowlist, `DOCUMENT_STUDIO_PRODUCT_PRICES_INR` (`product_code=whole_inr`), approved package evidence, capacity/retention settings, and private S3 credentials |
+| Draft Studio beta | `DOCUMENT_STUDIO_CUSTOMER_MODE=beta`, the residential and cheque questionnaire allowlist, retention settings, and the published encrypted cheque Flow configuration; document pricing/artifact delivery remains disabled for the first release |
 
 AI is optional. The Render Blueprint defaults to `AI_PROVIDER=local`. To enable
 a third-party provider, set `AI_PROVIDER=openai`, `claude`, or `auto`, provide

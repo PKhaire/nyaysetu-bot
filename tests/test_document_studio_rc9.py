@@ -11,11 +11,19 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from db import Base
-from models import DocumentAnswerRevision, DocumentOrder, User, utc_now
+from models import (
+    DocumentAnswerRevision,
+    DocumentOrder,
+    DocumentQuote,
+    User,
+    utc_now,
+)
 from services import document_artifact_vault as artifact_vault
 from services import document_catalogue as catalogue
+from services import document_customer_release as customer_release
 from services.document_artifact_vault import MemoryArtifactVault
 from services.document_payment_service import (
+    create_advocate_quote_payment_link,
     create_document_payment_link,
     validate_current_document_capture,
 )
@@ -98,6 +106,12 @@ def test_s3_vault_forces_virtual_host_addressing(monkeypatch):
 
 
 def _enable_product(monkeypatch, *, price_inr: int = 299) -> None:
+    monkeypatch.setattr(
+        customer_release,
+        "DOCUMENT_STUDIO_CUSTOMER_MODE",
+        "live",
+        raising=False,
+    )
     monkeypatch.setattr(catalogue, "DOCUMENT_STUDIO_ENABLED", True)
     monkeypatch.setattr(catalogue, "DOCUMENT_STUDIO_PRICE_INR", price_inr)
     monkeypatch.setattr(
@@ -335,6 +349,219 @@ def test_single_schema_does_not_collect_unused_or_repeated_answers():
             "lawful_use_ack",
         }
     )
+
+
+def test_beta_order_has_no_commercial_entitlement(monkeypatch, studio_db):
+    _enable_product(monkeypatch)
+    monkeypatch.setattr(
+        customer_release,
+        "DOCUMENT_STUDIO_CUSTOMER_MODE",
+        "beta",
+        raising=False,
+    )
+    db = studio_db()
+    try:
+        user = User(
+            whatsapp_id="919900000101",
+            case_id="NS-BETA-ORDER",
+        )
+        db.add(user)
+        db.flush()
+
+        order = create_or_resume_order(db, user.id)
+
+        assert order.release_status == "BETA"
+        assert order.price_minor is None
+        assert order.payment_processed is False
+        assert order.razorpay_payment_link_id is None
+    finally:
+        db.close()
+
+
+def test_beta_payment_adapters_fail_closed_before_provider_access():
+    class ProviderMustNotBeCalled:
+        def post(self, *_args, **_kwargs):
+            raise AssertionError("payment provider must not be called")
+
+    order = DocumentOrder(release_status="BETA")
+    user = User(whatsapp_id="919900000106")
+    quote = DocumentQuote()
+
+    with pytest.raises(ValueError, match="beta_commerce_disabled"):
+        create_document_payment_link(
+            order,
+            user,
+            client=ProviderMustNotBeCalled(),
+        )
+    with pytest.raises(ValueError, match="beta_commerce_disabled"):
+        create_advocate_quote_payment_link(
+            order,
+            quote,
+            user,
+            client=ProviderMustNotBeCalled(),
+        )
+
+
+def test_global_beta_mode_blocks_legacy_candidate_commerce(monkeypatch):
+    class ProviderMustNotBeCalled:
+        def post(self, *_args, **_kwargs):
+            raise AssertionError("payment provider must not be called")
+
+    monkeypatch.setattr(
+        customer_release,
+        "DOCUMENT_STUDIO_CUSTOMER_MODE",
+        "beta",
+    )
+    order = DocumentOrder(release_status="CANDIDATE")
+    user = User(whatsapp_id="919900000107")
+
+    preview_result = build_preview(
+        None,
+        order,
+        vault=MemoryArtifactVault(),
+    )
+    assert preview_result.ok is False
+    assert preview_result.reason_code == "BETA_COMMERCE_DISABLED"
+
+    order.user_id = 1
+    user.id = 1
+    order.state = "PREVIEW_READY"
+    preview_link_result = preview_link_for_user(None, order, user)
+    assert preview_link_result.ok is False
+    assert preview_link_result.reason_code == "BETA_COMMERCE_DISABLED"
+
+    order.state = "FINAL_AVAILABLE"
+    order.final_available_until = utc_now() + timedelta(hours=1)
+    download_result = download_links_for_user(None, order, user)
+    assert download_result.ok is False
+    assert download_result.reason_code == "BETA_COMMERCE_DISABLED"
+
+    with pytest.raises(ValueError, match="beta_commerce_disabled"):
+        create_document_payment_link(
+            order,
+            user,
+            client=ProviderMustNotBeCalled(),
+        )
+
+
+def test_beta_order_cannot_generate_preview(monkeypatch, studio_db):
+    _enable_product(monkeypatch)
+    db = studio_db()
+    try:
+        user = User(
+            whatsapp_id="919900000102",
+            case_id="NS-BETA-PREVIEW",
+        )
+        db.add(user)
+        db.flush()
+        order = _confirmed_order(db, user)
+        order.release_status = "BETA"
+        order.price_minor = None
+
+        result = build_preview(db, order, vault=MemoryArtifactVault())
+
+        assert result.ok is False
+        assert result.reason_code == "BETA_COMMERCE_DISABLED"
+        assert order.state == "CONFIRMED"
+        assert order.preview_manifest_hash is None
+    finally:
+        db.close()
+
+
+def test_beta_order_cannot_request_payment(monkeypatch, studio_db):
+    _enable_product(monkeypatch)
+    db = studio_db()
+    try:
+        user = User(
+            whatsapp_id="919900000103",
+            case_id="NS-BETA-PAYMENT",
+        )
+        db.add(user)
+        db.flush()
+        order = _confirmed_order(db, user)
+        order.release_status = "BETA"
+        order.price_minor = None
+
+        result = request_payment(db, order, user)
+
+        assert result.ok is False
+        assert result.reason_code == "BETA_COMMERCE_DISABLED"
+        assert order.state == "CONFIRMED"
+        assert order.payment_token is None
+        assert order.razorpay_payment_link_id is None
+    finally:
+        db.close()
+
+
+def test_switching_to_beta_never_resumes_a_live_commercial_draft(
+    monkeypatch,
+    studio_db,
+):
+    _enable_product(monkeypatch)
+    db = studio_db()
+    try:
+        user = User(
+            whatsapp_id="919900000104",
+            case_id="NS-BETA-SUPERSEDE",
+        )
+        db.add(user)
+        db.flush()
+        live_order = create_or_resume_order(db, user.id)
+        live_order_ref = live_order.public_ref
+        assert live_order.release_status == "CANDIDATE"
+
+        monkeypatch.setattr(
+            customer_release,
+            "DOCUMENT_STUDIO_CUSTOMER_MODE",
+            "beta",
+        )
+        beta_order = create_or_resume_order(db, user.id)
+
+        assert beta_order.public_ref != live_order_ref
+        assert beta_order.release_status == "BETA"
+        assert beta_order.price_minor is None
+        assert live_order.state == "ABANDONED"
+        assert live_order.exception_code == "RELEASE_MODE_CHANGED"
+    finally:
+        db.close()
+
+
+def test_beta_order_cannot_be_fulfilled_by_a_payment_webhook(
+    monkeypatch,
+    studio_db,
+):
+    _enable_product(monkeypatch)
+    db = studio_db()
+    try:
+        user = User(
+            whatsapp_id="919900000105",
+            case_id="NS-BETA-WEBHOOK",
+        )
+        db.add(user)
+        db.flush()
+        order = _confirmed_order(db, user)
+        order.release_status = "BETA"
+        order.state = "PAYMENT_PENDING"
+        order.price_minor = 29900
+        order.payment_token = "beta-must-not-fulfil"
+        order.razorpay_payment_link_id = "plink_beta_must_not_fulfil"
+
+        result = apply_verified_payment(
+            db,
+            order,
+            payment_id="pay_beta_must_not_fulfil",
+            payment_amount=29900,
+            payment_currency="INR",
+            vault=MemoryArtifactVault(),
+        )
+
+        assert result.ok is False
+        assert result.reason_code == "BETA_COMMERCE_DISABLED"
+        assert order.state == "PAYMENT_PENDING"
+        assert order.payment_processed is False
+        assert order.razorpay_payment_id is None
+    finally:
+        db.close()
 
 
 def test_negative_optional_choices_skip_detail_questions(

@@ -255,6 +255,15 @@ DOCUMENT_STUDIO_DAILY_CAPACITY = env_int(
     minimum=1,
     maximum=1000,
 )
+DOCUMENT_STUDIO_CUSTOMER_MODE = env_str(
+    "DOCUMENT_STUDIO_CUSTOMER_MODE",
+    "beta",
+    allow_empty=False,
+).lower()
+if DOCUMENT_STUDIO_CUSTOMER_MODE not in {"beta", "live"}:
+    raise ValueError(
+        "DOCUMENT_STUDIO_CUSTOMER_MODE must be beta or live"
+    )
 DOCUMENT_STUDIO_PRICE_INR = env_int(
     "DOCUMENT_STUDIO_PRICE_INR",
     0,

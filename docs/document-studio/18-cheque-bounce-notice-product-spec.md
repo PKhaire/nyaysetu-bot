@@ -1,11 +1,13 @@
 # Product Specification: Single-Cheque Section 138 Demand Notice
 
-**Status:** revalidated for private Phase D implementation on 11 September
-2026; not customer-visible, globally allowlisted or approved for launch  
+**Status:** exact package revalidated on 11 September 2026; RC20 exposes only
+the questionnaire as a non-commercial Customer Beta, while the
+Advocate-Issued Notice service remains unpublished  
 **Research cut-off:** 10 September 2026  
-**Activation rule:** fail closed until the exact questionnaire, legal text,
-review workflow, evidence controls and golden artifacts receive authenticated
-advocate approval
+**Activation rule:** Customer Beta stops at saved feedback. A future live
+service fails closed until the exact legal text, review workflow, evidence,
+commercial, issuance and golden-artifact controls receive a new explicit
+activation decision.
 
 This document is a product boundary, not a legal opinion or reusable notice.
 The assigned advocate remains responsible for every notice that is issued.
@@ -33,7 +35,14 @@ operations review. An activated code is stable. Every change to legal wording,
 questions, derived dates, evidence requirements, output or review conditions
 creates a new immutable package and approval decision.
 
-## Customer promise
+## Current Customer Beta boundary
+
+Users may enter, save, resume, review and confirm questionnaire facts to help
+improve the product. Completion does not create evidence intake, advocate
+assignment, a quote, payment, a final notice, dispatch or legal service. Users
+with legal or time-sensitive needs are directed to Book Consultation.
+
+## Future advocate-issued customer promise
 
 Draft Studio collects and organises customer-confirmed facts for an assigned
 advocate. The advocate checks whether the matter is within the offered scope,
@@ -62,8 +71,10 @@ notice or automatically applies an advocate signature.
 
 ## Candidate eligibility matrix
 
-Every `ALLOW` answer opens an advocate review; it is not a legal conclusion.
-`ROUTE` stops product payment and offers consultation/manual handling.
+In a future explicitly activated live service, every `ALLOW` answer would open
+an advocate review; it would not be a legal conclusion. `ROUTE` would stop
+product payment and offer consultation/manual handling. Customer Beta does not
+perform either legal routing decision and stops before advocate work.
 
 | Code | Candidate condition | Result if not clearly satisfied |
 | --- | --- | --- |

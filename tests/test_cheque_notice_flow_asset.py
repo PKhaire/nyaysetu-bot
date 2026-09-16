@@ -24,7 +24,7 @@ def _components(screen):
     return form, form["children"]
 
 
-def test_flow_asset_matches_the_approved_six_section_schema():
+def test_flow_asset_matches_the_versioned_six_section_field_schema():
     flow = json.loads(FLOW_ASSET.read_text(encoding="utf-8"))
     screens = {screen["id"]: screen for screen in flow["screens"]}
 
@@ -57,19 +57,33 @@ def test_flow_asset_matches_the_approved_six_section_schema():
 
     rendered_asset = FLOW_ASSET.read_text(encoding="utf-8")
     for question in QUESTION_DEFINITIONS:
-        assert question.prompt in rendered_asset
+        if question.code not in {"review_consent", "contact_permission"}:
+            assert question.prompt in rendered_asset
 
 
-def test_flow_terminal_screen_discloses_the_staging_boundary():
+def test_flow_discloses_the_beta_boundary_before_and_after_intake():
     flow = json.loads(FLOW_ASSET.read_text(encoding="utf-8"))
+    suitability = next(
+        screen for screen in flow["screens"] if screen["id"] == "SUITABILITY"
+    )
+    review = next(
+        screen for screen in flow["screens"] if screen["id"] == "REVIEW_HANDOVER"
+    )
     terminal = next(screen for screen in flow["screens"] if screen["id"] == "SUCCESS")
-    text = json.dumps(terminal)
+    suitability_text = json.dumps(suitability).lower()
+    review_text = json.dumps(review).lower()
+    terminal_text = json.dumps(terminal).lower()
 
     assert terminal["terminal"] is True
     assert terminal["success"] is True
-    assert "staging" in text.lower()
-    assert "no payment" in text.lower()
-    assert "no notice" in text.lower()
+    assert "beta" in suitability_text
+    assert "no legal service" in suitability_text
+    assert "beta feedback" in review_text
+    assert "assigned advocate" not in review_text
+    assert "beta" in terminal_text
+    assert "no payment" in terminal_text
+    assert "no final notice" in terminal_text
+    assert "no legal service" in terminal_text
 
 
 def test_flow_routes_forward_from_one_entry_and_number_bindings_are_numeric():

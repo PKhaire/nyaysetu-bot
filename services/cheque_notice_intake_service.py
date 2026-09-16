@@ -35,6 +35,11 @@ from services.document_catalogue import (
     customer_visible,
     resolve_product,
 )
+from services.document_customer_release import (
+    cheque_notice_beta_enabled,
+    order_is_beta,
+    stamp_new_order,
+)
 from services.document_release_service import release_gate
 
 
@@ -167,8 +172,11 @@ def latest_resumable_notice_order(db, user_id: int) -> DocumentOrder | None:
 def create_or_resume_notice_order(db, user_id: int) -> DocumentOrder:
     """Create the exact approved product snapshot or resume it unchanged."""
 
-    if ENV != "staging" or not CHEQUE_NOTICE_STAGING_UAT_ENABLED:
-        raise ChequeNoticeFlowError("cheque_notice_uat_not_configured")
+    if not cheque_notice_beta_enabled(
+        environment=ENV,
+        staging_uat_enabled=CHEQUE_NOTICE_STAGING_UAT_ENABLED,
+    ):
+        raise ChequeNoticeFlowError("cheque_notice_beta_not_configured")
 
     product = resolve_product(CHEQUE_NOTICE_PRODUCT_CODE)
     if not customer_visible(product.code):
@@ -180,25 +188,41 @@ def create_or_resume_notice_order(db, user_id: int) -> DocumentOrder:
         raise ChequeNoticeFlowError(gate.reason_code)
 
     existing = latest_resumable_notice_order(db, user_id)
-    if existing and product.matches_package_snapshot(
-        template_version=existing.template_version,
-        schema_hash=existing.schema_hash,
-        template_hash=existing.template_hash,
-        output_classification=existing.output_classification,
-    ):
+    package_matches = bool(
+        existing
+        and product.matches_package_snapshot(
+            template_version=existing.template_version,
+            schema_hash=existing.schema_hash,
+            template_hash=existing.template_hash,
+            output_classification=existing.output_classification,
+        )
+    )
+    if existing and package_matches and order_is_beta(existing):
         return existing
     if existing:
+        reason = (
+            "RELEASE_MODE_CHANGED"
+            if not order_is_beta(existing)
+            else "SCHEMA_SUPERSEDED"
+        )
         previous = existing.state
         existing.state = "ABANDONED"
         existing.current_step = "superseded"
-        existing.exception_code = "SCHEMA_SUPERSEDED"
+        existing.exception_code = reason
         _audit(
             db,
             existing,
-            "DOCUMENT_SCHEMA_SUPERSEDED",
+            (
+                "DOCUMENT_RELEASE_MODE_CHANGED"
+                if reason == "RELEASE_MODE_CHANGED"
+                else "DOCUMENT_SCHEMA_SUPERSEDED"
+            ),
             from_state=previous,
             to_state=existing.state,
-            details={"replacement_schema_hash": product.schema_hash},
+            details={
+                "replacement_schema_hash": product.schema_hash,
+                "replacement_release_mode": "BETA",
+            },
         )
 
     order = DocumentOrder(
@@ -210,13 +234,14 @@ def create_or_resume_notice_order(db, user_id: int) -> DocumentOrder:
         current_step=FLOW_START_SCREEN,
         draft_answers_json="{}",
         output_classification=product.output_classification,
-        uat_only=True,
+        uat_only=ENV == "staging",
         schema_hash=product.schema_hash,
         template_hash=product.template_hash,
         price_minor=None,
         currency=product.currency,
         release_status="CANDIDATE",
     )
+    stamp_new_order(order)
     db.add(order)
     db.flush()
     _audit(db, order, "DOCUMENT_ORDER_CREATED", to_state=order.state)
@@ -248,8 +273,11 @@ def _serializer() -> URLSafeTimedSerializer:
 def issue_notice_flow_token(order: DocumentOrder) -> str:
     """Issue a time-limited unguessable capability for one product snapshot."""
 
-    if ENV != "staging" or not CHEQUE_NOTICE_STAGING_UAT_ENABLED:
-        raise ChequeNoticeFlowError("cheque_notice_uat_not_configured")
+    if not cheque_notice_beta_enabled(
+        environment=ENV,
+        staging_uat_enabled=CHEQUE_NOTICE_STAGING_UAT_ENABLED,
+    ):
+        raise ChequeNoticeFlowError("cheque_notice_beta_not_configured")
     if order.product_code != CHEQUE_NOTICE_PRODUCT_CODE:
         raise ChequeNoticeFlowError("document_product_mismatch")
     return _serializer().dumps(
@@ -289,7 +317,8 @@ def resolve_notice_flow_token(db, token: object) -> DocumentOrder:
         or payload.get("product_code") != CHEQUE_NOTICE_PRODUCT_CODE
         or order.product_code != CHEQUE_NOTICE_PRODUCT_CODE
         or payload.get("schema_hash") != order.schema_hash
-        or order.state not in {"INTAKE", "EVIDENCE_PENDING", "ROUTED_OUT"}
+        or order.state
+        not in {"INTAKE", "EVIDENCE_PENDING", "ROUTED_OUT", "BETA_COMPLETE"}
     ):
         raise ChequeNoticeFlowError("invalid_flow_token")
     return order
@@ -500,9 +529,36 @@ def handle_notice_flow_request(db, request_body: object) -> dict[str, object]:
     order.active_revision_number = revision.revision_number
     order.draft_answers_json = answers_json
     if normalized.get("review_consent") == "YES":
-        order.consent_version = normalized.get("review_consent_version")
+        order.consent_version = (
+            "cheque-notice-beta-feedback-2026-09"
+            if order_is_beta(order)
+            else normalized.get("review_consent_version")
+        )
         order.consented_at = utc_now()
     db.flush()
+    if order_is_beta(order):
+        previous = order.state
+        order.state = "BETA_COMPLETE"
+        order.current_step = "complete"
+        _audit(
+            db,
+            order,
+            "DOCUMENT_BETA_INTAKE_COMPLETED",
+            from_state=previous,
+            to_state=order.state,
+        )
+        return {
+            "screen": FLOW_TERMINAL_SCREEN,
+            "data": {
+                "extension_message_response": {
+                    "params": {
+                        "flow_token": str(token),
+                        "order_ref": order.public_ref,
+                        "status": order.state,
+                    }
+                }
+            },
+        }
     result = execute_notice_command(
         db,
         order,
@@ -538,7 +594,8 @@ def completion_for_user(
     order = resolve_notice_flow_token(db, response.get("flow_token"))
     if (
         order.user_id != user_id
-        or order.state not in {"EVIDENCE_PENDING", "ROUTED_OUT"}
+        or order.state
+        not in {"EVIDENCE_PENDING", "ROUTED_OUT", "BETA_COMPLETE"}
         or response.get("order_ref") != order.public_ref
         or response.get("status") != order.state
     ):

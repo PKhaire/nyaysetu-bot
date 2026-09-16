@@ -206,6 +206,12 @@ from services.document_catalogue import (
     resolve_product,
 )
 from services.document_capacity_service import DocumentStudioCapacityExhausted
+from services.document_customer_release import (
+    beta_mode_enabled,
+    cheque_notice_beta_enabled,
+    document_commerce_disabled,
+    order_is_beta,
+)
 from services.document_release_service import release_readiness
 from services.document_payment_service import validate_current_document_capture
 from services.document_operations_service import enqueue_final_delivery
@@ -1286,10 +1292,20 @@ def send_more_options(wa_id, user) -> None:
 
 
 def send_document_studio_home(wa_id, user) -> None:
+    body = t(user, "document_landing_body")
+    if beta_mode_enabled():
+        body = (
+            "Beta: you may try the questionnaires and share feedback. "
+            "No payment is collected, no final document is provided and no "
+            "legal service is created. Use Book Consultation for legal "
+            "assistance. Do not enter Aadhaar, PAN, bank credentials, "
+            "signatures or identity-document images.\n\n"
+            f"{body}"
+        )
     send_list_picker(
         wa_id,
         header=t(user, "document_landing_header"),
-        body=t(user, "document_landing_body"),
+        body=body,
         section_title=t(user, "document_landing_section"),
         rows=document_landing_rows(user, t),
     )
@@ -1297,12 +1313,18 @@ def send_document_studio_home(wa_id, user) -> None:
 
 def send_cheque_notice_intake_flow(wa_id, order) -> None:
     if (
-        ENV != "staging"
-        or not CHEQUE_NOTICE_STAGING_UAT_ENABLED
+        not cheque_notice_beta_enabled(
+            environment=ENV,
+            staging_uat_enabled=CHEQUE_NOTICE_STAGING_UAT_ENABLED,
+        )
         or not WHATSAPP_CHEQUE_NOTICE_FLOW_ID.isdigit()
+        or (
+            ENV == "production"
+            and WHATSAPP_CHEQUE_NOTICE_FLOW_MODE != "published"
+        )
         or order.state != "INTAKE"
     ):
-        raise ChequeNoticeFlowError("cheque_notice_uat_not_configured")
+        raise ChequeNoticeFlowError("cheque_notice_beta_not_configured")
     token = issue_notice_flow_token(order)
     send_flow(
         wa_id,
@@ -1313,12 +1335,13 @@ def send_cheque_notice_intake_flow(wa_id, order) -> None:
         mode=WHATSAPP_CHEQUE_NOTICE_FLOW_MODE,
         header="Cheque notice intake",
         body=(
-            "Complete the six-section fact form using synthetic staging "
-            "information only. No notice, payment or advocate relationship "
-            "is created by submitting it."
+            "Beta: complete the six-section fact form to help improve this "
+            "feature. No payment, final notice, advocate review or legal "
+            "service is created by submitting it. Time-sensitive matters "
+            "should use Book Consultation."
         ),
         cta="Open fact form",
-        footer="Exit anytime; completed sections are saved.",
+        footer="Beta only. Exit anytime; completed sections are saved.",
     )
 
 
@@ -2474,6 +2497,21 @@ def _production_configuration_is_valid() -> bool:
     cheque_notice_enabled = (
         CHEQUE_NOTICE_PRODUCT_CODE in catalogue.enabled_product_codes
     )
+    cheque_notice_beta_ok = bool(
+        not cheque_notice_enabled
+        or (
+            cheque_notice_beta_enabled(
+                environment="production",
+                staging_uat_enabled=False,
+            )
+            and WHATSAPP_CHEQUE_NOTICE_FLOW_ID.isdigit()
+            and WHATSAPP_CHEQUE_NOTICE_FLOW_MODE == "published"
+            and flow_private_key_is_valid(
+                WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY,
+                WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY_PASSPHRASE,
+            )
+        )
+    )
     document_studio_ok = bool(
         not DOCUMENT_STUDIO_ENABLED
         or (
@@ -2484,10 +2522,7 @@ def _production_configuration_is_valid() -> bool:
             and DOCUMENT_STUDIO_S3_BUCKET
             and len(DOCUMENT_STUDIO_S3_ACCESS_KEY_ID) >= 16
             and len(DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY) >= 32
-            # This Phase E slice is deliberately staging-only.  A production
-            # allowlist change must remain unhealthy until the later scanner,
-            # advocate-interface and launch-decision gates are implemented.
-            and not cheque_notice_enabled
+            and cheque_notice_beta_ok
         )
     )
     return document_studio_ok and _deployment_configuration_is_valid(
@@ -2502,10 +2537,13 @@ def _staging_configuration_is_valid() -> bool:
     cheque_notice_enabled = (
         CHEQUE_NOTICE_PRODUCT_CODE in catalogue.enabled_product_codes
     )
-    cheque_notice_uat_ok = bool(
+    cheque_notice_beta_ok = bool(
         not cheque_notice_enabled
         or (
-            CHEQUE_NOTICE_STAGING_UAT_ENABLED
+            cheque_notice_beta_enabled(
+                environment="staging",
+                staging_uat_enabled=CHEQUE_NOTICE_STAGING_UAT_ENABLED,
+            )
             and WHATSAPP_CHEQUE_NOTICE_FLOW_ID.isdigit()
             and WHATSAPP_CHEQUE_NOTICE_FLOW_MODE in {"draft", "published"}
             and flow_private_key_is_valid(
@@ -2521,7 +2559,7 @@ def _staging_configuration_is_valid() -> bool:
             and catalogue.ok
             and catalogue.reason_code == "CONFIGURED"
             and DOCUMENT_STUDIO_DAILY_CAPACITY > 0
-            and cheque_notice_uat_ok
+            and cheque_notice_beta_ok
         )
     )
     return document_studio_ok and _deployment_configuration_is_valid(
@@ -2666,7 +2704,10 @@ def verify():
 def cheque_notice_flow_endpoint():
     """Process signed and encrypted Meta Flow section exchanges."""
 
-    if not CHEQUE_NOTICE_STAGING_UAT_ENABLED or ENV != "staging":
+    if not cheque_notice_beta_enabled(
+        environment=ENV,
+        staging_uat_enabled=CHEQUE_NOTICE_STAGING_UAT_ENABLED,
+    ):
         return "Not found", 404
     if is_global_rate_limited():
         return "", 429
@@ -2921,7 +2962,19 @@ def webhook():
                 return jsonify({"status": "invalid_flow_response"}), 200
             user.flow_state = NORMAL
             db.commit()
-            if order.state == "EVIDENCE_PENDING":
+            if order.state == "BETA_COMPLETE":
+                send_text(
+                    wa_id,
+                    "Thank you for testing Cheque-bounce Notice Beta. Your "
+                    "facts are saved only to evaluate and improve this "
+                    "questionnaire. No payment has been created. No final "
+                    "notice has been created. No legal service or advocate "
+                    "review has started. Use Book "
+                    "Consultation for legal assistance, especially for a "
+                    "time-sensitive matter. Use Support from the Home menu "
+                    f"to share feedback. Reference: {order.public_ref}",
+                )
+            elif order.state == "EVIDENCE_PENDING":
                 send_text(
                     wa_id,
                     "Your confirmed facts are saved for advocate triage. "
@@ -3184,12 +3237,12 @@ def webhook():
                     db.commit()
                     send_text(
                         wa_id,
-                        "The cheque-notice intake is not available for this "
-                        "controlled staging step. No facts or payment were "
-                        "accepted.",
+                        "The cheque-notice beta form is currently "
+                        "unavailable. No facts or payment were accepted. "
+                        "Use Book Consultation if you need legal help.",
                     )
                     return jsonify(
-                        {"status": "cheque_notice_uat_unavailable"}
+                        {"status": "cheque_notice_beta_unavailable"}
                     ), 200
                 record_event(
                     "document_studio_started",
@@ -3252,11 +3305,14 @@ def webhook():
                 if order.state != "INTAKE":
                     send_text(
                         wa_id,
-                        "Your cheque-notice facts are saved. Evidence upload "
-                        "is not enabled in this synthetic staging step, and "
-                        "no payment or notice is available.",
+                        "Your earlier cheque-notice test facts are saved. "
+                        "Evidence upload, payment, final notice and legal "
+                        "service are not available in the beta. Use Book "
+                        "Consultation if you need legal help.",
                     )
-                    return jsonify({"status": "cheque_notice_evidence_pending"}), 200
+                    return jsonify(
+                        {"status": "cheque_notice_beta_saved"}
+                    ), 200
                 try:
                     user.flow_state = DOCUMENT_NOTICE_FLOW_PENDING
                     db.commit()
@@ -3270,7 +3326,7 @@ def webhook():
                         "unavailable. Your completed sections remain saved.",
                     )
                     return jsonify(
-                        {"status": "cheque_notice_uat_unavailable"}
+                        {"status": "cheque_notice_beta_unavailable"}
                     ), 200
                 return jsonify({"status": "cheque_notice_flow_sent"}), 200
             order = create_or_resume_order(db, user.id, order.product_code)
@@ -3320,6 +3376,18 @@ def webhook():
             if not document_studio_available(user):
                 send_text(wa_id, t(user, "document_studio_unavailable"))
                 return jsonify({"status": "document_studio_unavailable"}), 200
+            if beta_mode_enabled():
+                send_text(
+                    wa_id,
+                    "Draft Studio Beta lets you try the questionnaires and "
+                    "share product feedback. No payment is collected, no "
+                    "final document is provided and no legal service is "
+                    "created. Do not enter Aadhaar, PAN, bank credentials, "
+                    "signatures or identity-document images. Use Book "
+                    "Consultation for legal assistance and Support to share "
+                    "feedback.",
+                )
+                return jsonify({"status": "ok"}), 200
             send_text(
                 wa_id,
                 "Draft Studio collects only the facts needed for the "
@@ -3523,6 +3591,26 @@ def webhook():
                     ), 200
                 user.flow_state = NORMAL
                 reference = order.public_ref
+                if order_is_beta(order):
+                    db.commit()
+                    send_text(
+                        wa_id,
+                        "Thank you for testing Draft Studio Beta. Your "
+                        "confirmed answers are saved for product feedback "
+                        "only. No payment has been created and no final "
+                        "document or legal service has been provided. Use "
+                        "Support from the Home menu to share feedback. "
+                        f"Reference: {reference}",
+                    )
+                    record_event(
+                        "document_studio_beta_completed",
+                        {"product_code": order.product_code},
+                        user_id=user.id,
+                    )
+                    send_home(wa_id, user)
+                    return jsonify(
+                        {"status": "document_studio_beta_completed"}
+                    ), 200
                 try:
                     preview_result = build_document_preview(db, order)
                     if preview_result.ok:
@@ -5741,6 +5829,8 @@ def payment_webhook():
                 current_payment,
                 quote=accepted_quote,
             )
+            if document_commerce_disabled(document_order):
+                document_payment_error = "BETA_COMMERCE_DISABLED"
             if (
                 document_payment_error is None
                 and (

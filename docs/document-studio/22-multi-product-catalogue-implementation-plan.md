@@ -421,3 +421,12 @@ private key whenever the cheque product is globally allowlisted. Production
 readiness deliberately fails if this incomplete slice is allowlisted. The
 residential-only production allowlist and approved legal package hashes remain
 unchanged.
+
+## RC20 supersession note
+
+RC20 replaces the RC19 activation boundary without changing the approved legal
+package. The encrypted questionnaire may be globally visible only while
+`DOCUMENT_STUDIO_CUSTOMER_MODE=beta`. It terminates at `BETA_COMPLETE` and
+cannot create evidence handling, advocate work, quote, payment, notice,
+signature, dispatch or legal-service entitlement. The advocate-issued service
+remains unpublished; switching to `live` requires a separate launch decision.

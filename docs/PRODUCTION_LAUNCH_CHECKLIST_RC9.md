@@ -1,21 +1,23 @@
-# NyaySetu First Production Launch Checklist - Bot + Draft Studio
+# NyaySetu First Production Launch Checklist - Consultation + Customer Beta
 
-Updated: 11 September 2026
+Updated: 16 September 2026
 
-Release candidate: RC19 (integrated checklist filename retained for continuity)
+Release candidate: RC20 (integrated checklist filename retained for continuity)
 
-Decision rule: NyaySetu Bot and Draft Studio launch together. There is no
-base-bot-only production path in this checklist. Any unchecked mandatory gate
-keeps the release at **NO-GO**.
+Decision rule: Booking Consultation is the only live paid service. Residential
+Draft Studio and Cheque-bounce Notice launch only as globally consistent
+Customer Beta questionnaires. Paid document, artifact, advocate-work and
+notice-issuance gates are deferred and must not block this narrower launch,
+but every consultation and beta-safety gate remains mandatory. Any unchecked
+mandatory gate for that scope keeps the release at **NO-GO**.
 
 ## Current verdict
 
-**NO-GO for production.** The Phase D cheque-notice package is deployed and
-approved but remains outside the global allowlist. RC19 implements only its
-local staging fact-intake slice. Meta Flow validation, production scanner,
-evidence journey, advocate interface, translations, real-user/advocate UAT,
-restore proof, final regression, staffing/policy evidence, and a recorded GO
-decision remain mandatory.
+**NO-GO for production pending RC20 deployment and UAT.** The beta boundary is
+implemented locally, but the updated Meta Flow must be uploaded and published,
+production beta configuration verified, consultation booking regression and
+real-device UAT completed, restore proof recorded, and a final GO decision
+documented.
 
 Verified baseline:
 
@@ -34,18 +36,19 @@ Verified baseline:
   compilation, dependency consistency, SBOM, single-head, diff-integrity and
   live dependency-audit gates are green.
 - [x] RC19 local Phase E intake regression passes: 468 tests and 71.71%
-  coverage; the cheque product remains production-prohibited and hidden.
+  coverage; this is retained as historical staging evidence.
+- [x] RC20 local regression passes: 485 tests and 72.00% coverage; beta orders
+  are blocked from preview, payment, advocate work and final delivery.
 - [x] Draft Studio is globally available when enabled, not a test-user or
   cohort feature.
 - [ ] All mandatory gates below are complete and supported by saved evidence.
-- [x] RC14 full automated regression and static checks pass locally: 374 tests
-  and the 60% coverage gate pass; total measured coverage is 69.06%.
-- [ ] RC14 replacement aggregate and golden artifacts receive a new exact-hash
-  advocate approval; the earlier approval must not be reused.
+- [x] Historical RC14 automated regression and static evidence is retained.
+- [x] The currently deployed residential and cheque package hashes have
+  authenticated approvals and both release gates report `APPROVED`.
 
-## A. Freeze and publish the exact RC14 release
+## A. Freeze and publish the exact RC20 release
 
-- [ ] Review the local diff and confirm every intended RC10-RC12 file.
+- [ ] Review the local diff and confirm every intended RC20 file.
 - [ ] Confirm no credentials, access tokens, personal test data, generated
   documents, `.env` file, or private advocate material is in the upload set.
 - [x] Implement and test the global daily Draft Studio capacity
@@ -80,11 +83,17 @@ health responses. Never store secret values in evidence.
 
 ## C. Draft Studio legal and product approval
 
+The unchecked paid-document, advocate-service, evidence and issuance items in
+this section are future-live gates. They are not RC20 go-live gates while
+`DOCUMENT_STUDIO_CUSTOMER_MODE=beta`; changing that mode to `live` requires a
+new approval decision and completion of every applicable item below.
+
 - [ ] Confirm the test-only earlier schema and synthetic artifacts/payment
   attempts have been reconciled and removed through controlled procedures.
 - [ ] Verify the packaged Maharashtra PIN reference source revision, content
   hash, manual fallback and customer-confirmation wording.
-- [ ] Obtain authenticated advocate review of the exact RC14 aggregate,
+- [x] Obtain authenticated advocate review of the exact deployed residential
+  aggregate,
   clauses, eligibility rules, exclusions, questionnaire, preview, final output,
   disclaimer, and consent language.
 - [ ] Record advocate identity, enrolment verification, review date, exact
@@ -106,11 +115,12 @@ health responses. Never store secret values in evidence.
   template, validators and supported/boundary/decline golden artifacts.
 - [x] Deploy and authenticate the exact Phase D package hashes. Discovery-pack
   or source-review approval alone is insufficient.
-- [x] Implement RC19's disabled-by-default encrypted six-section staging fact
-  intake, server-side section save/resume, final immutable revision and
-  pre-evidence/pre-payment route-out.
-- [ ] Upload the RC19 Flow JSON to Meta, bind the staging endpoint/public key,
-  validate all six screens on real devices, and retain sanitized evidence.
+- [x] Implement RC19's encrypted six-section fact intake, server-side section
+  save/resume and final immutable revision; RC20 terminates it at
+  `BETA_COMPLETE` before evidence, advocate work or payment.
+- [ ] Upload the RC20 Flow JSON to Meta, bind the correct endpoint/public key,
+  validate all six screens on real devices, publish it for production, and
+  retain sanitized evidence.
 - [ ] Select and validate the production malware/file scanner and approve the
   evidence type/size, access, retention, incident and legal-hold procedures.
 - [ ] Build and security-test the dedicated scoped advocate interface; never
@@ -302,16 +312,16 @@ drill notes.
 ## L. Full integrated staging acceptance
 
 - [ ] Deploy the exact candidate SHA to staging with Draft Studio enabled for
-  all users and a safe non-zero test price.
+  all users in `beta` mode and no document price or payment entitlement.
 - [ ] Verify a new user sees all four choices: Ask Legal Question, Book
   Consultation, Draft Studio, More Options.
 - [ ] Complete consultation booking, test payment, webhook confirmation, case
   brief, admin assignment, manual handover, and outcome.
-- [ ] Complete every eligible Draft Studio path through paid PDF/DOCX download.
-- [ ] Complete every supported cheque-notice path through assignment, evidence,
-  quote, test payment, advocate draft, customer fact confirmation, exact issue,
-  locked-PDF download and simulated dispatch. Exercise conflict, decline,
-  unsupported, quote expiry, refund, scanner failure and legal-hold paths.
+- [ ] Complete every residential beta path through save, resume, review and
+  beta completion; prove preview, payment and final download are unreachable.
+- [ ] Complete every supported cheque beta path through encrypted section save,
+  resume and `BETA_COMPLETE`; prove evidence, advocate assignment, quote,
+  payment, issued notice and dispatch are unreachable.
 - [ ] Test ineligible/ambiguous matters, exhausted capacity, abandoned/expired
   drafts, invalid consent, failed/duplicate payment, generation/S3 failure,
   expired URL, cross-user access, refund, and deletion.
@@ -326,7 +336,9 @@ date, candidate SHA, schema version, and sanitized evidence.
 
 ## Final go/no-go record
 
-Record **GO** only when every mandatory checkbox is complete:
+Record **GO** only when every mandatory RC20 checkbox is complete. Explicitly
+future-live items identified in section C are not RC20 blockers while the
+global customer mode remains `beta`:
 
 - [ ] Product owner: scope, price, promise, and support readiness.
 - [ ] Verified advocate: exact legal content and boundaries.
@@ -351,9 +363,9 @@ Run only after a recorded GO decision:
 7. Confirm private S3, jobs, alerts, admin identity, Meta webhook, and Razorpay
    live webhook.
 8. Run one controlled live consultation payment smoke test.
-9. Run one controlled live Draft Studio payment, generation, private PDF/DOCX
-   download, admin/reconciliation, and deletion/expiry smoke test.
-10. Confirm both low-value payments settle/reconcile correctly.
+9. Run residential and cheque beta smoke tests through save/resume/completion;
+   prove no preview, payment, artifact, advocate work or legal service starts.
+10. Confirm the consultation smoke payment settles/reconciles correctly.
 11. Resolve test records under the approved financial/data procedure.
 12. Disable maintenance mode and monitor through the launch window.
 13. Record completion or activate rollback/kill switch.

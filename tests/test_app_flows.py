@@ -6,6 +6,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
+import pytest
+
 from models import (
     Booking,
     BookingStatus,
@@ -212,6 +214,73 @@ def test_document_studio_home_uses_four_ordered_list_rows(
     assert rows[2]["title"] == "Draft Studio"
 
 
+def test_document_studio_beta_disclaimer_precedes_document_actions(
+    monkeypatch,
+    app_module,
+    transport_spies,
+):
+    from services import document_customer_release
+
+    monkeypatch.setattr(
+        document_customer_release,
+        "DOCUMENT_STUDIO_CUSTOMER_MODE",
+        "beta",
+    )
+    user = User(
+        whatsapp_id="919911112222",
+        case_id="NS-DOC-BETA-HOME",
+        language="en",
+    )
+
+    app_module.send_document_studio_home(user.whatsapp_id, user)
+
+    body = transport_spies["list"].call_args.kwargs["body"].lower()
+    assert "beta" in body
+    assert "no payment" in body
+    assert "no final document" in body
+    assert "book consultation" in body
+
+
+def test_document_studio_beta_help_never_describes_live_payment_or_delivery(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+):
+    from services import document_customer_release
+
+    _secure_whatsapp_route(monkeypatch, app_module)
+    monkeypatch.setattr(
+        app_module,
+        "document_studio_available",
+        lambda _user=None: True,
+    )
+    monkeypatch.setattr(
+        document_customer_release,
+        "DOCUMENT_STUDIO_CUSTOMER_MODE",
+        "beta",
+    )
+    _create_user(isolated_app_db, flow_state=app_module.NORMAL)
+
+    response = _signed_whatsapp_post(
+        client,
+        _whatsapp_payload(
+            message_id="wamid.doc.beta-help",
+            interactive_id="doc_help",
+        ),
+    )
+
+    assert response.status_code == 200
+    message = transport_spies["text"].call_args.args[1].lower()
+    assert "beta" in message
+    assert "no payment" in message
+    assert "no final document" in message
+    assert "book consultation" in message
+    assert "payment link" not in message
+    assert "final pdf" not in message
+
+
 def test_document_studio_whatsapp_flow_starts_for_every_open_user(
     monkeypatch,
     app_module,
@@ -280,26 +349,38 @@ def test_document_studio_whatsapp_flow_starts_for_every_open_user(
         db.close()
 
 
-def test_cheque_notice_start_opens_only_the_staging_fact_flow(
+@pytest.mark.parametrize(
+    ("environment", "staging_switch", "flow_mode", "uat_only"),
+    (
+        ("staging", True, "draft", True),
+        ("production", False, "published", False),
+    ),
+)
+def test_cheque_notice_beta_starts_the_secure_fact_flow(
     monkeypatch,
     app_module,
     client,
     isolated_app_db,
     transport_spies,
+    environment,
+    staging_switch,
+    flow_mode,
+    uat_only,
 ):
     from services import cheque_notice_intake_service
     from services import document_catalogue
+    from services import document_customer_release
     from services.document_release_service import (
         record_approval,
         release_manifest,
     )
 
     _secure_whatsapp_route(monkeypatch, app_module)
-    monkeypatch.setattr(app_module, "ENV", "staging")
+    monkeypatch.setattr(app_module, "ENV", environment)
     monkeypatch.setattr(
         app_module,
         "CHEQUE_NOTICE_STAGING_UAT_ENABLED",
-        True,
+        staging_switch,
     )
     monkeypatch.setattr(
         app_module,
@@ -309,7 +390,7 @@ def test_cheque_notice_start_opens_only_the_staging_fact_flow(
     monkeypatch.setattr(
         app_module,
         "WHATSAPP_CHEQUE_NOTICE_FLOW_MODE",
-        "draft",
+        flow_mode,
     )
     monkeypatch.setattr(
         cheque_notice_intake_service,
@@ -319,12 +400,17 @@ def test_cheque_notice_start_opens_only_the_staging_fact_flow(
     monkeypatch.setattr(
         cheque_notice_intake_service,
         "ENV",
-        "staging",
+        environment,
     )
     monkeypatch.setattr(
         cheque_notice_intake_service,
         "CHEQUE_NOTICE_STAGING_UAT_ENABLED",
-        True,
+        staging_switch,
+    )
+    monkeypatch.setattr(
+        document_customer_release,
+        "DOCUMENT_STUDIO_CUSTOMER_MODE",
+        "beta",
     )
     monkeypatch.setattr(
         app_module,
@@ -392,7 +478,8 @@ def test_cheque_notice_start_opens_only_the_staging_fact_flow(
         assert order.product_code == document_catalogue.CHEQUE_NOTICE_PRODUCT_CODE
         assert order.output_classification == "ADVOCATE_ISSUED_NOTICE"
         assert order.state == "INTAKE"
-        assert order.uat_only is True
+        assert order.uat_only is uat_only
+        assert order.release_status == "BETA"
         assert order.price_minor is None
         assert order.payment_processed is False
         assert db.query(DocumentCapacityReservation).count() == 0
@@ -402,7 +489,7 @@ def test_cheque_notice_start_opens_only_the_staging_fact_flow(
     assert flow_call.args == ("919911112222",)
     assert flow_call.kwargs["flow_id"] == "123456789012345"
     assert flow_call.kwargs["screen"] == "SUITABILITY"
-    assert flow_call.kwargs["mode"] == "draft"
+    assert flow_call.kwargs["mode"] == flow_mode
     assert flow_call.kwargs["data"] == {
         "claimant_scope": "",
         "instrument_scope": "",
@@ -413,7 +500,7 @@ def test_cheque_notice_start_opens_only_the_staging_fact_flow(
     }
 
 
-def test_cheque_notice_completion_acknowledges_saved_facts_without_payment(
+def test_cheque_notice_beta_completion_acknowledges_no_service_or_payment(
     monkeypatch,
     app_module,
     client,
@@ -453,8 +540,8 @@ def test_cheque_notice_completion_acknowledges_saved_facts_without_payment(
             user_id=user_id,
             product_code=product.code,
             template_version=product.template_version,
-            state="EVIDENCE_PENDING",
-            current_step="evidence_validation",
+            state="BETA_COMPLETE",
+            current_step="complete",
             draft_answers_json="{}",
             output_classification=product.output_classification,
             uat_only=True,
@@ -462,6 +549,7 @@ def test_cheque_notice_completion_acknowledges_saved_facts_without_payment(
             template_hash=product.template_hash,
             currency="INR",
             payment_processed=False,
+            release_status="BETA",
         )
         db.add(order)
         db.flush()
@@ -478,7 +566,7 @@ def test_cheque_notice_completion_acknowledges_saved_facts_without_payment(
             flow_response={
                 "flow_token": token,
                 "order_ref": order_ref,
-                "status": "EVIDENCE_PENDING",
+                "status": "BETA_COMPLETE",
             },
         ),
     )
@@ -490,14 +578,16 @@ def test_cheque_notice_completion_acknowledges_saved_facts_without_payment(
         user = db.get(User, user_id)
         order = db.query(DocumentOrder).one()
         assert user.flow_state == app_module.NORMAL
-        assert order.state == "EVIDENCE_PENDING"
+        assert order.state == "BETA_COMPLETE"
         assert order.payment_processed is False
         assert order.razorpay_payment_link_id is None
     finally:
         db.close()
     message = transport_spies["text"].call_args.args[1].lower()
+    assert "beta" in message
     assert "no payment" in message
-    assert "no notice" in message
+    assert "no final notice" in message
+    assert "no legal service" in message
     transport_spies["home"].assert_called_once()
 
 
@@ -702,6 +792,77 @@ def test_document_review_edit_opens_section_picker_without_erasing_answers(
         db.close()
     question_body = transport_spies["buttons"].call_args.args[1]
     assert "Section 2 of 5" in question_body
+
+
+def test_document_beta_confirmation_stops_before_preview_and_payment(
+    monkeypatch,
+    app_module,
+    client,
+    isolated_app_db,
+    transport_spies,
+):
+    from services import document_catalogue
+    from services.document_studio_rc9_service import create_or_resume_order
+
+    _secure_whatsapp_route(monkeypatch, app_module)
+    monkeypatch.setattr(
+        app_module,
+        "document_studio_available",
+        lambda _user=None: True,
+    )
+    monkeypatch.setattr(document_catalogue, "DOCUMENT_STUDIO_ENABLED", True)
+    monkeypatch.setattr(document_catalogue, "DOCUMENT_STUDIO_PRICE_INR", 299)
+    monkeypatch.setattr(
+        document_catalogue,
+        "DOCUMENT_STUDIO_PRODUCT_ALLOWLIST",
+        frozenset({document_catalogue.PRODUCT_CODE}),
+    )
+    user_id = _create_user(
+        isolated_app_db,
+        flow_state=app_module.DOCUMENT_STUDIO_REVIEW,
+    )
+    db = isolated_app_db()
+    try:
+        order = create_or_resume_order(db, user_id)
+        product = document_catalogue.resolve_product()
+        order.state = "DRAFTING"
+        order.current_step = "review"
+        order.draft_answers_json = json.dumps(product.golden_answers())
+        order.release_status = "BETA"
+        order.price_minor = None
+        order_ref = order.public_ref
+        db.commit()
+    finally:
+        db.close()
+
+    response = _signed_whatsapp_post(
+        client,
+        _whatsapp_payload(
+            message_id="wamid.doc.beta-confirm",
+            interactive_id="doc_confirm",
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "document_studio_beta_completed"
+    db = isolated_app_db()
+    try:
+        order = db.query(DocumentOrder).filter_by(public_ref=order_ref).one()
+        assert order.state == "CONFIRMED"
+        assert order.release_status == "BETA"
+        assert order.price_minor is None
+        assert order.payment_processed is False
+        assert order.razorpay_payment_link_id is None
+        assert order.preview_manifest_hash is None
+    finally:
+        db.close()
+    messages = [
+        call.args[1].lower()
+        for call in transport_spies["text"].call_args_list
+    ]
+    assert any("beta" in message for message in messages)
+    assert any("no payment" in message for message in messages)
+    assert any("no final document" in message for message in messages)
 
 
 def test_document_question_uses_list_for_three_choices_and_keeps_save_exit(

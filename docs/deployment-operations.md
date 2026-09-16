@@ -204,9 +204,9 @@ WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY_PASSPHRASE=<only if encrypted>
 
 Then add the cheque product to the single staging global allowlist for the
 planned synthetic test window. Never print the private key/passphrase, place
-them in Git, or reuse the Flask/admin keys. Remove the cheque product from the
-allowlist and turn the switch off after UAT. Production readiness intentionally
-rejects this incomplete slice even if an operator changes its allowlist.
+them in Git, or reuse the Flask/admin keys. The first-release production beta
+uses the separate release-mode contract below; it never enables the staging
+switch.
 
 After staging acceptance, deploy the committed production Blueprint separately
 with live-only values and the approved legal-content review pair.
@@ -1245,7 +1245,31 @@ and provider intake as the incident/cutover procedure requires.
 - After rotating `AI_SAFETY_IDENTIFIER_SECRET`, expect provider safety
   identifiers to change; document the privacy/abuse-monitoring impact.
 
-## Draft Studio RC9 controlled staging release
+## Draft Studio release modes
+
+For the first customer release, Booking Consultation is the only live paid
+service. Draft Studio products use one global beta mode so every user sees the
+same non-commercial questionnaire behavior:
+
+```text
+DOCUMENT_STUDIO_ENABLED=true
+DOCUMENT_STUDIO_CUSTOMER_MODE=beta
+DOCUMENT_STUDIO_PRODUCT_ALLOWLIST=mh_residential_leave_licence_11m_self_service,in_ni138_single_cheque_individual_advocate_issued
+CHEQUE_NOTICE_STAGING_UAT_ENABLED=false
+WHATSAPP_CHEQUE_NOTICE_FLOW_ID=<published production Flow ID>
+WHATSAPP_CHEQUE_NOTICE_FLOW_MODE=published
+WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY=<matching RSA private PEM>
+WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY_PASSPHRASE=<only if encrypted>
+```
+
+Upload `docs/document-studio/flows/cheque-notice-intake-v1.json` to the Meta
+Flow before publishing it. Run the endpoint health check and a real-device
+beta UAT after deployment. In beta mode the backend stores questionnaire
+answers under the unpaid-draft retention policy but rejects preview, artifact,
+payment, advocate-triage and notice-issuance paths. Do not change the customer
+mode to `live` as part of the first release.
+
+### Historical paid staging release
 
 The Blueprint deliberately keeps `DOCUMENT_STUDIO_ENABLED=false`. Enabling it
 publishes the menu entry to every WhatsApp user; there is no tester-number

@@ -42,6 +42,10 @@
               },
               {
                 "type": "TextBody",
+                "text": "Beta feature: your answers help NyaySetu evaluate and improve this questionnaire. No payment is created. No final notice is created. No legal service or advocate review is started. For legal help, especially in a time-sensitive matter, use Book Consultation."
+              },
+              {
+                "type": "TextBody",
                 "text": "Confirm: you are the individual named payee acting for yourself, and the drawer is one living adult individual acting personally."
               },
               {
@@ -611,12 +615,12 @@
               },
               {
                 "type": "TextBody",
-                "text": "Permit the assigned advocate to review these facts and evidence for this request under the displayed consent notice."
+                "text": "Allow NyaySetu to use these submitted facts as beta feedback to evaluate and improve this questionnaire. No advocate review or legal service will start."
               },
               {
                 "type": "RadioButtonsGroup",
                 "name": "review_consent",
-                "label": "Allow advocate review?",
+                "label": "Allow beta feedback use?",
                 "required": true,
                 "data-source": [
                   {"id": "YES", "title": "Yes"},
@@ -625,7 +629,7 @@
               },
               {
                 "type": "TextBody",
-                "text": "Choose how the advocate or operator may contact you about missing facts, scope and quote."
+                "text": "Choose how NyaySetu may contact you only for beta feedback or to clarify questionnaire input."
               },
               {
                 "type": "RadioButtonsGroup",
@@ -667,11 +671,11 @@
         "children": [
           {
             "type": "TextHeading",
-            "text": "Synthetic staging intake saved"
+            "text": "Beta questionnaire saved"
           },
           {
             "type": "TextBody",
-            "text": "This test stops before evidence handling. No payment is available and no notice has been created or issued."
+            "text": "Thank you for helping us improve. No payment has been created. No final notice has been created. No legal service has been started. Use Book Consultation for legal assistance."
           },
           {
             "type": "Footer",

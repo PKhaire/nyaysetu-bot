@@ -48,11 +48,17 @@ from services.advocate_issued_workflow import (
 )
 from services.document_evidence_vault import MemoryEvidenceVault
 from services.document_artifact_vault import MemoryArtifactVault
+from services import document_customer_release
 from models import DocumentAnswerRevision
 
 
 @pytest.fixture
-def db():
+def db(monkeypatch):
+    monkeypatch.setattr(
+        document_customer_release,
+        "DOCUMENT_STUDIO_CUSTOMER_MODE",
+        "live",
+    )
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},

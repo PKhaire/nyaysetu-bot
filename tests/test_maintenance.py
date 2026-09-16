@@ -608,12 +608,13 @@ def test_document_studio_retention_redacts_unpaid_drafts_and_deletes_objects(
                 "mh_residential_leave_licence_11m_self_service"
             ),
             template_version="mh-ll-11m-self-service-2026-08-v1",
-            state="DRAFTING",
-            current_step="licensee_full_name",
+            state="BETA_COMPLETE",
+            current_step="complete",
             draft_answers_json='{"private":"must be redacted"}',
             output_classification="SELF_SERVICE_DRAFT",
             uat_only=False,
             payment_processed=False,
+            release_status="BETA",
             created_at=old,
             updated_at=old,
         )

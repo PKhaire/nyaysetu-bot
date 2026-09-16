@@ -22,6 +22,7 @@ from services.document_catalogue import (
     product_availability,
     resolve_product,
 )
+from services.document_customer_release import document_commerce_disabled
 
 
 _RAZORPAY_REFERENCE_ID_MAX_LENGTH = 40
@@ -256,6 +257,8 @@ def create_document_payment_link(
 ) -> str:
     """Create one exact-amount link bound to order/revision/manifest."""
 
+    if document_commerce_disabled(order):
+        raise ValueError("beta_commerce_disabled")
     product = product or resolve_product(order.product_code)
     if order.product_code != product.code:
         raise ValueError("document_product_mismatch")
@@ -331,6 +334,8 @@ def create_advocate_quote_payment_link(
 ) -> str:
     """Create one exact-amount link for an accepted advocate quote."""
 
+    if document_commerce_disabled(order):
+        raise ValueError("beta_commerce_disabled")
     if (
         order.output_classification != "ADVOCATE_ISSUED_NOTICE"
         or order.state != "QUOTE_ACCEPTED"

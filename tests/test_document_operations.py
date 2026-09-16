@@ -24,6 +24,7 @@ from models import (
 )
 from services import (
     document_catalogue,
+    document_customer_release,
     document_operations_service,
     outbox_service,
 )
@@ -55,6 +56,11 @@ def operations_db(monkeypatch):
     )
     Base.metadata.create_all(engine)
     monkeypatch.setattr(outbox_service, "SessionLocal", factory)
+    monkeypatch.setattr(
+        document_customer_release,
+        "DOCUMENT_STUDIO_CUSTOMER_MODE",
+        "live",
+    )
     monkeypatch.setattr(document_catalogue, "DOCUMENT_STUDIO_ENABLED", True)
     monkeypatch.setattr(document_catalogue, "DOCUMENT_STUDIO_PRICE_INR", 299)
     monkeypatch.setattr(
@@ -284,6 +290,69 @@ def test_exact_capture_recovers_reviewed_order_once(operations_db):
         assert replay.outcome == "already_processed"
         assert len(provider.paths) == 2
         assert db.query(OutboxJob).count() == 1
+    finally:
+        db.close()
+
+
+def test_global_beta_mode_blocks_legacy_recovery_and_delivery(
+    monkeypatch,
+    operations_db,
+):
+    monkeypatch.setattr(
+        document_customer_release,
+        "DOCUMENT_STUDIO_CUSTOMER_MODE",
+        "beta",
+    )
+    db = operations_db()
+    try:
+        order, _ = _order(db, state="NEEDS_ATTENTION")
+        provider = _ProviderClient(_link(order), _payment(order))
+
+        result = reconcile_document_order(
+            db,
+            order.id,
+            client=provider,
+            vault=MemoryArtifactVault(),
+        )
+
+        assert result.ok is False
+        assert result.outcome == "review_required"
+        assert result.reason_code == "BETA_COMMERCE_DISABLED"
+        db.refresh(order)
+        assert order.payment_processed is False
+
+        order.state = "FINAL_AVAILABLE"
+        order.payment_processed = True
+        order.final_available_until = utc_now() + timedelta(days=1)
+        with pytest.raises(ValueError, match="beta_commerce_disabled"):
+            enqueue_final_delivery(
+                db,
+                order,
+                dedupe_key="beta-delivery-must-not-queue",
+            )
+
+        monkeypatch.setattr(
+            document_customer_release,
+            "DOCUMENT_STUDIO_CUSTOMER_MODE",
+            "live",
+        )
+        job = enqueue_final_delivery(
+            db,
+            order,
+            dedupe_key="legacy-delivery-must-not-run-in-beta",
+        )
+        db.commit()
+        monkeypatch.setattr(
+            document_customer_release,
+            "DOCUMENT_STUDIO_CUSTOMER_MODE",
+            "beta",
+        )
+
+        assert outbox_service.process_job(job.id) is False
+        db.expire_all()
+        failed_job = db.get(OutboxJob, job.id)
+        assert failed_job.status == "DEAD"
+        assert failed_job.last_error == "document_final_delivery_beta_disabled"
     finally:
         db.close()
 

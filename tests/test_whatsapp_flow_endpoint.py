@@ -89,24 +89,32 @@ def test_encrypted_flow_ping_uses_separate_endpoint_contract(
     assert json.loads(plaintext) == {"data": {"status": "active"}}
 
 
-def test_flow_endpoint_is_not_exposed_outside_staging(
+def test_flow_endpoint_is_exposed_for_production_beta(
     monkeypatch,
     app_module,
     client,
 ):
+    from services import document_customer_release
+
     monkeypatch.setattr(app_module, "ENV", "production")
     monkeypatch.setattr(
         app_module,
         "CHEQUE_NOTICE_STAGING_UAT_ENABLED",
-        True,
+        False,
     )
+    monkeypatch.setattr(
+        document_customer_release,
+        "DOCUMENT_STUDIO_CUSTOMER_MODE",
+        "beta",
+    )
+    monkeypatch.setattr(app_module, "is_global_rate_limited", lambda: True)
 
     response = client.post(
         "/whatsapp/flows/cheque-notice",
         json={},
     )
 
-    assert response.status_code == 404
+    assert response.status_code == 429
 
 
 def test_flow_endpoint_applies_the_bounded_global_rate_limit(

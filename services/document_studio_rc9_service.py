@@ -42,6 +42,11 @@ from services.document_capacity_service import (
     release_capacity,
     reserve_capacity,
 )
+from services.document_customer_release import (
+    beta_mode_enabled,
+    order_is_beta,
+    stamp_new_order,
+)
 from services.document_address_service import render_premises_address
 from services.postal_reference_service import lookup_maharashtra_pin
 
@@ -317,6 +322,10 @@ def product_rows(
             )
         except (KeyError, ValueError):
             description = product.list_description
+        if beta_mode_enabled():
+            description = (
+                "Beta questionnaire | No payment or document delivery"
+            )
         rows.append({
             "id": f"{PRODUCT_ID_PREFIX}{product.code}",
             "title": f"{number}. {title}",
@@ -404,20 +413,26 @@ def product_selection_details(user, translate, code: str) -> tuple[str, str]:
     """Return catalogue-owned overview and CTA copy for one visible product."""
 
     product = resolve_product(code)
-    return (
-        _translated_product_text(
-            user,
-            translate,
-            product.selection_overview_key,
-            product.selection_overview,
-        ),
-        _translated_product_text(
-            user,
-            translate,
-            product.start_label_key,
-            product.start_label,
-        ),
+    overview = _translated_product_text(
+        user,
+        translate,
+        product.selection_overview_key,
+        product.selection_overview,
     )
+    start_label = _translated_product_text(
+        user,
+        translate,
+        product.start_label_key,
+        product.start_label,
+    )
+    if beta_mode_enabled():
+        overview = (
+            "Beta questionnaire: you may enter facts and share feedback. "
+            "No payment is collected and no final document or legal service "
+            f"is provided.\n\n{overview}"
+        )
+        start_label = "Try beta"
+    return overview, start_label
 
 
 def parse_product_id(value: str | None, *, start: bool = False) -> str | None:
@@ -506,23 +521,43 @@ def create_or_resume_order(
     ):
         raise ValueError("document_product_workflow_unsupported")
     existing = latest_draft(db, user_id, product.code)
-    if existing and existing.schema_hash == product.schema_hash:
+    beta_mode = beta_mode_enabled()
+    release_mode_matches = bool(
+        existing is not None and order_is_beta(existing) == beta_mode
+    )
+    if (
+        existing
+        and existing.schema_hash == product.schema_hash
+        and release_mode_matches
+    ):
         reserve_capacity(db, existing)
         return existing
     if existing:
+        reason = (
+            "RELEASE_MODE_CHANGED"
+            if not release_mode_matches
+            else "SCHEMA_SUPERSEDED"
+        )
         previous = existing.state
-        release_capacity(db, existing, reason="SCHEMA_SUPERSEDED")
+        release_capacity(db, existing, reason=reason)
         existing.state = "ABANDONED"
         existing.current_step = "superseded"
-        existing.exception_code = "SCHEMA_SUPERSEDED"
+        existing.exception_code = reason
         _audit(
             db,
             existing,
-            "DOCUMENT_SCHEMA_SUPERSEDED",
+            (
+                "DOCUMENT_RELEASE_MODE_CHANGED"
+                if reason == "RELEASE_MODE_CHANGED"
+                else "DOCUMENT_SCHEMA_SUPERSEDED"
+            ),
             from_state=previous,
             to_state=existing.state,
             details={
                 "replacement_schema_hash": product.schema_hash,
+                "replacement_release_mode": (
+                    "BETA" if beta_mode else "LIVE"
+                ),
             },
         )
     order = DocumentOrder(
@@ -534,6 +569,7 @@ def create_or_resume_order(
         template_hash=product.template_hash, price_minor=product.price_minor,
         currency=product.currency, release_status="CANDIDATE",
     )
+    stamp_new_order(order)
     db.add(order)
     db.flush()
     reserve_capacity(db, order)

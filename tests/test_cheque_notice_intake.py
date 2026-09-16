@@ -20,6 +20,7 @@ from models import (
 )
 from services import cheque_notice_intake_service as intake
 from services import document_catalogue as catalogue
+from services import document_customer_release as customer_release
 from services.cheque_notice_product import golden_answers
 from services.document_release_service import record_approval, release_manifest
 
@@ -43,6 +44,11 @@ def db():
 
 @pytest.fixture
 def published_cheque_intake(monkeypatch, db):
+    monkeypatch.setattr(
+        customer_release,
+        "DOCUMENT_STUDIO_CUSTOMER_MODE",
+        "beta",
+    )
     monkeypatch.setattr(intake, "ENV", "staging")
     monkeypatch.setattr(intake, "CHEQUE_NOTICE_STAGING_UAT_ENABLED", True)
     monkeypatch.setattr(catalogue, "DOCUMENT_STUDIO_ENABLED", True)
@@ -131,11 +137,12 @@ def test_customer_can_complete_six_sections_without_payment_or_notice(
     assert params == {
         "flow_token": token,
         "order_ref": order.public_ref,
-        "status": "EVIDENCE_PENDING",
+        "status": "BETA_COMPLETE",
     }
     completed = intake.completion_for_user(db, params, user_id=user.id)
     assert completed.id == order.id
-    assert order.state == "EVIDENCE_PENDING"
+    assert order.state == "BETA_COMPLETE"
+    assert order.release_status == "BETA"
     assert order.payment_processed is False
     assert order.price_minor is None
     assert order.razorpay_payment_link_id is None
@@ -174,6 +181,39 @@ def test_saved_sections_resume_at_the_next_section(
     assert "claimant_scope" not in reopened["data"]
 
 
+def test_beta_intake_never_resumes_a_pre_beta_cheque_order(
+    db,
+    published_cheque_intake,
+):
+    user = published_cheque_intake
+    product = catalogue.resolve_product(catalogue.CHEQUE_NOTICE_PRODUCT_CODE)
+    old_order = DocumentOrder(
+        public_ref="DS-PRE-BETA-CHEQUE",
+        user_id=user.id,
+        product_code=product.code,
+        template_version=product.template_version,
+        state="INTAKE",
+        current_step="SUITABILITY",
+        draft_answers_json="{}",
+        output_classification=product.output_classification,
+        uat_only=True,
+        schema_hash=product.schema_hash,
+        template_hash=product.template_hash,
+        price_minor=None,
+        currency=product.currency,
+        release_status="CANDIDATE",
+    )
+    db.add(old_order)
+    db.flush()
+
+    beta_order = intake.create_or_resume_notice_order(db, user.id)
+
+    assert beta_order.id != old_order.id
+    assert beta_order.release_status == "BETA"
+    assert old_order.state == "ABANDONED"
+    assert old_order.exception_code == "RELEASE_MODE_CHANGED"
+
+
 def test_out_of_sequence_or_cross_user_completion_fails_closed(
     db,
     published_cheque_intake,
@@ -203,7 +243,7 @@ def test_out_of_sequence_or_cross_user_completion_fails_closed(
         )
 
 
-def test_unsupported_answers_stop_before_evidence_and_payment(
+def test_unsupported_beta_answers_still_stop_before_service_and_payment(
     db,
     published_cheque_intake,
 ):
@@ -216,8 +256,9 @@ def test_unsupported_answers_stop_before_evidence_and_payment(
         result = _exchange(db, token, screen, answers)
 
     params = result["data"]["extension_message_response"]["params"]
-    assert params["status"] == "ROUTED_OUT"
-    assert order.state == "ROUTED_OUT"
+    assert params["status"] == "BETA_COMPLETE"
+    assert order.state == "BETA_COMPLETE"
+    assert order.release_status == "BETA"
     assert order.payment_processed is False
     assert order.price_minor is None
     assert db.query(DocumentQuote).count() == 0
@@ -281,20 +322,54 @@ def test_hidden_cheque_product_cannot_create_an_intake(monkeypatch, db):
     assert db.query(DocumentOrder).count() == 0
 
 
-def test_cheque_intake_cannot_create_outside_the_staging_switch(
+def test_cheque_beta_can_create_in_production_without_the_staging_switch(
     monkeypatch,
     db,
 ):
     monkeypatch.setattr(intake, "ENV", "production")
-    monkeypatch.setattr(intake, "CHEQUE_NOTICE_STAGING_UAT_ENABLED", True)
+    monkeypatch.setattr(intake, "CHEQUE_NOTICE_STAGING_UAT_ENABLED", False)
+    monkeypatch.setattr(
+        customer_release,
+        "DOCUMENT_STUDIO_CUSTOMER_MODE",
+        "beta",
+    )
+    monkeypatch.setattr(catalogue, "DOCUMENT_STUDIO_ENABLED", True)
+    monkeypatch.setattr(catalogue, "DOCUMENT_STUDIO_PRICE_INR", 299)
+    monkeypatch.setattr(
+        catalogue,
+        "DOCUMENT_STUDIO_PRODUCT_ALLOWLIST",
+        frozenset(
+            {
+                catalogue.PRODUCT_CODE,
+                catalogue.CHEQUE_NOTICE_PRODUCT_CODE,
+            }
+        ),
+    )
+    manifest = release_manifest(catalogue.CHEQUE_NOTICE_PRODUCT_CODE)
+    now = utc_now()
+    record_approval(
+        db,
+        {
+            "reviewer_name": "Synthetic Verified Advocate",
+            "reviewer_enrolment_ref": "SYNTHETIC-REVIEW-REF",
+            "authority_statement": "Approved exact beta intake package",
+            "authenticated_method": "NAMED_MFA_AND_SIGNED_RECORD",
+            "authenticated_at": (now - timedelta(minutes=1)).isoformat(),
+            "next_review_at": (now + timedelta(days=30)).isoformat(),
+            "decision": "APPROVED",
+            "template_aggregate_hash": manifest["template_aggregate_hash"],
+            "golden_artifact_hashes": manifest["golden_artifact_hashes"],
+        },
+        recorded_by="beta-test-operator",
+        product_code=catalogue.CHEQUE_NOTICE_PRODUCT_CODE,
+    )
     user = User(whatsapp_id="919900003333", case_id="NS-PHASEE03")
     db.add(user)
     db.flush()
 
-    with pytest.raises(
-        intake.ChequeNoticeFlowError,
-        match="cheque_notice_uat_not_configured",
-    ):
-        intake.create_or_resume_notice_order(db, user.id)
+    order = intake.create_or_resume_notice_order(db, user.id)
 
-    assert db.query(DocumentOrder).count() == 0
+    assert order.state == "INTAKE"
+    assert order.release_status == "BETA"
+    assert order.uat_only is False
+    assert order.price_minor is None

@@ -14,6 +14,9 @@ documentation. It describes the domain, not the implementation.
   per-customer, tester or cohort permission.
 - **Document Order**: One customer's attempt to use one Template Version,
   including its answer revisions, commercial snapshot and output entitlement.
+- **Customer Beta**: A globally visible, non-commercial questionnaire that
+  may save customer answers for product feedback but cannot create payment,
+  artifact, advocate-work or legal-service entitlement.
 - **Answer Revision**: An immutable revision of facts entered for a Document
   Order.
 - **Confirmed Snapshot**: The exact Answer Revision explicitly confirmed by
@@ -32,8 +35,8 @@ documentation. It describes the domain, not the implementation.
 - **Advocate-Issued Notice**: A separately priced service in which a Verified
   Advocate accepts one matter, approves an immutable quote, reviews the
   customer's evidence and issues one exact locked PDF. The cheque-notice
-  package is registered privately after Phase D, but it is not globally
-  allowlisted or published.
+  package may expose only its Customer Beta questionnaire; the
+  Advocate-Issued Notice service itself is not published.
 - **Verified Advocate**: An active advocate whose enrolment evidence and
   product authority scope have been recorded before assignment.
 - **Advocate Identity**: A named password-plus-TOTP identity linked one-to-one

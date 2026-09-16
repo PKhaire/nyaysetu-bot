@@ -21,6 +21,7 @@ from models import (
     utc_now,
 )
 from services.document_artifact_vault import S3ArtifactVault
+from services.document_customer_release import document_commerce_disabled
 from services.document_catalogue import (
     DocumentProduct,
     product_availability,
@@ -162,6 +163,8 @@ def _store_rendered(db, order, vault, rendered, *, expires_at):
 def build_preview(db, order: DocumentOrder, *, vault=None) -> WorkflowResult:
     """Render/store a watermarked preview only for an approved exact package."""
 
+    if document_commerce_disabled(order):
+        return WorkflowResult(False, "BETA_COMMERCE_DISABLED")
     if order.state not in {"CONFIRMED", "PREVIEW_READY"}:
         return WorkflowResult(False, "DOCUMENT_NOT_CONFIRMED")
     product, product_error = _resolve_order_product(order)
@@ -217,6 +220,8 @@ def request_payment(
 ) -> WorkflowResult:
     """Create a payment entitlement only after release/storage evidence."""
 
+    if document_commerce_disabled(order):
+        return WorkflowResult(False, "BETA_COMMERCE_DISABLED")
     product, product_error = _resolve_order_product(order)
     if product_error:
         order.release_status = "BLOCKED"
@@ -264,6 +269,8 @@ def preview_link_for_user(
 ) -> WorkflowResult:
     """Issue an owner-authorized, short-lived watermarked preview URL."""
 
+    if document_commerce_disabled(order):
+        return WorkflowResult(False, "BETA_COMMERCE_DISABLED")
     if order.user_id != user.id or order.state not in {
         "PREVIEW_READY",
         "PAYMENT_PENDING",
@@ -308,6 +315,8 @@ def _apply_verified_payment(
 ) -> WorkflowResult:
     """Grant final artifacts after the caller verifies current payment evidence."""
 
+    if document_commerce_disabled(order):
+        return WorkflowResult(False, "BETA_COMMERCE_DISABLED")
     if order.payment_processed:
         if order.razorpay_payment_id == payment_id:
             return WorkflowResult(True, "ALREADY_PROCESSED", order)
@@ -426,6 +435,8 @@ def download_links_for_user(
 ) -> WorkflowResult:
     """Authorize the owning user and issue bounded URLs without persisting them."""
 
+    if document_commerce_disabled(order):
+        return WorkflowResult(False, "BETA_COMMERCE_DISABLED")
     if order.user_id != user.id:
         db.add(
             DocumentAccessEvent(

@@ -152,7 +152,13 @@ def test_deployment_commands_and_render_release_controls_exist():
     )
     assert (
         "- key: DOCUMENT_STUDIO_PRODUCT_ALLOWLIST\n"
-        "        value: mh_residential_leave_licence_11m_self_service"
+        "        value: "
+        "mh_residential_leave_licence_11m_self_service,"
+        "in_ni138_single_cheque_individual_advocate_issued"
+        in blueprint
+    )
+    assert (
+        '- key: DOCUMENT_STUDIO_CUSTOMER_MODE\n        value: "beta"'
         in blueprint
     )
     assert "DOCUMENT_STUDIO_UAT_ONLY" not in blueprint
@@ -190,10 +196,12 @@ def test_render_only_schedules_existing_operational_modules():
     assert 'schedule: "*/10 * * * *"' in blueprint
 
 
-def test_cheque_notice_first_slice_cannot_be_enabled_in_production(
+def test_cheque_notice_beta_can_be_enabled_in_production_with_published_flow(
     monkeypatch,
     app_module,
 ):
+    from services import document_customer_release
+
     configured = SimpleNamespace(
         ok=True,
         reason_code="CONFIGURED",
@@ -227,14 +235,36 @@ def test_cheque_notice_first_slice_cannot_be_enabled_in_production(
         "_deployment_configuration_is_valid",
         lambda **_kwargs: True,
     )
+    monkeypatch.setattr(
+        document_customer_release,
+        "DOCUMENT_STUDIO_CUSTOMER_MODE",
+        "beta",
+    )
+    monkeypatch.setattr(
+        app_module,
+        "WHATSAPP_CHEQUE_NOTICE_FLOW_ID",
+        "123456789012345",
+    )
+    monkeypatch.setattr(
+        app_module,
+        "WHATSAPP_CHEQUE_NOTICE_FLOW_MODE",
+        "published",
+    )
+    monkeypatch.setattr(
+        app_module,
+        "flow_private_key_is_valid",
+        lambda *_args, **_kwargs: True,
+    )
 
-    assert app_module._production_configuration_is_valid() is False
+    assert app_module._production_configuration_is_valid() is True
 
 
 def test_cheque_notice_staging_gate_requires_flow_configuration(
     monkeypatch,
     app_module,
 ):
+    from services import document_customer_release
+
     configured = SimpleNamespace(
         ok=True,
         reason_code="CONFIGURED",
@@ -284,6 +314,18 @@ def test_cheque_notice_staging_gate_requires_flow_configuration(
         "WHATSAPP_CHEQUE_NOTICE_FLOW_MODE",
         "draft",
     )
+    monkeypatch.setattr(
+        document_customer_release,
+        "DOCUMENT_STUDIO_CUSTOMER_MODE",
+        "live",
+    )
+    assert app_module._staging_configuration_is_valid() is False
+
+    monkeypatch.setattr(
+        document_customer_release,
+        "DOCUMENT_STUDIO_CUSTOMER_MODE",
+        "beta",
+    )
     assert app_module._staging_configuration_is_valid() is True
 
 
@@ -326,6 +368,7 @@ def test_render_pins_operational_policy_for_maintenance():
         "PROCESSED_MESSAGE_TTL_DAYS": "30",
         "CASE_BRIEF_UNATTACHED_TTL_DAYS": "7",
         "DOCUMENT_STUDIO_DAILY_CAPACITY": "10",
+        "DOCUMENT_STUDIO_CUSTOMER_MODE": "beta",
         "ANALYTICS_EVENT_TTL_DAYS": "90",
         "OUTBOX_COMPLETED_TTL_DAYS": "30",
         "PAYMENT_LINK_TTL_MINUTES": "16",

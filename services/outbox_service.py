@@ -37,6 +37,7 @@ from models import (
     utc_now,
 )
 from services.document_workflow import download_links_for_user
+from services.document_customer_release import document_commerce_disabled
 from services.advocate_issued_workflow import (
     IssueIssuedArtifactLink,
     WorkflowActor,
@@ -113,6 +114,7 @@ _PERMANENT_ERROR_CODES = frozenset(
         "invalid_document_final_delivery_payload",
         "document_final_delivery_order_not_found",
         "document_final_delivery_user_not_found",
+        "document_final_delivery_beta_disabled",
         "document_final_delivery_not_available",
         "document_final_delivery_ambiguous",
         "document_final_delivery_rejected",
@@ -604,6 +606,8 @@ def _handle_document_final_delivery(
     order = db.get(DocumentOrder, document_order_id)
     if not order:
         raise DeliveryFailure("document_final_delivery_order_not_found")
+    if document_commerce_disabled(order):
+        raise DeliveryFailure("document_final_delivery_beta_disabled")
     user = db.get(User, order.user_id)
     if not user:
         raise DeliveryFailure("document_final_delivery_user_not_found")

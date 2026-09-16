@@ -55,7 +55,8 @@ of outcome.
   out-of-scope matters are routed out before payment.
 - Immutable answer revisions, an exact advocate-approved release gate,
   watermarked preview PDF, exact Razorpay payment verification, and private
-  time-limited PDF/DOCX delivery.
+  time-limited PDF/DOCX delivery in the retained future live mode. The first
+  release uses Customer Beta mode and cannot reach those commercial actions.
 
 ## Main navigation
 
@@ -87,7 +88,22 @@ for everyone; enabling it makes the same catalogue visible to every user. A
 separate release gate still blocks preview/payment if the exact deployed
 template package lacks a current authenticated advocate approval.
 
-## Draft Studio flow
+## Draft Studio flow and future live design
+
+### First-release Customer Beta
+
+Booking Consultation is the only live paid service. Both the residential
+questionnaire and Cheque-bounce Notice questionnaire are globally visible
+Customer Betas. Users may enter, save, resume, review and confirm facts for
+product feedback, but a beta order has no price and cannot create a preview,
+artifact, payment link, advocate assignment, quote, issued notice or legal
+service. The residential flow ends after confirmed facts; the cheque flow ends
+at `BETA_COMPLETE`. Beta data follows the unpaid-draft retention schedule.
+
+The paid artifact behavior documented below remains implemented for a future
+explicit `live` release and is not part of the first production launch.
+
+### Future live residential service (not part of the first launch)
 
 The first governed product is
 `mh_residential_leave_licence_11m_self_service`: an English self-service draft
@@ -464,9 +480,11 @@ production provisioning gates below are complete:
   manual operator notification procedure. Any future email-enabled release
   requires approved Amazon SES identity/domain, authentication records,
   production access, monitored configuration set, and recipients.
-- Draft Studio remains disabled until the exact RC9 hashes have a current
-  authenticated licensed-Maharashtra-advocate approval, a non-zero reviewed
-  price, a private S3 bucket with least-privilege credentials and lifecycle
-  controls, and tested preview/payment/final-download/expiry evidence.
+- Customer Beta remains disabled until both exact questionnaire packages have
+  current authenticated approval, retention controls are configured, the
+  encrypted cheque Flow is published and healthy, and tests prove preview,
+  payment, artifacts and advocate work are unreachable. A future `live`
+  document release additionally requires reviewed pricing, private storage
+  and complete preview/payment/final-download/expiry evidence.
 
 Passing unit tests alone does not satisfy these external acceptance criteria.

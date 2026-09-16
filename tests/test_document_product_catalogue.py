@@ -20,6 +20,7 @@ from models import (
     utc_now,
 )
 from services import document_catalogue as catalogue
+from services import document_customer_release as customer_release
 from services import document_renderer as renderer
 from services.document_payment_service import create_document_payment_link
 from services.document_release_service import (
@@ -31,6 +32,7 @@ from services.document_studio_rc9_service import (
     parse_product_id,
     parse_product_number,
     parse_product_page_id,
+    product_selection_details,
     product_rows,
 )
 from services.document_workflow import build_preview, download_links_for_user
@@ -57,6 +59,15 @@ EXPECTED_PRODUCT_IDENTITY = {
         "bc41414a90d312fa2ab6a3db50fa0b74849b86c41d34deb65749c6a603d5fcbc"
     ),
 }
+
+
+@pytest.fixture(autouse=True)
+def _live_customer_mode(monkeypatch):
+    monkeypatch.setattr(
+        customer_release,
+        "DOCUMENT_STUDIO_CUSTOMER_MODE",
+        "live",
+    )
 
 
 def _enable_current_product(monkeypatch) -> None:
@@ -214,6 +225,55 @@ def test_registry_exposes_only_enabled_allowlisted_products(monkeypatch):
         frozenset(),
     )
     assert catalogue.visible_products() == ()
+
+
+def test_beta_catalogue_hides_prices_and_live_delivery_claims(monkeypatch):
+    _enable_current_product(monkeypatch)
+    monkeypatch.setattr(
+        catalogue,
+        "DOCUMENT_STUDIO_PRODUCT_ALLOWLIST",
+        frozenset(
+            {catalogue.PRODUCT_CODE, catalogue.CHEQUE_NOTICE_PRODUCT_CODE}
+        ),
+    )
+    monkeypatch.setattr(
+        customer_release,
+        "DOCUMENT_STUDIO_CUSTOMER_MODE",
+        "beta",
+    )
+
+    rows = product_rows(None, lambda _user, key: key)
+
+    assert len(rows) == 2
+    for row in rows:
+        description = row["description"].lower()
+        assert "beta" in description
+        assert "no payment" in description
+        assert "final" not in description
+        assert "inr" not in description
+        assert "quote" not in description
+
+
+def test_beta_product_selection_repeats_the_non_commercial_boundary(
+    monkeypatch,
+):
+    _enable_current_product(monkeypatch)
+    monkeypatch.setattr(
+        customer_release,
+        "DOCUMENT_STUDIO_CUSTOMER_MODE",
+        "beta",
+    )
+
+    overview, start_label = product_selection_details(
+        None,
+        lambda _user, key: key,
+        catalogue.PRODUCT_CODE,
+    )
+
+    assert "beta" in overview.lower()
+    assert "no payment" in overview.lower()
+    assert "no final document" in overview.lower()
+    assert start_label == "Try beta"
 
 
 def test_runtime_registry_membership_is_immutable():

@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 import admin
 from db import Base
 from services import document_catalogue as catalogue
+from services import document_customer_release
 from models import (
     AdminAuditEvent,
     Advocate,
@@ -63,6 +64,11 @@ def admin_db(monkeypatch, app_module):
         "strong-admin-test-password",
     )
     monkeypatch.setattr(admin, "ADMIN_MFA_ENCRYPTION_KEY", ADMIN_MFA_KEY)
+    monkeypatch.setattr(
+        document_customer_release,
+        "DOCUMENT_STUDIO_CUSTOMER_MODE",
+        "live",
+    )
     original_config = {
         key: app_module.app.config.get(key)
         for key in (
