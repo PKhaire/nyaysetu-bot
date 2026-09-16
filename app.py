@@ -226,7 +226,6 @@ from services.cheque_notice_intake_service import (
     cancel_notice_order,
     completion_for_user as cheque_notice_completion_for_user,
     create_or_resume_notice_order,
-    flow_launch_data as cheque_notice_flow_launch_data,
     handle_notice_flow_request,
     issue_notice_flow_token,
     latest_resumable_notice_order,
@@ -1330,8 +1329,7 @@ def send_cheque_notice_intake_flow(wa_id, order) -> None:
         wa_id,
         flow_id=WHATSAPP_CHEQUE_NOTICE_FLOW_ID,
         flow_token=token,
-        screen=order.current_step,
-        data=cheque_notice_flow_launch_data(order),
+        flow_action="data_exchange",
         mode=WHATSAPP_CHEQUE_NOTICE_FLOW_MODE,
         header="Cheque notice intake",
         body=(

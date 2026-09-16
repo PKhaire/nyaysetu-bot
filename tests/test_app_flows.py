@@ -488,16 +488,10 @@ def test_cheque_notice_beta_starts_the_secure_fact_flow(
     flow_call = transport_spies["flow"].call_args
     assert flow_call.args == ("919911112222",)
     assert flow_call.kwargs["flow_id"] == "123456789012345"
-    assert flow_call.kwargs["screen"] == "SUITABILITY"
+    assert flow_call.kwargs["flow_action"] == "data_exchange"
+    assert "screen" not in flow_call.kwargs
+    assert "data" not in flow_call.kwargs
     assert flow_call.kwargs["mode"] == flow_mode
-    assert flow_call.kwargs["data"] == {
-        "claimant_scope": "",
-        "instrument_scope": "",
-        "liability_scope": "",
-        "conflict_scope": "",
-        "has_error": False,
-        "error_message": "",
-    }
 
 
 def test_cheque_notice_beta_completion_acknowledges_no_service_or_payment(

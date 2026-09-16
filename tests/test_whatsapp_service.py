@@ -141,6 +141,37 @@ def test_flow_message_uses_meta_navigate_contract(monkeypatch):
     }
 
 
+def test_flow_message_uses_endpoint_init_contract_without_launch_payload(
+    monkeypatch,
+):
+    _configure_transport(monkeypatch)
+    request = MagicMock(return_value=_response(200, {"messages": [{"id": "1"}]}))
+    monkeypatch.setattr(whatsapp._HTTP_CLIENT, "request", request)
+
+    result = whatsapp.send_flow(
+        "919876543210",
+        flow_id="123456789012345",
+        flow_token="synthetic-signed-flow-token",
+        flow_action="data_exchange",
+        body="Continue the secure fact form.",
+        cta="Continue fact form",
+        mode="draft",
+    )
+
+    assert result["ok"] is True
+    payload = request.call_args.kwargs["json"]
+    parameters = payload["interactive"]["action"]["parameters"]
+    assert parameters == {
+        "flow_message_version": "3",
+        "flow_token": "synthetic-signed-flow-token",
+        "flow_id": "123456789012345",
+        "flow_cta": "Continue fact form",
+        "flow_action": "data_exchange",
+        "mode": "draft",
+    }
+    assert "flow_action_payload" not in parameters
+
+
 @pytest.mark.parametrize(
     ("flow_id", "mode", "screen"),
     (

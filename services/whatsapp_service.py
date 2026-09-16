@@ -338,7 +338,10 @@ def _validate_flow_message(interactive: dict) -> None:
     if not isinstance(parameters, dict):
         raise WhatsAppValidationError("flow parameters are required")
     parameters["flow_message_version"] = "3"
-    parameters["flow_action"] = "navigate"
+    flow_action = str(parameters.get("flow_action") or "navigate").strip().lower()
+    if flow_action not in {"navigate", "data_exchange"}:
+        raise WhatsAppValidationError("invalid flow action")
+    parameters["flow_action"] = flow_action
     flow_id = _validate_identifier(
         parameters.get("flow_id"),
         FLOW_ID_MAX,
@@ -365,6 +368,12 @@ def _validate_flow_message(interactive: dict) -> None:
     else:
         parameters.pop("mode", None)
     payload = parameters.get("flow_action_payload")
+    if flow_action == "data_exchange":
+        if payload is not None:
+            raise WhatsAppValidationError(
+                "flow action payload is not allowed for data exchange"
+            )
+        return
     if not isinstance(payload, dict):
         raise WhatsAppValidationError("flow action payload is required")
     screen = _validate_identifier(
@@ -678,15 +687,30 @@ def send_flow(
     *,
     flow_id: str,
     flow_token: str,
-    screen: str,
-    data: dict[str, object],
     body: str,
+    screen: str | None = None,
+    data: dict[str, object] | None = None,
+    flow_action: str = "navigate",
     cta: str = "Open secure form",
     header: str = "Draft Studio",
     footer: str = "You can leave and resume later.",
     mode: str = "published",
 ):
     """Open one Meta-hosted Flow backed by our encrypted endpoint."""
+
+    parameters = {
+        "flow_message_version": "3",
+        "flow_token": flow_token,
+        "flow_id": flow_id,
+        "flow_cta": cta,
+        "flow_action": flow_action,
+        "mode": mode,
+    }
+    if flow_action == "navigate":
+        parameters["flow_action_payload"] = {
+            "screen": screen,
+            "data": data,
+        }
 
     return _send(
         {
@@ -700,18 +724,7 @@ def send_flow(
                 "footer": {"text": footer},
                 "action": {
                     "name": "flow",
-                    "parameters": {
-                        "flow_message_version": "3",
-                        "flow_token": flow_token,
-                        "flow_id": flow_id,
-                        "flow_cta": cta,
-                        "flow_action": "navigate",
-                        "mode": mode,
-                        "flow_action_payload": {
-                            "screen": screen,
-                            "data": data,
-                        },
-                    },
+                    "parameters": parameters,
                 },
             },
         }
