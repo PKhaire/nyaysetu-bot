@@ -403,6 +403,14 @@ def test_cheque_notice_start_opens_only_the_staging_fact_flow(
     assert flow_call.kwargs["flow_id"] == "123456789012345"
     assert flow_call.kwargs["screen"] == "SUITABILITY"
     assert flow_call.kwargs["mode"] == "draft"
+    assert flow_call.kwargs["data"] == {
+        "claimant_scope": "",
+        "instrument_scope": "",
+        "liability_scope": "",
+        "conflict_scope": "",
+        "has_error": False,
+        "error_message": "",
+    }
 
 
 def test_cheque_notice_completion_acknowledges_saved_facts_without_payment(

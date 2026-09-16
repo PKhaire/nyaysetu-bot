@@ -103,6 +103,14 @@ def test_flow_message_uses_meta_navigate_contract(monkeypatch):
         flow_id="123456789012345",
         flow_token="synthetic-signed-flow-token",
         screen="SUITABILITY",
+        data={
+            "claimant_scope": "",
+            "instrument_scope": "",
+            "liability_scope": "",
+            "conflict_scope": "",
+            "has_error": False,
+            "error_message": "",
+        },
         body="Complete the secure fact form.",
         cta="Open fact form",
         mode="draft",
@@ -119,7 +127,17 @@ def test_flow_message_uses_meta_navigate_contract(monkeypatch):
         "flow_cta": "Open fact form",
         "flow_action": "navigate",
         "mode": "draft",
-        "flow_action_payload": {"screen": "SUITABILITY", "data": {}},
+        "flow_action_payload": {
+            "screen": "SUITABILITY",
+            "data": {
+                "claimant_scope": "",
+                "instrument_scope": "",
+                "liability_scope": "",
+                "conflict_scope": "",
+                "has_error": False,
+                "error_message": "",
+            },
+        },
     }
 
 
@@ -147,8 +165,33 @@ def test_invalid_flow_message_fails_before_network_io(
             flow_id=flow_id,
             flow_token="synthetic-signed-flow-token",
             screen=screen,
+            data={"has_error": False},
             body="Complete the secure fact form.",
             mode=mode,
+        )
+
+    request.assert_not_called()
+
+
+def test_flow_message_rejects_empty_dynamic_data_before_network_io(monkeypatch):
+    _configure_transport(monkeypatch)
+    request = MagicMock(
+        return_value=_response(200, {"messages": [{"id": "1"}]})
+    )
+    monkeypatch.setattr(whatsapp._HTTP_CLIENT, "request", request)
+
+    with pytest.raises(
+        whatsapp.WhatsAppValidationError,
+        match="invalid flow action data",
+    ):
+        whatsapp.send_flow(
+            "919876543210",
+            flow_id="123456789012345",
+            flow_token="synthetic-signed-flow-token",
+            screen="SUITABILITY",
+            data={},
+            body="Complete the secure fact form.",
+            mode="draft",
         )
 
     request.assert_not_called()

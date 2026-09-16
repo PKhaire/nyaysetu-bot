@@ -376,7 +376,7 @@ def _validate_flow_message(interactive: dict) -> None:
         raise WhatsAppValidationError("invalid flow screen")
     payload["screen"] = screen
     data = payload.get("data", {})
-    if not isinstance(data, dict) or len(data) > 20:
+    if not isinstance(data, dict) or not data or len(data) > 20:
         raise WhatsAppValidationError("invalid flow action data")
     payload["data"] = data
     try:
@@ -679,6 +679,7 @@ def send_flow(
     flow_id: str,
     flow_token: str,
     screen: str,
+    data: dict[str, object],
     body: str,
     cta: str = "Open secure form",
     header: str = "Draft Studio",
@@ -708,7 +709,7 @@ def send_flow(
                         "mode": mode,
                         "flow_action_payload": {
                             "screen": screen,
-                            "data": {},
+                            "data": data,
                         },
                     },
                 },

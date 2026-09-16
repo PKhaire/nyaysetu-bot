@@ -332,6 +332,14 @@ def _screen_data(
     return data
 
 
+def flow_launch_data(order: DocumentOrder) -> dict[str, object]:
+    """Return typed data required to launch the order's current Flow screen."""
+
+    if order.state != "INTAKE" or order.current_step not in FLOW_SCREENS:
+        raise ChequeNoticeFlowError("flow_already_completed")
+    return _screen_data(order, order.current_step)
+
+
 def _review_summary(order: DocumentOrder) -> str:
     answers = _answers(order)
     return (
