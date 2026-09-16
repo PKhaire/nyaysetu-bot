@@ -5,7 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from services.cheque_notice_intake_service import FLOW_SCREENS, SCREEN_FIELDS
+from services.cheque_notice_intake_service import (
+    FLOW_ENTRY_SCREEN,
+    FLOW_SCREENS,
+    SCREEN_FIELDS,
+)
 from services.cheque_notice_product import QUESTION_DEFINITIONS
 
 
@@ -30,9 +34,10 @@ def test_flow_asset_matches_the_versioned_six_section_field_schema():
 
     assert flow["version"] == "7.3"
     assert flow["data_api_version"] == "3.0"
-    assert tuple(screens) == (*FLOW_SCREENS, "SUCCESS")
+    assert tuple(screens) == (FLOW_ENTRY_SCREEN, *FLOW_SCREENS, "SUCCESS")
     assert set(flow["routing_model"]) == set(screens)
     assert flow["routing_model"]["SUCCESS"] == []
+    assert flow["routing_model"][FLOW_ENTRY_SCREEN] == list(FLOW_SCREENS)
 
     for screen_id in FLOW_SCREENS:
         form, children = _components(screens[screen_id])
@@ -100,7 +105,7 @@ def test_flow_routes_forward_from_one_entry_and_number_bindings_are_numeric():
             assert screen_order[target] > screen_order[source]
 
     assert [screen_id for screen_id, count in inbound.items() if count == 0] == [
-        "SUITABILITY"
+        FLOW_ENTRY_SCREEN
     ]
 
     for screen_id, field in (

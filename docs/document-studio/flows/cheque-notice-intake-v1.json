@@ -2,6 +2,7 @@
   "version": "7.3",
   "data_api_version": "3.0",
   "routing_model": {
+    "START_GATE": ["SUITABILITY", "PEOPLE_ADDRESSES", "DEBT_CHEQUE", "DISHONOUR", "EVIDENCE_CHANGES", "REVIEW_HANDOVER"],
     "SUITABILITY": ["PEOPLE_ADDRESSES"],
     "PEOPLE_ADDRESSES": ["DEBT_CHEQUE"],
     "DEBT_CHEQUE": ["DISHONOUR"],
@@ -11,6 +12,41 @@
     "SUCCESS": []
   },
   "screens": [
+    {
+      "id": "START_GATE",
+      "title": "Cheque notice beta",
+      "data": {
+        "entry_heading": {"type": "string", "__example__": "Start cheque notice beta"},
+        "entry_message": {"type": "string", "__example__": "Continue to your saved section."}
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "${data.entry_heading}"
+          },
+          {
+            "type": "TextBody",
+            "text": "${data.entry_message}"
+          },
+          {
+            "type": "TextBody",
+            "text": "Beta only. Your answers help improve the questionnaire. No payment, final notice, advocate review or legal service is created."
+          },
+          {
+            "type": "Footer",
+            "label": "Continue",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "entry_action": "CONTINUE"
+              }
+            }
+          }
+        ]
+      }
+    },
     {
       "id": "SUITABILITY",
       "title": "1 of 6 - Suitability",

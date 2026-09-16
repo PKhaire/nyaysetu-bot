@@ -44,6 +44,7 @@ from services.document_release_service import release_gate
 
 
 DOCUMENT_NOTICE_FLOW_PENDING = "DOCUMENT_NOTICE_FLOW_PENDING"
+FLOW_ENTRY_SCREEN = "START_GATE"
 FLOW_START_SCREEN = "SUITABILITY"
 FLOW_TERMINAL_SCREEN = "SUCCESS"
 FLOW_SCREENS = (
@@ -369,6 +370,26 @@ def flow_launch_data(order: DocumentOrder) -> dict[str, object]:
     return _screen_data(order, order.current_step)
 
 
+def _entry_screen_data(order: DocumentOrder) -> dict[str, str]:
+    section_number = FLOW_SCREENS.index(order.current_step) + 1
+    if order.current_step == FLOW_START_SCREEN:
+        return {
+            "entry_heading": "Start cheque notice beta",
+            "entry_message": (
+                "Continue to section 1 of 6. No payment, final notice, "
+                "advocate review or legal service will be created."
+            ),
+        }
+    section_name = order.current_step.replace("_", " ").title()
+    return {
+        "entry_heading": "Continue saved beta draft",
+        "entry_message": (
+            "Your completed sections are saved. Continue at section "
+            f"{section_number} of {len(FLOW_SCREENS)} - {section_name}."
+        ),
+    }
+
+
 def _review_summary(order: DocumentOrder) -> str:
     answers = _answers(order)
     return (
@@ -450,13 +471,25 @@ def handle_notice_flow_request(db, request_body: object) -> dict[str, object]:
         if order.state != "INTAKE" or order.current_step not in FLOW_SCREENS:
             raise ChequeNoticeFlowError("flow_already_completed")
         return {
-            "screen": order.current_step,
-            "data": _screen_data(order, order.current_step),
+            "screen": FLOW_ENTRY_SCREEN,
+            "data": _entry_screen_data(order),
         }
     if action != "data_exchange":
         raise ChequeNoticeFlowError("unsupported_flow_action")
 
     screen = str(request_body.get("screen") or "").strip().upper()
+    if screen == FLOW_ENTRY_SCREEN:
+        if (
+            order.state != "INTAKE"
+            or order.current_step not in FLOW_SCREENS
+            or not isinstance(data, dict)
+            or data != {"entry_action": "CONTINUE"}
+        ):
+            raise ChequeNoticeFlowError("invalid_flow_entry")
+        return {
+            "screen": order.current_step,
+            "data": _screen_data(order, order.current_step),
+        }
     if (
         order.state != "INTAKE"
         or screen not in FLOW_SCREENS

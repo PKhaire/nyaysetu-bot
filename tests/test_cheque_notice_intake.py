@@ -120,7 +120,19 @@ def test_customer_can_complete_six_sections_without_payment_or_notice(
         db,
         {"action": "INIT", "flow_token": token},
     )
-    assert opened["screen"] == "SUITABILITY"
+    assert opened["screen"] == "START_GATE"
+    assert "start" in opened["data"]["entry_heading"].lower()
+
+    entered = intake.handle_notice_flow_request(
+        db,
+        {
+            "action": "data_exchange",
+            "flow_token": token,
+            "screen": "START_GATE",
+            "data": {"entry_action": "CONTINUE"},
+        },
+    )
+    assert entered["screen"] == "SUITABILITY"
 
     answers = golden_answers()
     for index, screen in enumerate(intake.FLOW_SCREENS):
@@ -177,8 +189,20 @@ def test_saved_sections_resume_at_the_next_section(
     )
 
     assert resumed.id == order.id
-    assert reopened["screen"] == "PEOPLE_ADDRESSES"
-    assert "claimant_scope" not in reopened["data"]
+    assert reopened["screen"] == "START_GATE"
+    assert "continue" in reopened["data"]["entry_heading"].lower()
+
+    continued = intake.handle_notice_flow_request(
+        db,
+        {
+            "action": "data_exchange",
+            "flow_token": second_token,
+            "screen": "START_GATE",
+            "data": {"entry_action": "CONTINUE"},
+        },
+    )
+    assert continued["screen"] == "PEOPLE_ADDRESSES"
+    assert "claimant_scope" not in continued["data"]
 
 
 def test_beta_intake_never_resumes_a_pre_beta_cheque_order(
