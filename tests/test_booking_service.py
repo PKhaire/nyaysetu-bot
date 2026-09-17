@@ -368,3 +368,71 @@ def test_confirm_missing_booking_and_expire_with_supplied_session(db):
     assert expired_count == 1
     assert db.get(Booking, old_booking.id).status == BookingStatus.EXPIRED
     assert db.get(Booking, fresh_booking.id).status == BookingStatus.PENDING
+
+
+def test_orphan_link_cancellation_log_omits_provider_identifier(caplog):
+    payment_link_id = "plink_SensitiveProviderReference"
+    fake_client = MagicMock()
+    fake_client.payment_link.cancel.side_effect = RuntimeError(
+        "provider cancellation failed"
+    )
+
+    with caplog.at_level("ERROR", logger="booking_service"):
+        booking_service._cancel_payment_link_safely(
+            fake_client,
+            payment_link_id,
+        )
+
+    assert "Failed to cancel orphaned Razorpay link" in caplog.text
+    assert payment_link_id not in caplog.text
+
+
+def test_duplicate_payment_log_omits_provider_identifier(db, caplog):
+    payment_id = "pay_SensitiveProviderReference"
+    existing = make_booking(
+        db,
+        suffix="existing",
+        status=BookingStatus.PAID,
+        payment_processed=True,
+        payment_link_id="plink_existing",
+        payment_id=payment_id,
+    )
+    pending = make_booking(
+        db,
+        suffix="pending",
+        payment_link_id="plink_pending",
+    )
+
+    with caplog.at_level("ERROR", logger="booking_service"):
+        result = booking_service.mark_booking_as_paid(
+            db=db,
+            payment_link_id=pending.razorpay_payment_link_id,
+            payment_id=payment_id,
+            payment_mode="test",
+        )
+
+    assert result is None
+    assert "another booking" in caplog.text
+    assert f"booking_id={existing.id}" in caplog.text
+    assert payment_id not in caplog.text
+
+
+def test_payment_update_failure_log_omits_provider_identifier(caplog):
+    payment_link_id = "plink_SensitiveProviderReference"
+    failing_db = MagicMock()
+    failing_db.query.side_effect = RuntimeError("database unavailable")
+
+    with (
+        caplog.at_level("ERROR", logger="booking_service"),
+        pytest.raises(RuntimeError, match="database unavailable"),
+    ):
+        booking_service.mark_booking_as_paid(
+            db=failing_db,
+            payment_link_id=payment_link_id,
+            payment_id="pay_SensitiveProviderReference",
+            payment_mode="test",
+        )
+
+    failing_db.rollback.assert_called_once_with()
+    assert "Atomic payment update failed" in caplog.text
+    assert payment_link_id not in caplog.text

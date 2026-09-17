@@ -196,10 +196,7 @@ def _cancel_payment_link_safely(client, payment_link_id: str | None) -> None:
         if callable(cancel):
             cancel(payment_link_id)
     except Exception:
-        logger.exception(
-            "Failed to cancel orphaned Razorpay link | payment_link_id=%s",
-            payment_link_id,
-        )
+        logger.exception("Failed to cancel orphaned Razorpay link")
 
 
 def create_token():
@@ -874,8 +871,9 @@ def mark_booking_as_paid(
         )
         if duplicate_payment:
             logger.error(
-                "Payment id already belongs to another booking | payment_id=%s",
-                payment_id,
+                "Payment id already belongs to another booking | "
+                "booking_id=%s",
+                duplicate_payment.id,
             )
             return None
 
@@ -943,10 +941,7 @@ def mark_booking_as_paid(
 
     except Exception:
         db.rollback()
-        logger.exception(
-            "Atomic payment update failed | payment_link_id=%s",
-            payment_link_id,
-        )
+        logger.exception("Atomic payment update failed")
         raise
 
 
