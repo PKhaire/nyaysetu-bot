@@ -527,6 +527,7 @@ def appointments():
         "admin_appointments.html",
         operator_id=_operator_id(),
         csrf_token=_csrf_token(),
+        booking_slots=tuple(SLOT_MAP.items()),
     )
 
 

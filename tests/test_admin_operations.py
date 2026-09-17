@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import re
 from datetime import date, timedelta
 from datetime import datetime, timezone
 
@@ -32,6 +33,7 @@ from models import (
 from services.document_operations_service import DocumentOperationResult
 from services.document_catalogue import PRODUCT_CODE
 from services.engagement_service import booking_status_message
+from services.booking_service import SLOT_MAP
 from services.admin_identity_service import (
     begin_operator_enrollment,
     confirm_operator_enrollment,
@@ -245,6 +247,26 @@ def test_admin_browser_login_dashboard_and_security_headers(client, admin_db):
     assert dashboard.headers["Cache-Control"] == "no-store, max-age=0"
     assert dashboard.headers["X-Frame-Options"] == "DENY"
     assert "default-src 'none'" in dashboard.headers["Content-Security-Policy"]
+
+
+def test_admin_reschedule_options_match_customer_booking_slots(
+    client,
+    admin_db,
+):
+    _browser_login(client)
+
+    dashboard = client.get("/admin/appointments")
+    html = dashboard.get_data(as_text=True)
+    slot_select = html.split('id="dialog-slot"', 1)[1].split(
+        "</select>",
+        1,
+    )[0]
+    rendered_values = re.findall(r'<option value="([^"]*)"', slot_select)
+
+    assert dashboard.status_code == 200
+    assert rendered_values == ["", *SLOT_MAP]
+    for code, label in SLOT_MAP.items():
+        assert f'<option value="{code}">{label}</option>' in slot_select
 
 
 def test_named_admin_browser_login_requires_password_and_authenticator_code(

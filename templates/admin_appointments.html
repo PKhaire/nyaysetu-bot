@@ -159,12 +159,9 @@
         <label for="dialog-slot">New time
           <select id="dialog-slot">
             <option value="">Select time</option>
-            <option value="10_11">10:00 AM – 11:00 AM</option>
-            <option value="11_12">11:00 AM – 12:00 PM</option>
-            <option value="12_13">12:00 PM – 1:00 PM</option>
-            <option value="14_15">2:00 PM – 3:00 PM</option>
-            <option value="15_16">3:00 PM – 4:00 PM</option>
-            <option value="16_17">4:00 PM – 5:00 PM</option>
+            {% for slot_code, slot_label in booking_slots %}
+            <option value="{{ slot_code }}">{{ slot_label }}</option>
+            {% endfor %}
           </select>
         </label>
       </div>
