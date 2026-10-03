@@ -311,11 +311,11 @@
       "version": "2026.3"
     },
     {
-      "bom-ref": "pkg:pypi/urllib3@2.7.0",
+      "bom-ref": "pkg:pypi/urllib3@2.8.0",
       "name": "urllib3",
-      "purl": "pkg:pypi/urllib3@2.7.0",
+      "purl": "pkg:pypi/urllib3@2.8.0",
       "type": "library",
-      "version": "2.7.0"
+      "version": "2.8.0"
     },
     {
       "bom-ref": "pkg:pypi/werkzeug@3.1.8",
@@ -372,7 +372,7 @@
         "pkg:pypi/typing-extensions@4.16.0",
         "pkg:pypi/typing-inspection@0.4.2",
         "pkg:pypi/tzdata@2026.3",
-        "pkg:pypi/urllib3@2.7.0",
+        "pkg:pypi/urllib3@2.8.0",
         "pkg:pypi/werkzeug@3.1.8"
       ],
       "ref": "pkg:generic/nyaysetu-bot@2026.07.31-rc3"
@@ -555,7 +555,7 @@
     },
     {
       "dependsOn": [],
-      "ref": "pkg:pypi/urllib3@2.7.0"
+      "ref": "pkg:pypi/urllib3@2.8.0"
     },
     {
       "dependsOn": [],
