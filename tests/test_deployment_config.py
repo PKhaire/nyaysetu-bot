@@ -147,7 +147,7 @@ def test_deployment_commands_and_render_release_controls_exist():
     assert "- key: ADMIN_MFA_ENCRYPTION_KEY\n        sync: false" in blueprint
     assert "- key: SECRET_KEY\n        generateValue: true" in blueprint
     assert (
-        '- key: DOCUMENT_STUDIO_ENABLED\n        value: "false"'
+        '- key: DOCUMENT_STUDIO_ENABLED\n        value: "true"'
         in blueprint
     )
     assert (
@@ -176,6 +176,19 @@ def test_deployment_commands_and_render_release_controls_exist():
     )
     assert "- key: WHATSAPP_CHEQUE_NOTICE_FLOW_ID" in blueprint
     assert "- key: WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY" in blueprint
+    assert (
+        "- key: WHATSAPP_CHEQUE_NOTICE_FLOW_ID\n        sync: false"
+        in blueprint
+    )
+    assert (
+        '- key: WHATSAPP_CHEQUE_NOTICE_FLOW_MODE\n        value: published'
+        in blueprint
+    )
+    assert (
+        "- key: WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY\n"
+        "        sync: false"
+        in blueprint
+    )
 
 
 def test_render_only_schedules_existing_operational_modules():
@@ -219,16 +232,16 @@ def test_cheque_notice_beta_can_be_enabled_in_production_with_published_flow(
         "synthetic-consent-v1",
     )
     monkeypatch.setattr(app_module, "DOCUMENT_STUDIO_DAILY_CAPACITY", 10)
-    monkeypatch.setattr(app_module, "DOCUMENT_STUDIO_S3_BUCKET", "synthetic")
+    monkeypatch.setattr(app_module, "DOCUMENT_STUDIO_S3_BUCKET", "")
     monkeypatch.setattr(
         app_module,
         "DOCUMENT_STUDIO_S3_ACCESS_KEY_ID",
-        "A" * 16,
+        "",
     )
     monkeypatch.setattr(
         app_module,
         "DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY",
-        "s" * 32,
+        "",
     )
     monkeypatch.setattr(
         app_module,

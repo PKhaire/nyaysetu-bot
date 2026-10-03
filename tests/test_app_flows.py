@@ -3,13 +3,14 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
 
 from models import (
     Booking,
+    BookingFulfillment,
     BookingStatus,
     CaseBrief,
     DocumentAnswerRevision,
@@ -26,6 +27,56 @@ from services import outbox_service
 
 
 WHATSAPP_SECRET = "test-whatsapp-secret"
+
+
+def test_completed_fulfillment_does_not_request_feedback_before_schedule(
+    app_module,
+    isolated_app_db,
+    transport_spies,
+):
+    wa_id = "919922223333"
+    db = isolated_app_db()
+    try:
+        user = User(
+            whatsapp_id=wa_id,
+            case_id="NS-FEEDBACK-FUTURE",
+            name="Future Consultation User",
+            flow_state="NORMAL",
+        )
+        booking = Booking(
+            whatsapp_id=wa_id,
+            name=user.name,
+            phone=wa_id,
+            state_name="Maharashtra",
+            district_name="Pune",
+            category="Family",
+            subcategory="Other Family Issue",
+            date=date(2099, 8, 3),
+            slot_code="10_11",
+            slot_readable="10:00 AM - 11:00 AM",
+            amount=499,
+            status=BookingStatus.COMPLETED,
+        )
+        db.add_all([user, booking])
+        db.flush()
+        fulfillment = BookingFulfillment(
+            booking_id=booking.id,
+            status="COMPLETED",
+            completed_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        )
+        db.add(fulfillment)
+        db.commit()
+
+        result = app_module.close_completed_consultation(db, user, wa_id)
+
+        assert result is False
+        db.refresh(user)
+        db.refresh(fulfillment)
+        assert user.flow_state == "NORMAL"
+        assert fulfillment.feedback_requested_at is None
+        transport_spies["list"].assert_not_called()
+    finally:
+        db.close()
 
 
 def _whatsapp_payload(

@@ -1408,6 +1408,7 @@ TRANSLATIONS["en"].update(
         ),
     }
 )
+
 TRANSLATIONS["hi"].update(
     {
         "brief_summary_prompt": (
@@ -1628,3 +1629,26 @@ TRANSLATIONS["mr"].update(
         ),
     }
 )
+
+# Presentation-only Draft Studio and case-brief overrides live separately so
+# the immutable document questionnaire remains easy to audit.
+from document_translations import (  # noqa: E402
+    APP_DOCUMENT_TRANSLATION_OVERRIDES,
+    BRIEF_TRANSLATION_OVERRIDES,
+    DOCUMENT_TRANSLATION_OVERRIDES,
+    GENERAL_TRANSLATION_OVERRIDES,
+)
+
+for _locale in ("en", "hi", "mr"):
+    TRANSLATIONS[_locale].update(
+        DOCUMENT_TRANSLATION_OVERRIDES.get(_locale, {})
+    )
+    TRANSLATIONS[_locale].update(
+        BRIEF_TRANSLATION_OVERRIDES.get(_locale, {})
+    )
+    TRANSLATIONS[_locale].update(
+        GENERAL_TRANSLATION_OVERRIDES.get(_locale, {})
+    )
+    TRANSLATIONS[_locale].update(
+        APP_DOCUMENT_TRANSLATION_OVERRIDES.get(_locale, {})
+    )

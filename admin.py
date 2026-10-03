@@ -57,7 +57,10 @@ from models import (
     utc_now,
 )
 from services.booking_service import SLOT_MAP, reschedule_paid_booking
-from services.fulfillment_service import ensure_booking_fulfillment
+from services.fulfillment_service import (
+    ensure_booking_fulfillment,
+    scheduled_end_utc,
+)
 from services.payment_reconciliation_service import (
     lock_matching_payment_reconciliations,
 )
@@ -294,6 +297,18 @@ def _masked_contact(value: str | None) -> str:
     if not digits:
         return "Not available"
     return f"••••••{digits[-4:]}"
+
+
+def _is_verified_advocate(advocate: Advocate) -> bool:
+    return bool(
+        advocate.verification_status == "VERIFIED"
+        and advocate.verification_ref
+        and advocate.verified_at is not None
+    )
+
+
+def _normalized_scope_value(value: str | None) -> str:
+    return " ".join(str(value or "").split()).casefold()
 
 
 def _parse_optional_timestamp(value) -> datetime | None:
@@ -1380,6 +1395,7 @@ def _serialize_fulfillment(
         "name": booking.name,
         "category": booking.category,
         "subcategory": booking.subcategory,
+        "district": booking.district_name,
         "date": booking.date.isoformat(),
         "slot_code": booking.slot_code,
         "slot": booking.slot_readable,
@@ -1590,6 +1606,12 @@ def update_fulfillment(booking_id: int):
             "CANCELLED",
         } and len(notes) < 5:
             return jsonify({"error": "operator_notes_required"}), 400
+        if requested_status == "COMPLETED":
+            scheduled_end = scheduled_end_utc(booking)
+            if scheduled_end is None:
+                return jsonify({"error": "consultation_schedule_invalid"}), 409
+            if utc_now() < scheduled_end:
+                return jsonify({"error": "consultation_not_ended"}), 409
 
         before = {
             "status": current_status,
@@ -1638,6 +1660,16 @@ def update_fulfillment(booking_id: int):
             advocate = db.get(Advocate, advocate_id)
             if not advocate or not advocate.active:
                 return jsonify({"error": "active_advocate_not_found"}), 404
+            if not _is_verified_advocate(advocate):
+                return jsonify({"error": "advocate_not_verified"}), 409
+            if _normalized_scope_value(advocate.category) != (
+                _normalized_scope_value(booking.category)
+            ):
+                return jsonify({"error": "advocate_category_mismatch"}), 409
+            if _normalized_scope_value(advocate.district) != (
+                _normalized_scope_value(booking.district_name)
+            ):
+                return jsonify({"error": "advocate_district_mismatch"}), 409
             fulfillment.advocate_id = advocate_id
             fulfillment.assigned_to = advocate.name
         if "assigned_to" in body and advocate_id is None:
@@ -1891,6 +1923,10 @@ def advocates():
                         "district": item.district,
                         "languages": item.languages,
                         "active": bool(item.active),
+                        "verification_status": item.verification_status,
+                        "assignment_eligible": bool(
+                            item.active and _is_verified_advocate(item)
+                        ),
                     }
                     for item in rows
                 ]
@@ -1980,6 +2016,8 @@ def reveal_advocate_contact(advocate_id: int):
         item = db.get(Advocate, advocate_id)
         if not item or not item.active:
             return jsonify({"error": "active_advocate_not_found"}), 404
+        if not _is_verified_advocate(item):
+            return jsonify({"error": "advocate_not_verified"}), 409
         _audit(
             db,
             action="advocate_contact.reveal",

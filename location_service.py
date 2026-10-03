@@ -295,6 +295,12 @@ def detect_district_and_state(text: str):
         if state:
             return district, state, "HIGH"
 
+    # A one- or two-character fragment can occur inside many district names
+    # and must not be treated as a confident location. Short, supported city
+    # abbreviations are handled explicitly by ALIASES above.
+    if len(text) < 3:
+        return None, None, "LOW"
+
     scores = []
     
     for district_key, entries in DISTRICT_INDEX.items():

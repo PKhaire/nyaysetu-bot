@@ -367,11 +367,19 @@ HOME_KEYWORDS = {
     "menu",
     "main menu",
     "home",
+    "madad",
+    "mukhya menu",
+    "नमस्कार",
+    "मदत",
+    "मेनू",
+    "मुख्य मेनू",
+    "होम",
 }
 
 RESTART_KEYWORDS = {
     "restart", "reset", "start over", "begin again",
-    "cancel", "stop", "exit"
+    "cancel", "stop", "exit", "radd", "roko", "bahar niklein",
+    "रद्द", "थांबा", "बाहेर पडा", "पुन्हा सुरू करा",
 }
 
 BOOKING_KEYWORDS = {
@@ -381,6 +389,11 @@ BOOKING_KEYWORDS = {
     "consult",
     "consultation",
     "lawyer",
+    "consultation book karein",
+    "vakil",
+    "सल्लामसलत बुक करा",
+    "अपॉइंटमेंट बुक करा",
+    "वकील",
 }
 
 DOCUMENT_STUDIO_KEYWORDS = {
@@ -388,6 +401,18 @@ DOCUMENT_STUDIO_KEYWORDS = {
     "document studio",
     "document test",
     "agreement test",
+    "document banayein",
+    "draft taiyar karein",
+    "दस्तऐवज तयार करा",
+    "मसुदा तयार करा",
+}
+
+SAVE_KEYWORDS = {
+    "save",
+    "save and exit",
+    "save karke niklein",
+    "जतन करा",
+    "जतन करा व बाहेर पडा",
 }
 
 ADVOCATE_INTAKE_PREFIX = (
@@ -1293,14 +1318,7 @@ def send_more_options(wa_id, user) -> None:
 def send_document_studio_home(wa_id, user) -> None:
     body = t(user, "document_landing_body")
     if beta_mode_enabled():
-        body = (
-            "Beta: you may try the questionnaires and share feedback. "
-            "No payment is collected, no final document is provided and no "
-            "legal service is created. Use Book Consultation for legal "
-            "assistance. Do not enter Aadhaar, PAN, bank credentials, "
-            "signatures or identity-document images.\n\n"
-            f"{body}"
-        )
+        body = t(user, "document_beta_overview", overview=body)
     send_list_picker(
         wa_id,
         header=t(user, "document_landing_header"),
@@ -1310,7 +1328,7 @@ def send_document_studio_home(wa_id, user) -> None:
     )
 
 
-def send_cheque_notice_intake_flow(wa_id, order) -> None:
+def send_cheque_notice_intake_flow(wa_id, user, order) -> None:
     if (
         not cheque_notice_beta_enabled(
             environment=ENV,
@@ -1331,20 +1349,15 @@ def send_cheque_notice_intake_flow(wa_id, order) -> None:
         flow_token=token,
         flow_action="data_exchange",
         mode=WHATSAPP_CHEQUE_NOTICE_FLOW_MODE,
-        header="Cheque notice intake",
-        body=(
-            "Beta: complete the six-section fact form to help improve this "
-            "feature. No payment, final notice, advocate review or legal "
-            "service is created by submitting it. Time-sensitive matters "
-            "should use Book Consultation."
-        ),
-        cta="Open fact form",
-        footer="Beta only. Exit anytime; completed sections are saved.",
+        header=t(user, "document_cheque_flow_header"),
+        body=t(user, "document_cheque_flow_body"),
+        cta=t(user, "document_cheque_flow_cta"),
+        footer=t(user, "document_cheque_flow_footer"),
     )
 
 
 def send_document_question(wa_id, user, order) -> None:
-    question = current_document_question(order)
+    question = current_document_question(order, user, t)
     options = list(question.get("options") or ())
     progress = t(
         user,
@@ -1377,7 +1390,7 @@ def send_document_question(wa_id, user, order) -> None:
             {
                 "id": f"doc_answer::{question['key']}::{code}",
                 "title": str(label)[:24],
-                "description": "Select this answer",
+                "description": t(user, "document_select_answer_desc"),
             }
             for code, label in options
         ]
@@ -1403,14 +1416,14 @@ def send_document_edit_sections(wa_id, user) -> None:
         header=t(user, "document_edit_section_header")[:60],
         body=t(user, "document_edit_section_body"),
         section_title=t(user, "document_edit_section_title")[:24],
-        rows=document_edit_section_rows(),
+        rows=document_edit_section_rows(user, t),
     )
 
 
 def send_document_review(wa_id, user, order) -> None:
     send_text(
         wa_id,
-        document_review_message(order),
+        document_review_message(order, user, t),
     )
     send_buttons(
         wa_id,
@@ -2083,7 +2096,7 @@ def get_subcategory_label(subcategory, user):
     lang = user.language or "en"
     return SUBCATEGORY_LABELS.get(subcategory, {}).get(lang, subcategory)
     
-def send_payment_receipt_again(db, wa_id):
+def send_payment_receipt_again(db, user, wa_id):
     booking = (
         db.query(Booking)
         .filter(
@@ -2097,7 +2110,7 @@ def send_payment_receipt_again(db, wa_id):
     )
 
     if not booking:
-        send_text(wa_id, "❌ No completed payment found.")
+        send_text(wa_id, t(user, "receipt_none"))
         return
 
     pdf_path = None
@@ -2117,7 +2130,7 @@ def send_payment_receipt_again(db, wa_id):
         logger.exception("Receipt resend failed | booking_id=%s", booking.id)
         send_text(
             wa_id,
-            "⚠️ Unable to resend receipt right now. Please try later."
+            t(user, "receipt_resend_failed")
         )
     finally:
         if pdf_path and os.path.isfile(pdf_path):
@@ -2208,6 +2221,9 @@ def close_completed_consultation(db, user, wa_id) -> bool:
     if not result:
         return False
     fulfillment, completed_booking = result
+    _, booking_end = get_booking_window(completed_booking)
+    if booking_end is None or datetime.now(IST) < booking_end:
+        return False
 
     fulfillment.feedback_requested_at = utc_now()
     user.flow_state = ASK_FEEDBACK_RATING
@@ -2517,9 +2533,14 @@ def _production_configuration_is_valid() -> bool:
             and catalogue.ok
             and catalogue.reason_code == "CONFIGURED"
             and DOCUMENT_STUDIO_DAILY_CAPACITY > 0
-            and DOCUMENT_STUDIO_S3_BUCKET
-            and len(DOCUMENT_STUDIO_S3_ACCESS_KEY_ID) >= 16
-            and len(DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY) >= 32
+            and (
+                beta_mode_enabled()
+                or (
+                    DOCUMENT_STUDIO_S3_BUCKET
+                    and len(DOCUMENT_STUDIO_S3_ACCESS_KEY_ID) >= 16
+                    and len(DOCUMENT_STUDIO_S3_SECRET_ACCESS_KEY) >= 32
+                )
+            )
             and cheque_notice_beta_ok
         )
     )
@@ -2634,6 +2655,7 @@ def health_ready():
     document_release = None
     if (
         DOCUMENT_STUDIO_ENABLED
+        and not beta_mode_enabled()
         and database.get("ok")
         and schema_ok
     ):
@@ -2864,14 +2886,16 @@ def webhook():
                 if not should_send_maintenance_notice(wa_id, now_ts):
                     return jsonify({"status": "maintenance_duplicate"}), 200
 
+                maintenance_user = (
+                    db.query(User)
+                    .filter(User.whatsapp_id == wa_id)
+                    .one_or_none()
+                )
+                if maintenance_user is None:
+                    maintenance_user = User(language="en")
                 send_text(
                     wa_id,
-                    (
-                        "⚙️ *NyaySetu is temporarily under maintenance.*\n\n"
-                        "We are upgrading the service. Please try again later. "
-                        "If anyone is in immediate danger, contact the appropriate "
-                        "local emergency service."
-                    ),
+                    t(maintenance_user, "maintenance_message"),
                 )
                 return jsonify({"status": "maintenance"}), 200
 
@@ -2940,8 +2964,7 @@ def webhook():
         if flow_response_invalid:
             send_text(
                 wa_id,
-                "The secure form response could not be verified. No facts "
-                "were accepted. Reopen Draft Studio to continue.",
+                t(user, "document_flow_invalid"),
             )
             return jsonify({"status": "invalid_flow_response"}), 200
         if flow_response is not None:
@@ -2954,8 +2977,7 @@ def webhook():
             except ChequeNoticeFlowError:
                 send_text(
                     wa_id,
-                    "The secure form response is invalid or expired. No "
-                    "new payment or notice was created.",
+                    t(user, "document_flow_expired"),
                 )
                 return jsonify({"status": "invalid_flow_response"}), 200
             user.flow_state = NORMAL
@@ -2963,29 +2985,29 @@ def webhook():
             if order.state == "BETA_COMPLETE":
                 send_text(
                     wa_id,
-                    "Thank you for testing Cheque-bounce Notice Beta. Your "
-                    "facts are saved only to evaluate and improve this "
-                    "questionnaire. No payment has been created. No final "
-                    "notice has been created. No legal service or advocate "
-                    "review has started. Use Book "
-                    "Consultation for legal assistance, especially for a "
-                    "time-sensitive matter. Use Support from the Home menu "
-                    f"to share feedback. Reference: {order.public_ref}",
+                    t(
+                        user,
+                        "document_cheque_beta_completed",
+                        reference=order.public_ref,
+                    ),
                 )
             elif order.state == "EVIDENCE_PENDING":
                 send_text(
                     wa_id,
-                    "Your confirmed facts are saved for advocate triage. "
-                    "Evidence upload remains disabled during this synthetic "
-                    "staging step. No payment is available and no notice has "
-                    f"been issued. Reference: {order.public_ref}",
+                    t(
+                        user,
+                        "document_cheque_triage_saved",
+                        reference=order.public_ref,
+                    ),
                 )
             else:
                 send_text(
                     wa_id,
-                    "This fact pattern requires a separate advocate review, "
-                    "so the standard cheque-notice path has stopped before "
-                    f"evidence or payment. Reference: {order.public_ref}",
+                    t(
+                        user,
+                        "document_cheque_route_stopped",
+                        reference=order.public_ref,
+                    ),
                 )
             record_event(
                 "cheque_notice_intake_completed",
@@ -3228,16 +3250,14 @@ def webhook():
                     order = create_or_resume_notice_order(db, user.id)
                     user.flow_state = DOCUMENT_NOTICE_FLOW_PENDING
                     db.commit()
-                    send_cheque_notice_intake_flow(wa_id, order)
+                    send_cheque_notice_intake_flow(wa_id, user, order)
                 except ChequeNoticeFlowError:
                     db.rollback()
                     user.flow_state = NORMAL
                     db.commit()
                     send_text(
                         wa_id,
-                        "The cheque-notice beta form is currently "
-                        "unavailable. No facts or payment were accepted. "
-                        "Use Book Consultation if you need legal help.",
+                        t(user, "document_cheque_unavailable"),
                     )
                     return jsonify(
                         {"status": "cheque_notice_beta_unavailable"}
@@ -3303,10 +3323,7 @@ def webhook():
                 if order.state != "INTAKE":
                     send_text(
                         wa_id,
-                        "Your earlier cheque-notice test facts are saved. "
-                        "Evidence upload, payment, final notice and legal "
-                        "service are not available in the beta. Use Book "
-                        "Consultation if you need legal help.",
+                        t(user, "document_cheque_saved_summary"),
                     )
                     return jsonify(
                         {"status": "cheque_notice_beta_saved"}
@@ -3314,14 +3331,13 @@ def webhook():
                 try:
                     user.flow_state = DOCUMENT_NOTICE_FLOW_PENDING
                     db.commit()
-                    send_cheque_notice_intake_flow(wa_id, order)
+                    send_cheque_notice_intake_flow(wa_id, user, order)
                 except ChequeNoticeFlowError:
                     user.flow_state = NORMAL
                     db.commit()
                     send_text(
                         wa_id,
-                        "The secure cheque-notice form is currently "
-                        "unavailable. Your completed sections remain saved.",
+                        t(user, "document_cheque_secure_unavailable"),
                     )
                     return jsonify(
                         {"status": "cheque_notice_beta_unavailable"}
@@ -3344,7 +3360,10 @@ def webhook():
             if not document_studio_available(user):
                 send_text(wa_id, t(user, "document_studio_unavailable"))
                 return jsonify({"status": "document_studio_unavailable"}), 200
-            send_text(wa_id, recent_orders_message(db, user.id))
+            send_text(
+                wa_id,
+                recent_orders_message(db, user.id, user, t),
+            )
             newest_order = latest_document_order(db, user.id)
             if newest_order and newest_order.state == "FINAL_AVAILABLE":
                 link_result = document_download_links_for_user(
@@ -3357,16 +3376,18 @@ def webhook():
                     db.commit()
                     send_text(
                         wa_id,
-                        "Fresh download links (valid briefly):\n"
-                        f"PDF: {links['FINAL_PDF']}\n"
-                        f"Editable DOCX: {links['FINAL_DOCX']}",
+                        t(
+                            user,
+                            "document_download_links",
+                            pdf_url=links["FINAL_PDF"],
+                            docx_url=links["FINAL_DOCX"],
+                        ),
                     )
                 else:
                     db.rollback()
                     send_text(
                         wa_id,
-                        "The final files are no longer available. Contact "
-                        "NyaySetu support with the document reference.",
+                        t(user, "document_files_unavailable"),
                     )
             return jsonify({"status": "ok"}), 200
 
@@ -3377,24 +3398,12 @@ def webhook():
             if beta_mode_enabled():
                 send_text(
                     wa_id,
-                    "Draft Studio Beta lets you try the questionnaires and "
-                    "share product feedback. No payment is collected, no "
-                    "final document is provided and no legal service is "
-                    "created. Do not enter Aadhaar, PAN, bank credentials, "
-                    "signatures or identity-document images. Use Book "
-                    "Consultation for legal assistance and Support to share "
-                    "feedback.",
+                    t(user, "document_beta_help"),
                 )
                 return jsonify({"status": "ok"}), 200
             send_text(
                 wa_id,
-                "Draft Studio collects only the facts needed for the "
-                "selected draft. Do not send Aadhaar, PAN, bank details, "
-                "signatures or identity documents. You review a watermarked "
-                "preview before payment. Final PDF and DOCX are released "
-                "only when the exact legal template, payment and private "
-                "storage checks pass. Stamping, signing and registration "
-                "remain external steps.",
+                t(user, "document_live_help"),
             )
             return jsonify({"status": "ok"}), 200
 
@@ -3425,7 +3434,7 @@ def webhook():
                 return jsonify({"status": "ok"}), 200
             if (
                 interactive_id == DOCUMENT_STUDIO_IDS["save"]
-                or lower_text in {"save", "save and exit"}
+                or lower_text in SAVE_KEYWORDS
             ):
                 user.flow_state = NORMAL
                 db.commit()
@@ -3445,7 +3454,11 @@ def webhook():
                 t(
                     user,
                     "document_editing_section",
-                    section=current_document_question(order)["section_title"],
+                    section=current_document_question(
+                        order,
+                        user,
+                        t,
+                    )["section_title"],
                 ),
             )
             send_document_question(wa_id, user, order)
@@ -3477,7 +3490,7 @@ def webhook():
                 return jsonify({"status": "ok"}), 200
             if (
                 interactive_id == DOCUMENT_STUDIO_IDS["save"]
-                or lower_text in {"save", "save and exit"}
+                or lower_text in SAVE_KEYWORDS
             ):
                 user.flow_state = NORMAL
                 db.commit()
@@ -3487,7 +3500,7 @@ def webhook():
             parsed_answer = parse_document_answer_id(interactive_id)
             if parsed_answer:
                 answer_key, raw_answer = parsed_answer
-                question = current_document_question(order)
+                question = current_document_question(order, user, t)
                 if answer_key != question["key"]:
                     send_text(wa_id, t(user, "document_uat_answer_invalid"))
                     send_document_question(wa_id, user, order)
@@ -3498,7 +3511,7 @@ def webhook():
                 send_text(wa_id, t(user, "document_uat_answer_invalid"))
                 send_document_question(wa_id, user, order)
                 return jsonify({"status": "ok"}), 200
-            question = current_document_question(order)
+            question = current_document_question(order, user, t)
             answer = validate_document_answer(question["key"], text_body)
             if answer is None:
                 send_text(wa_id, t(user, "document_uat_answer_invalid"))
@@ -3513,9 +3526,11 @@ def webhook():
                 db.commit()
                 send_text(
                     wa_id,
-                    "This matter falls outside the safe self-service scope, "
-                    "so no document or payment has been created. An advocate "
-                    f"can review it through Book Consultation. Reference: {reference}",
+                    t(
+                        user,
+                        "document_routed_out",
+                        reference=reference,
+                    ),
                 )
                 record_event(
                     "document_studio_routed_out",
@@ -3537,7 +3552,7 @@ def webhook():
                 send_text(wa_id, t(user, "document_all_sections_saved"))
                 send_document_review(wa_id, user, order)
             else:
-                next_question = current_document_question(order)
+                next_question = current_document_question(order, user, t)
                 if next_question["section"] != previous_section:
                     send_text(
                         wa_id,
@@ -3593,12 +3608,11 @@ def webhook():
                     db.commit()
                     send_text(
                         wa_id,
-                        "Thank you for testing Draft Studio Beta. Your "
-                        "confirmed answers are saved for product feedback "
-                        "only. No payment has been created and no final "
-                        "document or legal service has been provided. Use "
-                        "Support from the Home menu to share feedback. "
-                        f"Reference: {reference}",
+                        t(
+                            user,
+                            "document_beta_completed",
+                            reference=reference,
+                        ),
                     )
                     record_event(
                         "document_studio_beta_completed",
@@ -3635,22 +3649,32 @@ def webhook():
                 if preview_result and preview_result.ok:
                     send_text(
                         wa_id,
-                        "Your confirmed watermarked preview is ready for a "
-                        "short time:\n"
-                        f"{link_result.value if link_result and link_result.ok else 'Preview link unavailable'}",
+                        t(
+                            user,
+                            "document_preview_ready",
+                            preview_url=(
+                                link_result.value
+                                if link_result and link_result.ok
+                                else t(
+                                    user,
+                                    "document_preview_link_unavailable",
+                                )
+                            ),
+                        ),
                     )
                     if payment_result and payment_result.ok:
                         send_text(
                             wa_id,
-                            "After reviewing every fact, use this exact-amount "
-                            "payment link for the final PDF and DOCX:\n"
-                            f"{payment_result.value}",
+                            t(
+                                user,
+                                "document_payment_ready",
+                                payment_url=payment_result.value,
+                            ),
                         )
                     else:
                         send_text(
                             wa_id,
-                            "Payment is not available because a release check "
-                            "did not pass. You have not been charged.",
+                            t(user, "document_payment_unavailable"),
                         )
                 else:
                     reason_code = (
@@ -3660,11 +3684,12 @@ def webhook():
                     )
                     send_text(
                         wa_id,
-                        "Your answers are saved and confirmed, but preview "
-                        "and payment are blocked until the exact advocate "
-                        "approval and private-storage checks pass. You have "
-                        f"not been charged. Reference: {reference}. "
-                        f"Operational code: {reason_code}",
+                        t(
+                            user,
+                            "document_preview_blocked",
+                            reference=reference,
+                            reason_code=reason_code,
+                        ),
                     )
                 record_event(
                     "document_studio_answers_confirmed",
@@ -3680,7 +3705,7 @@ def webhook():
                 return jsonify({"status": "ok"}), 200
             if (
                 interactive_id == DOCUMENT_STUDIO_IDS["save"]
-                or lower_text in {"save", "save and exit"}
+                or lower_text in SAVE_KEYWORDS
             ):
                 user.flow_state = NORMAL
                 db.commit()
@@ -3712,28 +3737,25 @@ def webhook():
                 db.commit()
                 send_text(
                     wa_id,
-                    "The cheque-notice fact intake was cancelled. No payment "
-                    "or notice was created.",
+                    t(user, "document_cheque_cancelled"),
                 )
                 send_home(wa_id, user)
                 return jsonify({"status": "cheque_notice_cancelled"}), 200
             if (
                 interactive_id == DOCUMENT_STUDIO_IDS["save"]
-                or lower_text in {"save", "save and exit"}
+                or lower_text in SAVE_KEYWORDS
             ):
                 user.flow_state = NORMAL
                 db.commit()
                 send_text(
                     wa_id,
-                    "Completed form sections are saved. Use Continue Draft "
-                    "to reopen the next section.",
+                    t(user, "document_cheque_saved"),
                 )
                 send_home(wa_id, user)
                 return jsonify({"status": "cheque_notice_saved"}), 200
             send_text(
                 wa_id,
-                "Please complete the secure form already sent, or type Save "
-                "to continue later or Cancel to stop.",
+                t(user, "document_cheque_pending"),
             )
             return jsonify({"status": "cheque_notice_flow_pending"}), 200
 
@@ -4262,7 +4284,7 @@ def webhook():
                 message = (text_body or "").strip().lower()
             
                 if message == "receipt":
-                    send_payment_receipt_again(db, wa_id)
+                    send_payment_receipt_again(db, user, wa_id)
                     return jsonify({"status": "ok"}), 200
 
                 if not user.ai_enabled:

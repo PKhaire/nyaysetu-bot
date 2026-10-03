@@ -169,7 +169,15 @@ function populateStatusOptions(item) {
 function populateAdvocateOptions(selectedId = null) {
   const options = [node("option", "", "Select a verified advocate")];
   options[0].value = "";
-  for (const advocate of state.advocates.filter((item) => item.active)) {
+  const normalizeScope = (value) => String(value || "").trim().replace(/\s+/g, " ").toLocaleLowerCase();
+  const bookingCategory = normalizeScope(state.selected?.category);
+  const bookingDistrict = normalizeScope(state.selected?.district);
+  const eligibleAdvocates = state.advocates.filter((item) => (
+    item.assignment_eligible
+    && normalizeScope(item.category) === bookingCategory
+    && normalizeScope(item.district) === bookingDistrict
+  ));
+  for (const advocate of eligibleAdvocates) {
     const option = node(
       "option", "",
       `${advocate.name} · ${advocate.bar_registration_number} · ${advocate.district}`
@@ -393,7 +401,7 @@ async function registerAdvocate(event) {
     });
     elements.advocateForm.reset();
     await loadAdvocates();
-    showToast("Advocate registered and available for assignment.");
+    showToast("Advocate registered and awaiting verification.");
   } catch (error) {
     elements.advocateError.textContent = String(error.message || error).replaceAll("_", " ");
     elements.advocateError.classList.remove("hidden");

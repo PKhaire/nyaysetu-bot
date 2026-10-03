@@ -63,9 +63,9 @@ services:
       - key: CASE_BRIEF_UNATTACHED_TTL_DAYS
         value: "7"
       # Global product switch. It never performs per-user/tester sampling.
-      # Release, price and private-storage gates remain fail-closed.
+      # Beta commerce stays blocked; live release gates remain fail-closed.
       - key: DOCUMENT_STUDIO_ENABLED
-        value: "false"
+        value: "true"
       # Safe default for the first release: questionnaires and feedback only.
       # No document artifact, payment or advocate workflow is available.
       - key: DOCUMENT_STUDIO_CUSTOMER_MODE
@@ -141,11 +141,11 @@ services:
       - key: CHEQUE_NOTICE_STAGING_UAT_ENABLED
         value: "false"
       - key: WHATSAPP_CHEQUE_NOTICE_FLOW_ID
-        value: ""
+        sync: false
       - key: WHATSAPP_CHEQUE_NOTICE_FLOW_MODE
-        value: draft
+        value: published
       - key: WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY
-        value: ""
+        sync: false
       - key: WHATSAPP_CHEQUE_NOTICE_FLOW_PRIVATE_KEY_PASSPHRASE
         value: ""
       - key: RAZORPAY_KEY_ID

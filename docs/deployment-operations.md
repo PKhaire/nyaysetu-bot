@@ -1271,10 +1271,12 @@ mode to `live` as part of the first release.
 
 ### Historical paid staging release
 
-The Blueprint deliberately keeps `DOCUMENT_STUDIO_ENABLED=false`. Enabling it
-publishes the menu entry to every WhatsApp user; there is no tester-number
-allowlist or per-user sampling. Keep the service labelled `staging`, use only
-synthetic facts and Razorpay test mode, and configure all of the following:
+The production Blueprint enables Draft Studio globally in Customer Beta mode,
+which publishes the menu entry to every WhatsApp user without enabling
+payment, artifact generation, advocate work or legal-service entitlement.
+There is no tester-number allowlist or per-user sampling. For historical paid
+staging validation, keep the service labelled `staging`, use only synthetic
+facts and Razorpay test mode, and configure all of the following:
 
 ```text
 ENV=staging

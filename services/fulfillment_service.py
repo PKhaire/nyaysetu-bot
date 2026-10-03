@@ -31,6 +31,13 @@ def _scheduled_start_utc(booking) -> datetime | None:
     return scheduled.astimezone(timezone.utc).replace(tzinfo=None)
 
 
+def scheduled_end_utc(booking) -> datetime | None:
+    scheduled_start = _scheduled_start_utc(booking)
+    if scheduled_start is None:
+        return None
+    return scheduled_start + timedelta(hours=1)
+
+
 def ensure_booking_fulfillment(
     db,
     booking,

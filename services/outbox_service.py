@@ -68,6 +68,7 @@ from services.whatsapp_service import (
     send_payment_success_message,
     send_text,
 )
+from utils.i18n import t
 
 
 logger = logging.getLogger(__name__)
@@ -621,10 +622,10 @@ def _handle_document_final_delivery(
         )
         if not link_result.ok or not link_result.snapshot:
             raise DeliveryFailure("document_final_delivery_not_available")
-        message = (
-            "Your advocate-issued Draft Studio final PDF is available "
-            "for a limited time.\n"
-            f"PDF: {link_result.snapshot['download_url']}"
+        message = t(
+            user,
+            "document_final_advocate_available",
+            pdf_url=link_result.snapshot["download_url"],
         )
     else:
         if order.state != "FINAL_AVAILABLE" or not order.payment_processed:
@@ -635,11 +636,11 @@ def _handle_document_final_delivery(
                 raise DeliveryFailure("document_final_delivery_not_available")
             raise DeliveryFailure("document_final_links_unavailable")
         links = links_result.value
-        message = (
-            "Payment confirmed. Your Draft Studio final files are available "
-            "for 30 days.\n"
-            f"PDF: {links['FINAL_PDF']}\n"
-            f"Editable DOCX: {links['FINAL_DOCX']}"
+        message = t(
+            user,
+            "document_final_paid_available",
+            pdf_url=links["FINAL_PDF"],
+            docx_url=links["FINAL_DOCX"],
         )
     result = send_text(user.whatsapp_id, message)
     if is_ambiguous_delivery_failure(result):

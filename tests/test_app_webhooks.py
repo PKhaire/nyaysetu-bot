@@ -1442,6 +1442,7 @@ def test_staging_readiness_requires_postgresql_test_keys_and_strict_config(
     from services.document_catalogue import CatalogueConfiguration
 
     monkeypatch.setattr(app_module, "DOCUMENT_STUDIO_ENABLED", True)
+    monkeypatch.setattr(app_module, "beta_mode_enabled", lambda: False)
     monkeypatch.setattr(
         app_module,
         "catalogue_configuration",
@@ -1493,6 +1494,10 @@ def test_staging_readiness_requires_postgresql_test_keys_and_strict_config(
         catalogue_blocked.get_json()["document_studio_release"]
         == blocked_release
     )
+    monkeypatch.setattr(app_module, "beta_mode_enabled", lambda: True)
+    beta_catalogue_ready = client.get("/health/ready")
+    assert beta_catalogue_ready.status_code == 200
+    assert beta_catalogue_ready.get_json()["document_studio_release"] is None
     monkeypatch.setattr(app_module, "DOCUMENT_STUDIO_ENABLED", False)
 
     monkeypatch.setattr(app_module, "RAZORPAY_MODE", "live")

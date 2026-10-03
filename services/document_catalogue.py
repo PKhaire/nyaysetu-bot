@@ -33,6 +33,7 @@ from services.cheque_notice_product import (
     golden_artifact_hashes as cheque_notice_golden_artifact_hashes,
     questionnaire_schema_bytes as cheque_notice_questionnaire_schema_bytes,
 )
+from services.document_customer_release import beta_mode_enabled
 
 
 PRODUCT_CODE = "mh_residential_leave_licence_11m_self_service"
@@ -389,6 +390,16 @@ def catalogue_configuration(
             "UNKNOWN_DOCUMENT_PRODUCT",
             ordered_codes,
         )
+
+    # Customer Beta exposes questionnaires only. Commerce is blocked again at
+    # every order/payment/artifact seam, so requiring live prices here would
+    # incorrectly hide the beta catalogue from all users.
+    if (
+        beta_mode_enabled()
+        and prices_inr is None
+        and not DOCUMENT_STUDIO_PRODUCT_PRICES_INR_CONFIGURED
+    ):
+        return CatalogueConfiguration(True, "CONFIGURED", ordered_codes)
 
     effective_prices = dict(
         _runtime_prices_inr() if prices_inr is None else prices_inr

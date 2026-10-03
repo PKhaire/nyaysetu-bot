@@ -359,6 +359,39 @@ def test_synthetic_product_exercises_global_catalogue_routing_only_in_test(
     assert product_rows(object(), lambda _user, key: key) == rows
 
 
+def test_beta_catalogue_is_visible_without_commercial_prices(monkeypatch):
+    monkeypatch.setattr(
+        customer_release,
+        "DOCUMENT_STUDIO_CUSTOMER_MODE",
+        "beta",
+    )
+    monkeypatch.setattr(catalogue, "DOCUMENT_STUDIO_ENABLED", True)
+    monkeypatch.setattr(
+        catalogue,
+        "DOCUMENT_STUDIO_PRODUCT_ALLOWLIST",
+        frozenset(catalogue.registered_product_codes()),
+    )
+    monkeypatch.setattr(
+        catalogue,
+        "DOCUMENT_STUDIO_PRODUCT_PRICES_INR_CONFIGURED",
+        False,
+    )
+    monkeypatch.setattr(catalogue, "DOCUMENT_STUDIO_PRICE_INR", 0)
+
+    configuration = catalogue.catalogue_configuration()
+
+    assert configuration.ok is True
+    assert configuration.reason_code == "CONFIGURED"
+    assert configuration.enabled_product_codes == (
+        catalogue.PRODUCT_CODE,
+        catalogue.CHEQUE_NOTICE_PRODUCT_CODE,
+    )
+    assert tuple(product.code for product in catalogue.visible_products()) == (
+        catalogue.PRODUCT_CODE,
+        catalogue.CHEQUE_NOTICE_PRODUCT_CODE,
+    )
+
+
 def test_distinct_synthetic_package_cannot_reuse_current_product_snapshot(
     monkeypatch,
     tmp_path,

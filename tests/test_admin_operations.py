@@ -147,6 +147,9 @@ def _seed_operations(session_factory):
             district="Pune",
             languages="English, Hindi, Marathi",
             active=True,
+            verification_status="VERIFIED",
+            verification_ref="synthetic-admin-operations-verification",
+            verified_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
         brief = CaseBrief(
             user_id=user.id,
@@ -718,6 +721,226 @@ def test_paid_consultation_assignment_and_completion_are_explicit(
         db.close()
 
 
+def test_paid_consultation_cannot_complete_before_scheduled_end(
+    client,
+    admin_db,
+):
+    seeded = _seed_operations(admin_db)
+    db = admin_db()
+    try:
+        booking = db.get(Booking, seeded["booking_id"])
+        booking.date = date(2099, 8, 3)
+        db.commit()
+    finally:
+        db.close()
+
+    assigned = client.patch(
+        f"/admin/fulfillments/{seeded['booking_id']}",
+        headers=_headers(),
+        json={
+            "status": "ASSIGNED",
+            "advocate_id": seeded["advocate_id"],
+        },
+    )
+    assert assigned.status_code == 200
+
+    completed = client.patch(
+        f"/admin/fulfillments/{seeded['booking_id']}",
+        headers=_headers(),
+        json={
+            "status": "COMPLETED",
+            "operator_notes": "Consultation completed with the client.",
+        },
+    )
+
+    assert completed.status_code == 409
+    assert completed.get_json()["error"] == "consultation_not_ended"
+
+    db = admin_db()
+    try:
+        booking = db.get(Booking, seeded["booking_id"])
+        fulfillment = (
+            db.query(BookingFulfillment)
+            .filter(BookingFulfillment.booking_id == seeded["booking_id"])
+            .one()
+        )
+        assert booking.status == BookingStatus.PAID
+        assert fulfillment.status == "ASSIGNED"
+        assert fulfillment.completed_at is None
+        assert db.query(AdminAuditEvent).count() == 1
+    finally:
+        db.close()
+
+
+def test_paid_consultation_assignment_rejects_unverified_advocate(
+    client,
+    admin_db,
+):
+    seeded = _seed_operations(admin_db)
+    db = admin_db()
+    try:
+        unverified_advocate = Advocate(
+            name="Pending Advocate",
+            email="pending.advocate@example.test",
+            phone="919977776666",
+            bar_registration_number="MAH/5678/2026",
+            category="Family",
+            district="Pune",
+            active=True,
+        )
+        db.add(unverified_advocate)
+        db.commit()
+        unverified_advocate_id = unverified_advocate.id
+    finally:
+        db.close()
+
+    response = client.patch(
+        f"/admin/fulfillments/{seeded['booking_id']}",
+        headers=_headers(),
+        json={
+            "status": "ASSIGNED",
+            "advocate_id": unverified_advocate_id,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.get_json()["error"] == "advocate_not_verified"
+
+    db = admin_db()
+    try:
+        fulfillment = (
+            db.query(BookingFulfillment)
+            .filter(BookingFulfillment.booking_id == seeded["booking_id"])
+            .one()
+        )
+        assert fulfillment.status == "UNASSIGNED"
+        assert fulfillment.advocate_id is None
+        assert db.query(AdminAuditEvent).count() == 0
+    finally:
+        db.close()
+
+
+@pytest.mark.parametrize(
+    ("category", "district", "expected_error"),
+    [
+        ("Criminal", "Pune", "advocate_category_mismatch"),
+        ("Family", "Nashik", "advocate_district_mismatch"),
+    ],
+)
+def test_paid_consultation_assignment_rejects_scope_mismatch(
+    client,
+    admin_db,
+    category,
+    district,
+    expected_error,
+):
+    seeded = _seed_operations(admin_db)
+    db = admin_db()
+    try:
+        advocate = Advocate(
+            name="Out of Scope Advocate",
+            email=f"{category.lower()}.{district.lower()}@example.test",
+            phone="919966665555",
+            bar_registration_number=f"MAH/{category}/{district}/2026",
+            category=category,
+            district=district,
+            active=True,
+            verification_status="VERIFIED",
+            verification_ref="synthetic-scope-verification",
+            verified_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        )
+        db.add(advocate)
+        db.commit()
+        advocate_id = advocate.id
+    finally:
+        db.close()
+
+    response = client.patch(
+        f"/admin/fulfillments/{seeded['booking_id']}",
+        headers=_headers(),
+        json={"status": "ASSIGNED", "advocate_id": advocate_id},
+    )
+
+    assert response.status_code == 409
+    assert response.get_json()["error"] == expected_error
+
+    db = admin_db()
+    try:
+        fulfillment = (
+            db.query(BookingFulfillment)
+            .filter(BookingFulfillment.booking_id == seeded["booking_id"])
+            .one()
+        )
+        assert fulfillment.status == "UNASSIGNED"
+        assert fulfillment.advocate_id is None
+        assert db.query(AdminAuditEvent).count() == 0
+    finally:
+        db.close()
+
+
+def test_unverified_advocate_contact_cannot_be_revealed(client, admin_db):
+    db = admin_db()
+    try:
+        advocate = Advocate(
+            name="Pending Contact Advocate",
+            email="pending.contact@example.test",
+            phone="919955554444",
+            bar_registration_number="MAH/CONTACT/2026",
+            category="Family",
+            district="Pune",
+            active=True,
+        )
+        db.add(advocate)
+        db.commit()
+        advocate_id = advocate.id
+    finally:
+        db.close()
+
+    response = client.post(
+        f"/admin/advocates/{advocate_id}/contact-reveal",
+        headers=_headers(),
+        json={"reason": "Contacting assigned advocate for consultation."},
+    )
+
+    assert response.status_code == 409
+    assert response.get_json()["error"] == "advocate_not_verified"
+
+    db = admin_db()
+    try:
+        assert db.query(AdminAuditEvent).count() == 0
+    finally:
+        db.close()
+
+
+def test_advocate_directory_exposes_assignment_eligibility(client, admin_db):
+    seeded = _seed_operations(admin_db)
+    db = admin_db()
+    try:
+        pending_advocate = Advocate(
+            name="Pending Directory Advocate",
+            email="pending.directory@example.test",
+            phone="919944443333",
+            bar_registration_number="MAH/DIRECTORY/2026",
+            category="Family",
+            district="Pune",
+            active=True,
+        )
+        db.add(pending_advocate)
+        db.commit()
+        pending_advocate_id = pending_advocate.id
+    finally:
+        db.close()
+
+    response = client.get("/admin/advocates", headers=_headers())
+
+    assert response.status_code == 200
+    items = {item["id"]: item for item in response.get_json()["items"]}
+    assert items[seeded["advocate_id"]]["verification_status"] == "VERIFIED"
+    assert items[seeded["advocate_id"]]["assignment_eligible"] is True
+    assert items[pending_advocate_id]["verification_status"] == "PENDING"
+    assert items[pending_advocate_id]["assignment_eligible"] is False
+
+
 def test_queue_masks_contact_and_reveal_and_manual_handover_are_audited(
     client,
     admin_db,
@@ -730,6 +953,7 @@ def test_queue_masks_contact_and_reveal_and_manual_handover_are_audited(
     queue_item = queue_response.get_json()["items"][0]
     assert queue_item["contact_masked"] == "••••••1234"
     assert "whatsapp_id" not in queue_item
+    assert queue_item["district"] == "Pune"
     assert queue_item["case_brief"]["issue_summary"].startswith("A family")
     assert queue_item["case_brief"]["preparation_status"] == "INCOMPLETE"
 

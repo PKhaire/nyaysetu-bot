@@ -271,10 +271,26 @@ def home_rows(user, translate) -> list[dict[str, str]]:
 
 def landing_rows(user, translate) -> list[dict[str, str]]:
     return [
-        {"id": DOCUMENT_STUDIO_IDS["create"], "title": "Create a document", "description": "Check eligibility and prepare a draft"},
-        {"id": DOCUMENT_STUDIO_IDS["continue"], "title": "Continue draft", "description": "Resume your latest saved answers"},
-        {"id": DOCUMENT_STUDIO_IDS["mine"], "title": "My documents", "description": "View recent document references"},
-        {"id": DOCUMENT_STUDIO_IDS["help"], "title": "How it works", "description": "Scope, exclusions and next steps"},
+        {
+            "id": DOCUMENT_STUDIO_IDS["create"],
+            "title": translate(user, "document_create_test"),
+            "description": translate(user, "document_create_test_desc"),
+        },
+        {
+            "id": DOCUMENT_STUDIO_IDS["continue"],
+            "title": translate(user, "document_continue"),
+            "description": translate(user, "document_continue_desc"),
+        },
+        {
+            "id": DOCUMENT_STUDIO_IDS["mine"],
+            "title": translate(user, "document_my_tests"),
+            "description": translate(user, "document_my_tests_desc"),
+        },
+        {
+            "id": DOCUMENT_STUDIO_IDS["help"],
+            "title": translate(user, "document_help"),
+            "description": translate(user, "document_help_desc"),
+        },
     ]
 
 
@@ -323,8 +339,11 @@ def product_rows(
         except (KeyError, ValueError):
             description = product.list_description
         if beta_mode_enabled():
-            description = (
-                "Beta questionnaire | No payment or document delivery"
+            description = _translated_product_text(
+                user,
+                translate,
+                "document_beta_list_desc",
+                "Beta questionnaire | No payment or document delivery",
             )
         rows.append({
             "id": f"{PRODUCT_ID_PREFIX}{product.code}",
@@ -426,12 +445,21 @@ def product_selection_details(user, translate, code: str) -> tuple[str, str]:
         product.start_label,
     )
     if beta_mode_enabled():
-        overview = (
+        overview = _translated_copy(
+            user,
+            translate,
+            "document_beta_overview",
             "Beta questionnaire: you may enter facts and share feedback. "
             "No payment is collected and no final document or legal service "
-            f"is provided.\n\n{overview}"
+            "is provided.\n\n{overview}",
+            overview=overview,
         )
-        start_label = "Try beta"
+        start_label = _translated_copy(
+            user,
+            translate,
+            "document_beta_start",
+            "Try beta",
+        )
     return overview, start_label
 
 
@@ -460,15 +488,36 @@ def parse_edit_section_id(value: str | None) -> str | None:
     return section if section in dict(SECTION_ORDER) else None
 
 
-def edit_section_rows() -> list[dict[str, str]]:
+def edit_section_rows(user=None, translate=None) -> list[dict[str, str]]:
     return [
         {
             "id": f"{EDIT_SECTION_ID_PREFIX}{section}",
-            "title": title[:24],
-            "description": "Change only this section",
+            "title": _translated_copy(
+                user,
+                translate,
+                f"document_section_{section}",
+                title,
+            )[:24],
+            "description": _translated_copy(
+                user,
+                translate,
+                "document_edit_section_desc",
+                "Change only this section",
+            ),
         }
         for section, title in SECTION_ORDER
     ]
+
+
+def _translated_copy(user, translate, key: str, fallback: str, **kwargs) -> str:
+    """Translate presentation copy while retaining service-only compatibility."""
+
+    if user is None or translate is None:
+        return fallback.format(**kwargs) if kwargs else fallback
+    value = str(translate(user, key) or "").strip()
+    if not value or value == key:
+        value = fallback
+    return value.format(**kwargs) if kwargs else value
 
 
 def _answers(order: DocumentOrder) -> dict[str, object]:
@@ -581,16 +630,20 @@ def create_or_resume_order(
 create_or_resume_uat_order = create_or_resume_order
 
 
-def current_question(order: DocumentOrder) -> dict[str, object]:
+def current_question(
+    order: DocumentOrder,
+    user=None,
+    translate=None,
+) -> dict[str, object]:
     answers = _answers(order)
     for index, question in enumerate(QUESTION_DEFINITIONS):
         if question["key"] == order.current_step:
             if _question_applies(question, answers):
-                return _present_question(question, answers)
+                return _present_question(question, answers, user, translate)
             next_question = _next_question(index, answers)
             if next_question is not None:
                 order.current_step = str(next_question["key"])
-                return _present_question(next_question, answers)
+                return _present_question(next_question, answers, user, translate)
             order.current_step = "review"
             return question
     order.current_step = str(QUESTION_DEFINITIONS[0]["key"])
@@ -600,6 +653,8 @@ def current_question(order: DocumentOrder) -> dict[str, object]:
 def _present_question(
     question: dict[str, object],
     answers: dict[str, object],
+    user=None,
+    translate=None,
 ) -> dict[str, object]:
     """Add customer-facing context without changing the hashed schema."""
 
@@ -608,10 +663,33 @@ def _present_question(
     sections = dict(SECTION_ORDER)
     presented.update(
         {
-            "section_title": sections[section],
+            "section_title": _translated_copy(
+                user,
+                translate,
+                f"document_section_{section}",
+                sections[section],
+            ),
             "section_number": tuple(sections).index(section) + 1,
             "section_total": len(SECTION_ORDER),
+            "prompt": _translated_copy(
+                user,
+                translate,
+                f"document_question_{question['key']}",
+                str(question["prompt"]),
+            ),
         }
+    )
+    presented["options"] = tuple(
+        (
+            code,
+            _translated_copy(
+                user,
+                translate,
+                f"document_option_{str(code).lower()}",
+                label,
+            ),
+        )
+        for code, label in question.get("options", ())
     )
     if question["key"] == "premises_address_lines":
         pin = str(answers.get("premises_pin") or "").strip()
@@ -620,27 +698,47 @@ def _present_question(
             districts = ", ".join(hint["districts"]) or "not listed"
             talukas = ", ".join(hint["talukas"]) or "not listed"
             offices = ", ".join(hint["offices"]) or "not listed"
-            assistance = (
-                f"For PIN {pin}, postal reference suggests district: "
-                f"{districts}; taluka: {talukas}; post offices: {offices}. "
+            assistance = _translated_copy(
+                user,
+                translate,
+                "document_address_reference_found",
+                "For PIN {pin}, postal reference suggests district: "
+                "{districts}; taluka: {talukas}; post offices: {offices}. ",
+                pin=pin,
+                districts=districts,
+                talukas=talukas,
+                offices=offices,
             )
         else:
-            assistance = (
-                f"We could not suggest locality details for PIN {pin}. "
+            assistance = _translated_copy(
+                user,
+                translate,
+                "document_address_reference_missing",
+                "We could not suggest locality details for PIN {pin}. ",
+                pin=pin,
             )
         presented["prompt"] = (
             assistance
-            + "Please type the complete address yourself: flat/unit, "
-            "building/society, floor if applicable, road/locality, "
-            "city/town/village, taluka if known, and district. Do not "
-            "repeat the PIN. You will confirm it next."
+            + _translated_copy(
+                user,
+                translate,
+                "document_address_entry_prompt",
+                "Please type the complete address yourself: flat/unit, "
+                "building/society, floor if applicable, road/locality, "
+                "city/town/village, taluka if known, and district. Do not "
+                "repeat the PIN. You will confirm it next.",
+            )
         )
     elif question["key"] == "premises_address_confirmed":
         address = render_premises_address(answers)
-        presented["prompt"] = (
-            "Please check the complete premises address:\n"
-            f"{address}\n\nChoose Confirm only if it is correct, or "
-            "Edit address to enter it again."
+        presented["prompt"] = _translated_copy(
+            user,
+            translate,
+            "document_address_confirm_prompt",
+            "Please check the complete premises address:\n{address}\n\n"
+            "Choose Confirm only if it is correct, or Edit address to enter "
+            "it again.",
+            address=address,
         )
     return presented
 
@@ -875,9 +973,9 @@ def summary_values(order: DocumentOrder) -> dict[str, str]:
     }
 
 
-def review_message(order: DocumentOrder) -> str:
+def review_message(order: DocumentOrder, user=None, translate=None) -> str:
     values = summary_values(order)
-    return (
+    fallback = (
         "Please confirm these customer-provided facts:\n"
         f"Reference: {values['reference']}\n"
         f"Licensor: {values['party_a']}\n"
@@ -888,6 +986,13 @@ def review_message(order: DocumentOrder) -> str:
         f"Term: {values['commencement']} to {values['expiry']} (11 months)\n"
         f"Monthly fee: INR {values['fee']}\nRefundable deposit: INR {values['deposit']}\n\n"
         "NyaySetu has not verified identity, title, authority or facts. Stamping, signing and registration are external."
+    )
+    return _translated_copy(
+        user,
+        translate,
+        "document_review_summary",
+        fallback,
+        **values,
     )
 
 
@@ -923,11 +1028,33 @@ def cancel_order(db, order: DocumentOrder) -> None:
     _audit(db, order, "DOCUMENT_ORDER_ABANDONED", from_state=previous, to_state=order.state)
 
 
-def recent_orders_message(db, user_id: int) -> str:
+def recent_orders_message(db, user_id: int, user=None, translate=None) -> str:
     orders = db.query(DocumentOrder).filter(DocumentOrder.user_id == user_id).order_by(DocumentOrder.id.desc()).limit(5).all()
     if not orders:
-        return "No Draft Studio drafts found."
-    lines = ["Your recent Draft Studio items:"]
-    lines.extend(f"- {order.public_ref}: {order.state}" for order in orders)
-    lines.append("Final files are released only after all legal, payment and storage checks pass.")
+        return _translated_copy(
+            user,
+            translate,
+            "document_recent_none",
+            "No Draft Studio drafts found.",
+        )
+    lines = [_translated_copy(
+        user,
+        translate,
+        "document_recent_header",
+        "Your recent Draft Studio items:",
+    )]
+    for order in orders:
+        state = _translated_copy(
+            user,
+            translate,
+            f"document_state_{str(order.state).lower()}",
+            str(order.state),
+        )
+        lines.append(f"- {order.public_ref}: {state}")
+    lines.append(_translated_copy(
+        user,
+        translate,
+        "document_recent_footer",
+        "Final files are released only after all legal, payment and storage checks pass.",
+    ))
     return "\n".join(lines)
