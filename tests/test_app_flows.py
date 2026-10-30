@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 from datetime import date, datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -1856,6 +1857,87 @@ def test_slot_selection_requires_review_before_payment_link_creation(
 
     review_prompt = transport_spies["buttons"].call_args.args[1]
     assert str(app_module.BOOKING_PRICE) in review_prompt
+
+
+@pytest.mark.parametrize("language", ["en", "hi", "mr"])
+def test_long_booking_review_keeps_policy_and_consent_before_pay(
+    monkeypatch, app_module, language
+):
+    sent_text = MagicMock()
+    sent_buttons = MagicMock()
+    monkeypatch.setattr(app_module, "send_text", sent_text)
+    monkeypatch.setattr(app_module, "send_buttons", sent_buttons)
+    monkeypatch.setattr(app_module, "PRIVACY_POLICY_URL", "https://example.test/privacy")
+    user = SimpleNamespace(
+        language=language, name="A" * 800, category="Criminal",
+        district_name="Pune", state_name="Maharashtra",
+        temp_date="2026-11-01", temp_slot="10_11", flow_state="ASK_SLOT",
+    )
+
+    app_module.send_booking_review(MagicMock(), user, "919900000000")
+
+    sent_text.assert_called_once()
+    review = sent_text.call_args.args[1]
+    assert len(review) <= 4096
+    assert app_module.BOOKING_TERMS_VERSION in review
+    assert str(app_module.BOOKING_PRICE) in review
+    assert "https://example.test/privacy" in review
+    assert review.endswith(
+        app_module.t(user, "review_before_payment", **{
+            "name": user.name,
+            "category": app_module.get_category_label(user.category, user),
+            "district": user.district_name,
+            "state": user.state_name,
+            "date": app_module.format_date_readable(user.temp_date),
+            "slot": app_module.SLOT_MAP[user.temp_slot],
+            "amount": app_module.BOOKING_PRICE,
+            "terms_url": app_module.TERMS_OF_SERVICE_URL or "N/A",
+            "refund_url": app_module.REFUND_POLICY_URL or "N/A",
+            "cancellation_url": app_module.CANCELLATION_POLICY_URL or "N/A",
+            "privacy_url": app_module.PRIVACY_POLICY_URL,
+            "policy_version": app_module.BOOKING_TERMS_VERSION,
+        })[-100:]
+    )
+    buttons = sent_buttons.call_args.args[2]
+    assert any(button["id"] == app_module.BTN_REVIEW_PAY for button in buttons)
+    assert len(sent_buttons.call_args.args[1]) <= 1024
+
+
+def test_extremely_long_booking_review_never_offers_payment(
+    monkeypatch, app_module
+):
+    sent_buttons = MagicMock()
+    monkeypatch.setattr(app_module, "send_text", MagicMock())
+    monkeypatch.setattr(app_module, "send_buttons", sent_buttons)
+    user = SimpleNamespace(
+        language="en", name="A" * 5000, category="Criminal",
+        district_name="Pune", state_name="Maharashtra",
+        temp_date="2026-11-01", temp_slot="10_11", flow_state="ASK_SLOT",
+    )
+
+    app_module.send_booking_review(MagicMock(), user, "919900000000")
+
+    sent_buttons.assert_not_called()
+    assert user.flow_state != app_module.REVIEW_BOOKING
+
+
+def test_failed_long_review_delivery_does_not_enable_payment(
+    monkeypatch, app_module
+):
+    monkeypatch.setattr(app_module, "send_text", MagicMock(side_effect=RuntimeError))
+    sent_buttons = MagicMock()
+    monkeypatch.setattr(app_module, "send_buttons", sent_buttons)
+    user = SimpleNamespace(
+        language="en", name="A" * 800, category="Criminal",
+        district_name="Pune", state_name="Maharashtra",
+        temp_date="2026-11-01", temp_slot="10_11", flow_state="ASK_SLOT",
+    )
+
+    with pytest.raises(RuntimeError):
+        app_module.send_booking_review(MagicMock(), user, "919900000000")
+
+    sent_buttons.assert_not_called()
+    assert user.flow_state != app_module.REVIEW_BOOKING
 
 
 def test_failed_message_is_released_for_provider_retry(

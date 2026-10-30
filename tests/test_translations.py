@@ -37,6 +37,23 @@ def test_all_locales_have_the_same_keys_and_placeholder_contracts():
             ), key
 
 
+def test_customer_reply_button_labels_fit_without_truncation():
+    # These labels are used in reply-button payloads, including booking and
+    # payment recovery. Silent clipping can obscure the action in WhatsApp.
+    keys = (
+        "ask_ai",
+        "book_consult",
+        "continue_booking",
+        "cancel_booking",
+        "check_payment_status",
+        "support_cancel",
+        "verified_button",
+    )
+    for language in ("en", "hi", "mr"):
+        for key in keys:
+            assert len(TRANSLATIONS[language][key]) <= 20, (language, key)
+
+
 def test_customer_visible_translation_fallbacks_are_explicitly_localized():
     keys = {
         key

@@ -432,11 +432,15 @@ BRIEF_TRANSLATION_OVERRIDES = {
 
 GENERAL_TRANSLATION_OVERRIDES = {
     "en": {
+        "booking_review_controls": "Please review the booking details and policies in the message above before choosing an option.",
+        "booking_review_too_long": "We cannot display the full booking review safely. No payment link was created. Please type MENU and contact support for help.",
         "maintenance_message": "⚙️ *NyaySetu is temporarily under maintenance.*\n\nWe are upgrading the service. Please try again later. If anyone is in immediate danger, contact the appropriate local emergency service.",
     },
     "hi": {
-        "book_consult": "Consultation book karein",
-        "verified_button": "Details verify karein",
+        "booking_review_controls": "Kripya koi option chunne se pehle upar diye booking details aur policies check karein.",
+        "booking_review_too_long": "Poora booking review surakshit tarike se nahi dikha sakte. Payment link nahi bana. Madad ke liye MENU type karke support se sampark karein.",
+        "book_consult": "Salah book karein",
+        "verified_button": "Details sahi hain",
         "available_dates": "Available dates dekhein",
         "available_slots": "Available slots dekhein",
         "time_slots": "Samay ke slots",
@@ -452,12 +456,12 @@ GENERAL_TRANSLATION_OVERRIDES = {
         "support_phone": "Support ka phone",
         "support_email": "Support ka email",
         "support_latest_status": "Sabse naya support ticket {ticket_id}: {status}",
-        "support_cancel": "Support request cancel karein",
+        "support_cancel": "Request radd karein",
         "ai_consent_accept": "Main sahmat hoon",
-        "continue_booking": "Booking continue karein",
+        "continue_booking": "Aage badhein",
         "pay_now": "Ab payment karein",
-        "cancel_booking": "Booking cancel karein",
-        "check_payment_status": "Payment status check karein",
+        "cancel_booking": "Booking radd karein",
+        "check_payment_status": "Status dekhein",
         "payment_help": "Payment mein madad",
         "feedback_header": "Apna feedback dein",
         "feedback_skip": "Feedback skip karein",
@@ -467,6 +471,8 @@ GENERAL_TRANSLATION_OVERRIDES = {
         "maintenance_message": "⚙️ *NyaySetu par abhi maintenance chal raha hai.*\n\nHum service upgrade kar rahe hain. Kripya baad mein phir try karein. Kisi ko turant khatra ho to sahi local emergency service se contact karein.",
     },
     "mr": {
+        "booking_review_controls": "पर्याय निवडण्यापूर्वी वरील संदेशातील बुकिंग तपशील आणि धोरणे तपासा.",
+        "booking_review_too_long": "संपूर्ण बुकिंग तपशील सुरक्षितपणे दाखवता येत नाहीत. पेमेंट लिंक तयार झालेली नाही. मदतीसाठी MENU लिहून सपोर्टशी संपर्क साधा.",
         "home_ai_desc": "सामान्य कायदेशीर माहिती",
         "home_book_desc": "सशुल्क वकील सल्लामसलत",
         "maintenance_message": "⚙️ *NyaySetu वर सध्या देखभाल सुरू आहे.*\n\nआम्ही सेवा सुधारत आहोत. कृपया नंतर पुन्हा प्रयत्न करा. कोणाला तात्काळ धोका असल्यास योग्य स्थानिक आपत्कालीन सेवेशी संपर्क करा.",

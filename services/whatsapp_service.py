@@ -174,6 +174,7 @@ def _validate_button_message(interactive: dict) -> None:
         raise WhatsAppValidationError("reply buttons must contain between 1 and 3 items")
 
     seen_ids = set()
+    seen_titles = set()
     for index, button in enumerate(buttons):
         if not isinstance(button, dict):
             raise WhatsAppValidationError(f"button {index} must be an object")
@@ -193,6 +194,9 @@ def _validate_button_message(interactive: dict) -> None:
             BUTTON_TITLE_MAX,
             f"button {index} title",
         )
+        if reply["title"] in seen_titles:
+            raise WhatsAppValidationError("reply button titles must be unique")
+        seen_titles.add(reply["title"])
 
 
 def _validate_list_message(interactive: dict) -> None:

@@ -122,6 +122,8 @@ from subcategory_labels import SUBCATEGORY_LABELS
 from utils.date_utils import format_date_readable
 from utils.i18n import t
 from services.whatsapp_service import (
+    INTERACTIVE_BODY_MAX,
+    TEXT_BODY_MAX,
     is_ambiguous_delivery_failure,
     is_retryable_delivery_failure,
     send_text as _wa_send_text,
@@ -1841,27 +1843,40 @@ def begin_booking_scope_review(db, user, wa_id) -> None:
     )
 
 
-def send_booking_review(db, user, wa_id) -> None:
+def send_booking_review(db, user, wa_id) -> bool:
+    review = t(
+        user,
+        "review_before_payment",
+        name=user.name or "N/A",
+        category=get_category_label(user.category, user),
+        district=user.district_name or "N/A",
+        state=user.state_name or "N/A",
+        date=format_date_readable(user.temp_date),
+        slot=SLOT_MAP.get(user.temp_slot, "N/A"),
+        amount=BOOKING_PRICE,
+        terms_url=TERMS_OF_SERVICE_URL or "N/A",
+        refund_url=REFUND_POLICY_URL or "N/A",
+        cancellation_url=CANCELLATION_POLICY_URL or "N/A",
+        privacy_url=PRIVACY_POLICY_URL or "N/A",
+        policy_version=BOOKING_TERMS_VERSION,
+    )
+    if len(review) > TEXT_BODY_MAX:
+        # Never offer payment if a complete review cannot be displayed.
+        user.flow_state = NORMAL
+        db.commit()
+        send_text(wa_id, t(user, "booking_review_too_long"))
+        return False
+
+    if len(review) > INTERACTIVE_BODY_MAX:
+        # A text message allows the complete policy and consent to remain
+        # visible when they cannot fit in an interactive-button body.
+        send_text(wa_id, review)
+        review = t(user, "booking_review_controls")
     user.flow_state = REVIEW_BOOKING
     db.commit()
     send_buttons(
         wa_id,
-        t(
-            user,
-            "review_before_payment",
-            name=user.name or "N/A",
-            category=get_category_label(user.category, user),
-            district=user.district_name or "N/A",
-            state=user.state_name or "N/A",
-            date=format_date_readable(user.temp_date),
-            slot=SLOT_MAP.get(user.temp_slot, "N/A"),
-            amount=BOOKING_PRICE,
-            terms_url=TERMS_OF_SERVICE_URL or "N/A",
-            refund_url=REFUND_POLICY_URL or "N/A",
-            cancellation_url=CANCELLATION_POLICY_URL or "N/A",
-            privacy_url=PRIVACY_POLICY_URL or "N/A",
-            policy_version=BOOKING_TERMS_VERSION,
-        ),
+        review,
         [
             {"id": BTN_REVIEW_PAY, "title": t(user, "pay_now")},
             {
@@ -1871,6 +1886,7 @@ def send_booking_review(db, user, wa_id) -> None:
             {"id": BTN_REVIEW_CANCEL, "title": t(user, "cancel_booking")},
         ],
     )
+    return True
 
 
 def send_pending_payment_options(user, wa_id, booking=None) -> None:
@@ -4366,8 +4382,8 @@ def webhook():
                 wa_id,
                 t(user, "welcome_back", name=user.name),
                 [
-                    {"id": BTN_ASK_AI, "title": f"🤖 {t(user, 'ask_ai')}"},
-                    {"id": BTN_BOOK_CONSULT, "title": f"📅 {t(user, 'book_consult')}"},
+                    {"id": BTN_ASK_AI, "title": t(user, "ask_ai")},
+                    {"id": BTN_BOOK_CONSULT, "title": t(user, "book_consult")},
                 ],
             )
             return jsonify({"status": "ok"}), 200
@@ -5175,16 +5191,16 @@ def webhook():
 
             user.temp_slot = slot_code
             db.commit()
-            send_booking_review(db, user, wa_id)
-            record_event(
-                "booking_review_viewed",
-                {
-                    "category": user.category,
-                    "date": user.temp_date,
-                    "slot": slot_code,
-                },
-                user_id=user.id,
-            )
+            if send_booking_review(db, user, wa_id):
+                record_event(
+                    "booking_review_viewed",
+                    {
+                        "category": user.category,
+                        "date": user.temp_date,
+                        "slot": slot_code,
+                    },
+                    user_id=user.id,
+                )
             return jsonify({"status": "ok"}), 200
 
         # -------------------------------

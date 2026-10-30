@@ -75,6 +75,21 @@ def test_text_and_interactive_fields_are_truncated_before_send(monkeypatch):
     )
 
 
+def test_duplicate_reply_button_titles_are_rejected_after_truncation():
+    interactive = {
+        "body": {"text": "Choose an option"},
+        "action": {
+            "buttons": [
+                {"reply": {"id": "first", "title": "A" * 20 + "X"}},
+                {"reply": {"id": "second", "title": "A" * 20 + "Y"}},
+            ]
+        },
+    }
+
+    with pytest.raises(whatsapp.WhatsAppValidationError, match="titles must be unique"):
+        whatsapp._validate_button_message(interactive)
+
+
 def test_list_picker_uses_the_supplied_localized_action_title(monkeypatch):
     _configure_transport(monkeypatch)
     request = MagicMock(return_value=_response(200, {"messages": [{"id": "1"}]}))
