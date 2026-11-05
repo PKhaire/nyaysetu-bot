@@ -1,12 +1,8 @@
 "use strict";
 
 const TERMINAL_STATUSES = new Set(["COMPLETED", "REFUNDED", "CANCELLED"]);
-const ACTIVE_STATUSES = new Set([
-  "UNASSIGNED", "ASSIGNED", "CONFIRMED", "RESCHEDULE_REQUIRED",
-  "REFUND_REVIEW", "NO_SHOW",
-]);
-
-const state = { items: [], advocates: [], transitions: {}, selected: null };
+const state = { items: [], advocates: [], transitions: {}, selected: null, offset: 0, total: 0, requestId: 0 };
+const PAGE_SIZE = 50;
 const elements = {};
 
 function byId(id) { return document.getElementById(id); }
@@ -74,32 +70,13 @@ function showQueueError(message) {
   elements.queueError.classList.toggle("hidden", !message);
 }
 
-function updateSummary() {
-  const count = (status) => state.items.filter((item) => item.fulfillment_status === status).length;
+function updateSummary(counts) {
+  const count = (status) => counts[status] || 0;
   elements.countUnassigned.textContent = count("UNASSIGNED");
   elements.countAssigned.textContent = count("ASSIGNED");
   elements.countConfirmed.textContent = count("CONFIRMED");
-  elements.countAttention.textContent = state.items.filter((item) =>
-    ["RESCHEDULE_REQUIRED", "REFUND_REVIEW", "NO_SHOW"].includes(item.fulfillment_status)
-  ).length;
-}
-
-function searchableText(item) {
-  return [
-    item.booking_id, item.case_id, item.name, item.category, item.subcategory,
-    item.assigned_to, item.fulfillment_status,
-  ].join(" ").toLowerCase();
-}
-
-function filteredItems() {
-  const selectedStatus = elements.statusFilter.value;
-  const query = elements.queueSearch.value.trim().toLowerCase();
-  return state.items.filter((item) => {
-    const statusMatches = selectedStatus === "ALL"
-      || (selectedStatus === "ACTIVE" && ACTIVE_STATUSES.has(item.fulfillment_status))
-      || item.fulfillment_status === selectedStatus;
-    return statusMatches && (!query || searchableText(item).includes(query));
-  });
+  elements.countAttention.textContent = ["RESCHEDULE_REQUIRED", "REFUND_REVIEW", "NO_SHOW"]
+    .reduce((sum, status) => sum + count(status), 0);
 }
 
 function appendTwoLineCell(row, primary, secondary, className = "") {
@@ -150,7 +127,7 @@ function appointmentRow(item) {
 }
 
 function renderQueue() {
-  const items = filteredItems();
+  const items = state.items;
   elements.rows.replaceChildren(...items.map(appointmentRow));
   elements.emptyState.classList.toggle("hidden", items.length !== 0);
 }
@@ -196,6 +173,8 @@ function updateDialogRequirements() {
     "REFUNDED", "CANCELLED",
   ].includes(status);
   elements.rescheduleFields.classList.toggle("hidden", status !== "RESCHEDULE_REQUIRED");
+  elements.earlyCompletionFields.classList.toggle("hidden", status !== "COMPLETED");
+  if (status !== "COMPLETED") elements.earlyCompletionOverride.checked = false;
 }
 
 function setText(id, value) {
@@ -253,6 +232,7 @@ function openDialog(item) {
   elements.dialogContext.textContent = `${item.name || "Client"} · ${formatDate(item.date)} · ${item.slot || "Time not set"} · ${item.category || "Legal consultation"}`;
   populateAdvocateOptions(item.advocate_id);
   elements.dialogNotes.value = item.operator_notes || "";
+  elements.earlyCompletionOverride.checked = false;
   elements.dialogDate.value = "";
   elements.dialogSlot.value = "";
   elements.contactNotes.value = "";
@@ -289,6 +269,9 @@ async function saveAppointment(event) {
     advocate_id: elements.dialogAdvocate.value || null,
     operator_notes: elements.dialogNotes.value.trim(),
   };
+  if (status === "COMPLETED" && elements.earlyCompletionOverride.checked) {
+    payload.early_completion_override = true;
+  }
   if (status === "RESCHEDULE_REQUIRED" && (elements.dialogDate.value || elements.dialogSlot.value)) {
     payload.reschedule_date = elements.dialogDate.value;
     payload.reschedule_slot_code = elements.dialogSlot.value;
@@ -416,24 +399,50 @@ async function loadAdvocates() {
 }
 
 async function loadAppointments() {
+  const requestId = ++state.requestId;
   elements.refreshButton.disabled = true;
+  elements.queuePrevious.disabled = true;
+  elements.queueNext.disabled = true;
+  elements.emptyState.classList.add("hidden");
+  elements.rows.replaceChildren();
+  elements.queuePage.textContent = "Loading…";
   showQueueError("");
   try {
+    const params = new URLSearchParams({
+      limit: String(PAGE_SIZE), offset: String(state.offset),
+      status: elements.statusFilter.value, search: elements.queueSearch.value.trim(),
+    });
     const [queue, workflow, advocates] = await Promise.all([
-      api("/admin/fulfillments?limit=200"),
+      api(`/admin/fulfillments?${params}`),
       Object.keys(state.transitions).length ? Promise.resolve(null) : api("/admin/fulfillment-workflow"),
       api("/admin/advocates"),
     ]);
+    if (requestId !== state.requestId) return;
+    if (!Array.isArray(queue.items) || !Number.isInteger(queue.total)
+        || queue.total < 0 || !queue.status_counts || typeof queue.status_counts !== "object") {
+      throw new Error("Queue response is incomplete. Check the backend version and contact support.");
+    }
+    if (state.offset > 0 && (state.offset >= queue.total || queue.items.length === 0)) {
+      state.offset = Math.min(state.offset - PAGE_SIZE, Math.max(0, Math.ceil(queue.total / PAGE_SIZE) - 1) * PAGE_SIZE);
+      return loadAppointments();
+    }
     state.items = queue.items || [];
+    state.total = queue.total;
     state.advocates = advocates.items || [];
     if (workflow) state.transitions = workflow.transitions || {};
-    updateSummary();
+    updateSummary(queue.status_counts || {});
     renderQueue();
-    elements.lastUpdated.textContent = `Last refreshed ${new Intl.DateTimeFormat("en-IN", { timeStyle: "short" }).format(new Date())} · ${state.items.length} records`;
+    elements.queuePrevious.disabled = state.offset === 0;
+    elements.queueNext.disabled = state.offset + state.items.length >= state.total;
+    elements.queuePage.textContent = state.total ? `${state.offset + 1}–${state.offset + state.items.length} of ${state.total}` : "0 results";
+    elements.lastUpdated.textContent = `Last refreshed ${new Intl.DateTimeFormat("en-IN", { timeStyle: "short" }).format(new Date())} · ${state.total} matching records`;
   } catch (error) {
+    if (requestId !== state.requestId) return;
+    elements.queuePage.textContent = "Queue unavailable";
+    for (const item of [elements.countUnassigned, elements.countAssigned, elements.countConfirmed, elements.countAttention]) item.textContent = "—";
     showQueueError(error.message || "Unable to load appointments.");
   } finally {
-    elements.refreshButton.disabled = false;
+    if (requestId === state.requestId) elements.refreshButton.disabled = false;
   }
 }
 
@@ -441,6 +450,7 @@ function initialise() {
   Object.assign(elements, {
     rows: byId("appointment-rows"), emptyState: byId("empty-state"),
     statusFilter: byId("status-filter"), queueSearch: byId("queue-search"),
+    queuePrevious: byId("queue-previous"), queueNext: byId("queue-next"), queuePage: byId("queue-page"),
     refreshButton: byId("refresh-button"), lastUpdated: byId("last-updated"),
     queueError: byId("queue-error"), countUnassigned: byId("count-unassigned"),
     countAssigned: byId("count-assigned"), countConfirmed: byId("count-confirmed"),
@@ -448,6 +458,8 @@ function initialise() {
     dialogTitle: byId("dialog-title"), dialogBookingId: byId("dialog-booking-id"),
     dialogContext: byId("dialog-context"), dialogStatus: byId("dialog-status"),
     dialogAdvocate: byId("dialog-advocate"), dialogNotes: byId("dialog-notes"),
+    earlyCompletionFields: byId("early-completion-fields"),
+    earlyCompletionOverride: byId("early-completion-override"),
     dialogDate: byId("dialog-date"), dialogSlot: byId("dialog-slot"),
     rescheduleFields: byId("reschedule-fields"), dialogError: byId("dialog-error"),
     dialogSubmit: byId("dialog-submit"), toast: byId("toast"),
@@ -472,8 +484,21 @@ function initialise() {
     advocateError: byId("advocate-error"), advocateSubmit: byId("advocate-submit"),
   });
 
-  elements.statusFilter.addEventListener("change", renderQueue);
-  elements.queueSearch.addEventListener("input", renderQueue);
+  elements.statusFilter.addEventListener("change", () => { state.offset = 0; loadAppointments(); });
+  let searchTimer;
+  elements.queueSearch.addEventListener("input", () => {
+    window.clearTimeout(searchTimer);
+    state.requestId += 1;
+    state.offset = 0;
+    elements.rows.replaceChildren();
+    elements.emptyState.classList.add("hidden");
+    elements.queuePrevious.disabled = true;
+    elements.queueNext.disabled = true;
+    elements.queuePage.textContent = "Searching…";
+    searchTimer = window.setTimeout(loadAppointments, 300);
+  });
+  elements.queuePrevious.addEventListener("click", () => { state.offset = Math.max(0, state.offset - PAGE_SIZE); loadAppointments(); });
+  elements.queueNext.addEventListener("click", () => { state.offset += PAGE_SIZE; loadAppointments(); });
   elements.refreshButton.addEventListener("click", loadAppointments);
   elements.dialogStatus.addEventListener("change", updateDialogRequirements);
   elements.revealClientContact.addEventListener("click", revealClientContact);
