@@ -130,6 +130,14 @@ jobs:
           python -m alembic -c alembic.ini upgrade head
           python -m alembic -c alembic.ini check
 
+      - name: Install PostgreSQL test runner
+        run: python -m pip install --disable-pip-version-check pytest==9.1.1
+
+      - name: Test appointment queue against disposable PostgreSQL
+        env:
+          NYAYSETU_POSTGRES_QUEUE_CI: "1"
+        run: python -m pytest -q postgres_tests/test_queue_postgres.py
+
   dependency-audit:
     name: Dependency vulnerability audit
     runs-on: ubuntu-latest
