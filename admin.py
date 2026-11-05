@@ -1443,6 +1443,10 @@ def _serialize_fulfillment(
 @admin_bp.get("/fulfillments")
 def fulfillment_queue():
     limit = min(max(request.args.get("limit", default=50, type=int), 1), 200)
+    offset_text = request.args.get("offset", "0")
+    if not re.fullmatch(r"[0-9]{1,9}", offset_text):
+        return jsonify({"error": "invalid_offset"}), 400
+    offset = int(offset_text)
     status_filter = request.args.get("status", "").strip().upper()
     db = SessionLocal()
     try:
@@ -1453,15 +1457,39 @@ def fulfillment_queue():
             .outerjoin(CaseBrief, CaseBrief.booking_id == Booking.id)
             .outerjoin(Advocate, Advocate.id == BookingFulfillment.advocate_id)
             .order_by(
+                BookingFulfillment.sla_due_at.is_(None).asc(),
                 BookingFulfillment.sla_due_at.asc(),
                 Booking.id.asc(),
             )
         )
-        if status_filter:
+        status_counts = {
+            str(status): count
+            for status, count in query.order_by(None).with_entities(
+                BookingFulfillment.status, func.count(Booking.id)
+            ).group_by(BookingFulfillment.status).all()
+        }
+        if status_filter == "ACTIVE":
+            query = query.filter(BookingFulfillment.status.in_((
+                "UNASSIGNED", "ASSIGNED", "CONFIRMED", "RESCHEDULE_REQUIRED",
+                "REFUND_REVIEW", "NO_SHOW",
+            )))
+        elif status_filter and status_filter != "ALL":
             query = query.filter(
                 BookingFulfillment.status == status_filter
             )
-        rows = query.limit(limit).all()
+        search = request.args.get("search", "").strip()[:120]
+        if search:
+            query = query.filter(or_(
+                cast(Booking.id, String).icontains(search, autoescape=True),
+                User.case_id.icontains(search, autoescape=True),
+                Booking.name.icontains(search, autoescape=True),
+                Booking.category.icontains(search, autoescape=True),
+                Booking.subcategory.icontains(search, autoescape=True),
+                BookingFulfillment.assigned_to.icontains(search, autoescape=True),
+                BookingFulfillment.status.icontains(search, autoescape=True),
+            ))
+        total = query.order_by(None).count()
+        rows = query.offset(offset).limit(limit).all()
         booking_ids = [booking.id for _, booking, _, _, _ in rows]
         contact_events_by_booking: dict[int, list[ManualContactEvent]] = {
             booking_id: [] for booking_id in booking_ids
@@ -1478,6 +1506,9 @@ def fulfillment_queue():
                 )
         return jsonify(
             {
+                "total": total,
+                "offset": offset,
+                "status_counts": status_counts,
                 "items": [
                     _serialize_fulfillment(
                         fulfillment,
@@ -1606,12 +1637,18 @@ def update_fulfillment(booking_id: int):
             "CANCELLED",
         } and len(notes) < 5:
             return jsonify({"error": "operator_notes_required"}), 400
+        early_completion_override = False
         if requested_status == "COMPLETED":
             scheduled_end = scheduled_end_utc(booking)
             if scheduled_end is None:
                 return jsonify({"error": "consultation_schedule_invalid"}), 409
             if utc_now() < scheduled_end:
-                return jsonify({"error": "consultation_not_ended"}), 409
+                if body.get("early_completion_override") is not True:
+                    return jsonify({"error": "consultation_not_ended"}), 409
+                identity = _session_operator() if not _token_authorized() else None
+                if not identity or identity.get("role") not in {"ADMIN", "OPERATOR"}:
+                    return jsonify({"error": "named_operator_required"}), 403
+                early_completion_override = True
 
         before = {
             "status": current_status,
@@ -1770,6 +1807,8 @@ def update_fulfillment(booking_id: int):
             "slot_code": booking.slot_code,
             "operator_notes": fulfillment.operator_notes,
         }
+        if early_completion_override:
+            after["early_completion_override"] = True
         _audit(
             db,
             action="fulfillment.update",
