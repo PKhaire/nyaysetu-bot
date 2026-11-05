@@ -107,6 +107,12 @@
         <strong>No matching appointments</strong>
         <span>Try a different status or search term.</span>
       </div>
+      <p class="muted small">Summary counts above cover all appointments, regardless of the selected filter. Results may change as appointments are updated; refresh to recheck.</p>
+      <div class="inline-action" aria-label="Queue pagination">
+        <button id="queue-previous" class="button button-secondary" type="button" disabled>Previous</button>
+        <span id="queue-page" aria-live="polite">Loading…</span>
+        <button id="queue-next" class="button button-secondary" type="button" disabled>Next</button>
+      </div>
     </section>
   </main>
 
@@ -167,6 +173,10 @@
       </div>
       <label for="dialog-notes">Operator notes</label>
       <textarea id="dialog-notes" rows="4" maxlength="4000" placeholder="Record the action taken. Notes are mandatory for completion, no-show, reschedule and refund outcomes."></textarea>
+      <div id="early-completion-fields" class="hidden">
+        <p class="muted small">If the consultation ended before its scheduled end, provide the reason above. This action is audited; feedback must wait until the scheduled end.</p>
+        <label for="early-completion-override"><input id="early-completion-override" type="checkbox"> Mark completed early: I confirm the consultation took place and has ended.</label>
+      </div>
       <section class="detail-panel">
         <h3>Record manual contact or handover</h3>
         <div class="field-grid">

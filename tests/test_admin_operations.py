@@ -400,6 +400,18 @@ def test_named_non_admin_can_read_but_cannot_change_admin_only_data(
 
     assert forbidden.status_code == 403
     assert forbidden.get_json()["error"] == "insufficient_role"
+    if role == "VIEWER":
+        override = client.patch(
+            "/admin/fulfillments/999999",
+            headers={"X-CSRF-Token": csrf_token},
+            json={
+                "status": "COMPLETED",
+                "early_completion_override": True,
+                "operator_notes": "Synthetic early completion request.",
+            },
+        )
+        assert override.status_code == 403
+        assert override.get_json()["error"] == "insufficient_role"
 
 
 def test_advocate_identity_cannot_enter_general_operations_dashboard(
@@ -654,6 +666,75 @@ def test_admin_browser_session_requires_csrf_and_audits_operator(
     assert client.get("/admin/fulfillments").status_code == 401
 
 
+def test_appointment_queue_can_reach_records_beyond_first_200(client, admin_db):
+    db = admin_db()
+    try:
+        for index in range(201):
+            booking = Booking(
+                whatsapp_id=f"919000{index:06d}",
+                name=f"Synthetic Queue User {index}",
+                phone=f"919000{index:06d}",
+                state_name="Maharashtra",
+                district_name="Pune",
+                category="Family",
+                subcategory="Other Family Issue",
+                date=date(2099, 8, 3),
+                slot_code="10_11",
+                slot_readable="10:00 AM - 11:00 AM",
+                amount=499,
+                status=BookingStatus.PAID,
+                payment_token=f"synthetic-queue-{index}",
+            )
+            db.add(booking)
+            db.flush()
+            db.add(BookingFulfillment(
+                booking_id=booking.id,
+                status="ASSIGNED" if index == 200 else "UNASSIGNED",
+            ))
+        db.commit()
+    finally:
+        db.close()
+
+    first = client.get("/admin/fulfillments?limit=200&offset=0", headers=_headers())
+    second = client.get("/admin/fulfillments?limit=200&offset=200", headers=_headers())
+
+    assert first.status_code == second.status_code == 200
+    assert first.get_json()["total"] == 201
+    assert first.get_json()["status_counts"]["UNASSIGNED"] == 200
+    assert first.get_json()["status_counts"]["ASSIGNED"] == 1
+    first_ids = {item["booking_id"] for item in first.get_json()["items"]}
+    second_ids = {item["booking_id"] for item in second.get_json()["items"]}
+    assert len(first_ids) == 200
+    assert len(second_ids) == 1
+    assert first_ids.isdisjoint(second_ids)
+    search = client.get(
+        "/admin/fulfillments",
+        query_string={"limit": 200, "search": "Synthetic Queue User 200"},
+        headers=_headers(),
+    )
+    assert search.status_code == 200
+    assert search.get_json()["total"] == 1
+    assert {item["booking_id"] for item in search.get_json()["items"]} == second_ids
+    assigned = client.get(
+        "/admin/fulfillments?status=ASSIGNED", headers=_headers(),
+    )
+    assert assigned.get_json()["total"] == 1
+    assert assigned.get_json()["status_counts"]["UNASSIGNED"] == 200
+    assert {item["booking_id"] for item in assigned.get_json()["items"]} == second_ids
+    literal = client.get(
+        "/admin/fulfillments", query_string={"search": "%"}, headers=_headers(),
+    )
+    assert literal.get_json()["total"] == 0
+    assert literal.get_json()["items"] == []
+    assert client.get("/admin/fulfillments").status_code == 401
+    assert client.get(
+        "/admin/fulfillments?offset=-1", headers=_headers(),
+    ).status_code == 400
+    assert client.get(
+        "/admin/fulfillments?offset=invalid", headers=_headers(),
+    ).status_code == 400
+
+
 def test_support_resolution_is_audited(client, admin_db):
     seeded = _seed_operations(admin_db)
     response = client.patch(
@@ -770,6 +851,143 @@ def test_paid_consultation_cannot_complete_before_scheduled_end(
         assert db.query(AdminAuditEvent).count() == 1
     finally:
         db.close()
+
+
+@pytest.mark.parametrize(
+    ("now_utc", "expected_status"),
+    [
+        (datetime(2099, 8, 3, 5, 29, 59), 409),
+        (datetime(2099, 8, 3, 5, 30), 200),
+        (datetime(2099, 8, 3, 5, 30, 1), 200),
+    ],
+)
+def test_completion_without_override_at_scheduled_end_boundary(
+    client, admin_db, monkeypatch, now_utc, expected_status,
+):
+    seeded = _seed_operations(admin_db)
+    db = admin_db()
+    try:
+        db.get(Booking, seeded["booking_id"]).date = date(2099, 8, 3)
+        db.commit()
+    finally:
+        db.close()
+    assigned = client.patch(
+        f"/admin/fulfillments/{seeded['booking_id']}",
+        headers=_headers(),
+        json={"status": "ASSIGNED", "advocate_id": seeded["advocate_id"]},
+    )
+    assert assigned.status_code == 200
+    monkeypatch.setattr(admin, "utc_now", lambda: now_utc)
+
+    response = client.patch(
+        f"/admin/fulfillments/{seeded['booking_id']}",
+        headers=_headers(),
+        json={"status": "COMPLETED", "operator_notes": "Consultation completed."},
+    )
+
+    assert response.status_code == expected_status
+    if expected_status == 409:
+        assert response.get_json()["error"] == "consultation_not_ended"
+    else:
+        assert response.get_json()["item"]["fulfillment_status"] == "COMPLETED"
+
+
+def test_named_operator_can_record_audited_early_consultation_completion(
+    client,
+    admin_db,
+    monkeypatch,
+):
+    seeded = _seed_operations(admin_db)
+    now = datetime.now(timezone.utc)
+    db = admin_db()
+    try:
+        db.get(Booking, seeded["booking_id"]).date = date(2099, 8, 3)
+        enrollment = begin_operator_enrollment(
+            db,
+            operator_id="early.operator@example.com",
+            display_name="Synthetic Operator",
+            role="OPERATOR",
+            password="synthetic operator password",
+            encryption_key=ADMIN_MFA_KEY,
+            now=now,
+        )
+        confirm_operator_enrollment(
+            db,
+            operator_id=enrollment.operator_id,
+            verification_code=totp_code(enrollment.secret, timestamp=now),
+            encryption_key=ADMIN_MFA_KEY,
+            now=now,
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    client.get("/admin/login")
+    with client.session_transaction() as browser_session:
+        csrf_token = browser_session["admin_csrf_token"]
+    login = client.post(
+        "/admin/login",
+        data={
+            "operator_id": enrollment.operator_id,
+            "password": "synthetic operator password",
+            "verification_code": totp_code(enrollment.secret, timestamp=now),
+            "csrf_token": csrf_token,
+        },
+    )
+    assert login.status_code == 302
+    with client.session_transaction() as browser_session:
+        csrf_token = browser_session["admin_csrf_token"]
+    headers = {"X-CSRF-Token": csrf_token}
+    assigned = client.patch(
+        f"/admin/fulfillments/{seeded['booking_id']}",
+        headers=headers,
+        json={"status": "ASSIGNED", "advocate_id": seeded["advocate_id"]},
+    )
+    assert assigned.status_code == 200
+
+    # 10:30 AM IST: the consultation has started but its 11 AM end is future.
+    monkeypatch.setattr(admin, "utc_now", lambda: datetime(2099, 8, 3, 5, 0))
+    reason = "Consultation finished early and both parties confirmed completion."
+    missing_reason = client.patch(
+        f"/admin/fulfillments/{seeded['booking_id']}",
+        headers=headers,
+        json={"status": "COMPLETED", "early_completion_override": True},
+    )
+    assert missing_reason.status_code == 400
+    assert missing_reason.get_json()["error"] == "operator_notes_required"
+    token_override = client.patch(
+        f"/admin/fulfillments/{seeded['booking_id']}",
+        headers=_headers(),
+        json={
+            "status": "COMPLETED",
+            "early_completion_override": True,
+            "operator_notes": reason,
+        },
+    )
+    assert token_override.status_code == 403
+    assert token_override.get_json()["error"] == "named_operator_required"
+    completed = client.patch(
+        f"/admin/fulfillments/{seeded['booking_id']}",
+        headers=headers,
+        json={
+            "status": "COMPLETED",
+            "early_completion_override": True,
+            "operator_notes": reason,
+        },
+    )
+    assert completed.status_code == 200
+    assert completed.get_json()["item"]["fulfillment_status"] == "COMPLETED"
+
+    audit = client.get("/admin/audit")
+    assert audit.status_code == 200
+    events = audit.get_json()["items"]
+    assert any(
+        event["operator_id"] == "early.operator@example.com"
+        and event["target_id"] == str(seeded["booking_id"])
+        and event["after"].get("early_completion_override") is True
+        and event["after"].get("operator_notes") == reason
+        for event in events
+    )
 
 
 def test_paid_consultation_assignment_rejects_unverified_advocate(
