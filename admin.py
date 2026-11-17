@@ -98,6 +98,7 @@ _login_attempts_guard = Lock()
 _ADMIN_ONLY_MUTATIONS = frozenset(
     {
         "admin.create_advocate",
+        "admin.verify_advocate",
         "admin.create_blackout",
         "admin.create_capacity_override",
         "admin.deactivate_blackout",
@@ -1955,8 +1956,6 @@ def advocates():
                     {
                         "id": item.id,
                         "name": item.name,
-                        "email": item.email,
-                        "contact_masked": _masked_contact(item.phone),
                         "bar_registration_number": item.bar_registration_number,
                         "category": item.category,
                         "district": item.district,
@@ -1971,6 +1970,59 @@ def advocates():
                 ]
             }
         )
+    finally:
+        db.close()
+
+
+@admin_bp.get("/advocate-directory")
+def advocate_directory():
+    """Restricted server-paginated management view, separate from assignment."""
+    identity = _session_operator() if not _token_authorized() else None
+    if not identity or identity.get("role") != "ADMIN":
+        return jsonify({"error": "named_mfa_admin_required"}), 403
+    try:
+        offset = int(request.args.get("offset", "0"))
+    except ValueError:
+        return jsonify({"error": "invalid_offset"}), 400
+    if offset < 0 or offset > 1_000_000:
+        return jsonify({"error": "invalid_offset"}), 400
+    status = request.args.get("status", "ALL").strip().upper()
+    active = request.args.get("active", "ALL").strip().upper()
+    if status not in {"ALL", "PENDING", "VERIFIED"} or active not in {"ALL", "ACTIVE", "INACTIVE"}:
+        return jsonify({"error": "invalid_filter"}), 400
+    db = SessionLocal()
+    try:
+        query = db.query(Advocate)
+        if status != "ALL":
+            query = query.filter(Advocate.verification_status == status)
+        if active != "ALL":
+            query = query.filter(Advocate.active.is_(active == "ACTIVE"))
+        search = request.args.get("search", "").strip()[:120]
+        if search:
+            term = "%" + search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            query = query.filter(or_(Advocate.name.ilike(term, escape="\\"), Advocate.bar_registration_number.ilike(term, escape="\\")))
+        for field in ("category", "district", "languages"):
+            value = request.args.get(field, "").strip()[:120]
+            if value:
+                term = "%" + value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+                query = query.filter(getattr(Advocate, field).ilike(term, escape="\\"))
+        total = query.count()
+        counts = {
+            "total": db.query(Advocate).count(),
+            "pending": db.query(Advocate).filter(Advocate.verification_status == "PENDING").count(),
+            "verified": db.query(Advocate).filter(Advocate.verification_status == "VERIFIED").count(),
+            "inactive": db.query(Advocate).filter(Advocate.active.is_(False)).count(),
+        }
+        rows = query.order_by(Advocate.id.asc()).offset(offset).limit(50).all()
+        return jsonify({"total": total, "offset": offset, "counts": counts, "items": [{
+            "id": item.id, "name": item.name, "email": item.email,
+            "bar_registration_number": item.bar_registration_number,
+            "category": item.category, "district": item.district,
+            "languages": item.languages, "contact_masked": _masked_contact(item.phone),
+            "active": bool(item.active), "verification_status": item.verification_status,
+            "verification_reference": item.verification_ref,
+            "verified_at": item.verified_at.isoformat() + "Z" if item.verified_at else None,
+        } for item in rows]})
     finally:
         db.close()
 
@@ -2041,6 +2093,66 @@ def create_advocate():
     except IntegrityError:
         db.rollback()
         return jsonify({"error": "advocate_registration_already_exists"}), 409
+    finally:
+        db.close()
+
+
+@admin_bp.post("/advocates/<int:advocate_id>/verify")
+def verify_advocate(advocate_id: int):
+    """Record a human verification decision by a named MFA administrator."""
+    identity = _session_operator() if not _token_authorized() else None
+    if not identity or identity.get("role") != "ADMIN":
+        return jsonify({"error": "named_mfa_admin_required"}), 403
+    if not _csrf_authorized():
+        return jsonify({"error": "invalid_csrf_token"}), 403
+    body = _json_body()
+    reference = str(body.get("verification_reference") or "").strip()
+    if not 3 <= len(reference) <= 160:
+        return jsonify({"error": "verification_reference_required"}), 400
+    if body.get("independent_checks_confirmed") is not True:
+        return jsonify({"error": "verification_confirmation_required"}), 400
+    db = SessionLocal()
+    try:
+        advocate = db.query(Advocate).filter(Advocate.id == advocate_id).with_for_update().one_or_none()
+        if advocate is None:
+            return jsonify({"error": "advocate_not_found"}), 404
+        if not advocate.active:
+            return jsonify({"error": "advocate_inactive"}), 409
+        if advocate.verification_status != "PENDING":
+            return jsonify({"error": "advocate_not_pending"}), 409
+        advocate.verification_status = "VERIFIED"
+        advocate.verification_ref = reference
+        advocate.verified_at = utc_now()
+        _audit(db, action="advocate.verify", target_type="advocate", target_id=advocate.id,
+               before={"verification_status": "PENDING"},
+               after={"verification_status": "VERIFIED", "verification_reference": reference})
+        db.commit()
+        return jsonify({"ok": True, "verification_status": "VERIFIED"})
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+@admin_bp.get("/advocates/<int:advocate_id>/verification-history")
+def advocate_verification_history(advocate_id: int):
+    identity = _session_operator() if not _token_authorized() else None
+    if not identity or identity.get("role") != "ADMIN":
+        return jsonify({"error": "named_mfa_admin_required"}), 403
+    db = SessionLocal()
+    try:
+        if db.get(Advocate, advocate_id) is None:
+            return jsonify({"error": "advocate_not_found"}), 404
+        events = (db.query(AdminAuditEvent)
+                  .filter(AdminAuditEvent.target_type == "advocate",
+                          AdminAuditEvent.target_id == str(advocate_id),
+                          AdminAuditEvent.action.in_(("advocate.create", "advocate.verify")))
+                  .order_by(AdminAuditEvent.created_at.desc(), AdminAuditEvent.id.desc())
+                  .limit(25).all())
+        return jsonify({"items": [{"action": event.action, "operator_id": event.operator_id,
+                                   "created_at": event.created_at.isoformat() + "Z"} for event in events],
+                        "limit": 25})
     finally:
         db.close()
 

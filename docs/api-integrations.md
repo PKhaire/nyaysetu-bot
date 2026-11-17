@@ -191,8 +191,11 @@ before/after values and the operator ID in `admin_audit_events`.
 | `PATCH /admin/fulfillments/<booking_id>` | Audited assignment, status transition, capacity-checked paid reschedule, or reviewed refund recording |
 | `POST /admin/fulfillments/<booking_id>/contact-reveal` | Purpose-bound, audited reveal of the booked client's contact number |
 | `POST /admin/fulfillments/<booking_id>/contact-events` | Record a manual client/advocate notification attempt, result, and follow-up time |
-| `GET /admin/advocates` | Active/verified advocate directory with masked contact details |
-| `POST /admin/advocates` | Register a verified advocate for controlled assignment |
+| `GET /admin/advocates` | Assignment directory; includes pending and inactive records, but omits email and phone. Clients must use `assignment_eligible` and scope checks. This response changed and external consumers require compatibility review. |
+| `POST /admin/advocates` | Register an advocate as pending verification; registration alone does not establish eligibility |
+| `GET /admin/advocate-directory` | Named-MFA administrator management directory, with server-side search, filters and pagination |
+| `POST /admin/advocates/<advocate_id>/verify` | Named-MFA administrator records independent verification and an evidence reference with an audit event |
+| `GET /admin/advocates/<advocate_id>/verification-history` | Named-MFA administrator views up to 25 recent registration and verification events |
 | `POST /admin/advocates/<advocate_id>/contact-reveal` | Purpose-bound, audited reveal of an advocate contact number |
 | `GET /admin/payment-reconciliations?status=OPEN` | Captured-payment review queue |
 | `PATCH /admin/payment-reconciliations/<id>` | Audited disposition with a required resolution note |

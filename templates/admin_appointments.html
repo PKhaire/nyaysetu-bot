@@ -8,6 +8,7 @@
   <title>Appointments | NyaySetu Operations</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
   <script src="{{ url_for('static', filename='admin.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='advocate_management.js') }}" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -55,6 +56,25 @@
         <div id="advocate-error" class="alert alert-error hidden" role="alert"></div>
         <button id="advocate-submit" class="button button-primary" type="submit">Register advocate</button>
       </form>
+    </details>
+
+    <details class="work-panel" id="advocate-directory-panel">
+      <summary>Advocate management (administrator only)</summary>
+      <p class="muted small">Verification records an administrator decision; it does not check credentials automatically. Results can change; refresh to recheck.</p>
+      <p id="advocate-directory-summary" class="muted small">Directory summary not loaded</p>
+      <form id="advocate-directory-filters" class="advocate-form">
+        <label>Search name or registration<input name="search" type="search" maxlength="120"></label>
+        <label>Verification status<select name="status"><option value="ALL">All</option><option value="PENDING">Pending</option><option value="VERIFIED">Verified</option></select></label>
+        <label>Active status<select name="active"><option value="ALL">All</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></select></label>
+        <label>Category<input name="category" maxlength="120"></label>
+        <label>District<input name="district" maxlength="120"></label>
+        <label>Language<input name="languages" maxlength="120"></label>
+        <button type="submit" class="button button-secondary">Search advocates</button>
+      </form>
+      <div id="advocate-directory-error" class="alert alert-error hidden" role="alert"></div>
+      <p id="advocate-directory-count" aria-live="polite"></p>
+      <div id="advocate-directory-results"></div>
+      <div class="inline-action"><button id="advocate-directory-previous" class="button button-secondary" type="button" disabled>Previous</button><button id="advocate-directory-next" class="button button-secondary" type="button" disabled>Next</button></div>
     </details>
 
     <section class="work-panel" aria-labelledby="queue-heading">

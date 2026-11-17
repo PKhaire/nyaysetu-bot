@@ -348,6 +348,7 @@ def test_named_non_admin_can_read_but_cannot_change_admin_only_data(
     admin_db,
     role,
 ):
+    seeded = _seed_operations(admin_db)
     now = datetime.now(timezone.utc)
     operator_id = f"{role.lower()}@example.com"
     db = admin_db()
@@ -389,6 +390,10 @@ def test_named_non_admin_can_read_but_cannot_change_admin_only_data(
     )
     assert login.status_code == 302
     assert client.get("/admin/metrics").status_code == 200
+    directory = client.get("/admin/advocates")
+    assert directory.status_code == 200
+    assert any(item["id"] == seeded["advocate_id"] for item in directory.get_json()["items"])
+    assert all("email" not in item and "contact_masked" not in item for item in directory.get_json()["items"])
 
     with client.session_transaction() as browser_session:
         csrf_token = browser_session["admin_csrf_token"]
@@ -400,6 +405,12 @@ def test_named_non_admin_can_read_but_cannot_change_admin_only_data(
 
     assert forbidden.status_code == 403
     assert forbidden.get_json()["error"] == "insufficient_role"
+    assert client.get("/admin/advocate-directory").status_code == 403
+    assert client.post(
+        "/admin/advocates/999999/verify",
+        headers={"X-CSRF-Token": csrf_token},
+        json={"verification_reference": "synthetic-check", "independent_checks_confirmed": True},
+    ).status_code == 403
     if role == "VIEWER":
         override = client.patch(
             "/admin/fulfillments/999999",
@@ -1130,6 +1141,97 @@ def test_unverified_advocate_contact_cannot_be_revealed(client, admin_db):
         db.close()
 
 
+def test_advocate_verification_rejects_bearer_token(client, admin_db):
+    seeded = _seed_operations(admin_db)
+    response = client.post(
+        f"/admin/advocates/{seeded['advocate_id']}/verify",
+        headers=_headers(),
+        json={"verification_reference": "synthetic-reference", "independent_checks_confirmed": True},
+    )
+    assert response.status_code == 403
+    assert response.get_json()["error"] == "named_mfa_admin_required"
+    directory = client.get("/admin/advocate-directory", headers=_headers())
+    assert directory.status_code == 403
+    assert client.get(f"/admin/advocates/{seeded['advocate_id']}/verification-history", headers=_headers()).status_code == 403
+
+
+def test_named_admin_can_verify_pending_advocate_with_audit(client, admin_db, monkeypatch):
+    now = datetime.now(timezone.utc)
+    db = admin_db()
+    try:
+        advocate = Advocate(name="Synthetic Advocate", email="test@example.com", category="family", district="Pune", active=True)
+        db.add(advocate)
+        db.flush()
+        advocate_id = advocate.id
+        enrollment = begin_operator_enrollment(
+            db, operator_id="verifier@example.com", display_name="Verifier", role="ADMIN",
+            password="synthetic password long enough", encryption_key=ADMIN_MFA_KEY, now=now,
+        )
+        confirm_operator_enrollment(db, operator_id=enrollment.operator_id,
+            verification_code=totp_code(enrollment.secret, timestamp=now), encryption_key=ADMIN_MFA_KEY, now=now)
+        db.commit()
+    finally:
+        db.close()
+    client.get("/admin/login")
+    with client.session_transaction() as browser_session:
+        csrf = browser_session["admin_csrf_token"]
+    login = client.post("/admin/login", data={"operator_id": enrollment.operator_id,
+        "password": "synthetic password long enough", "verification_code": totp_code(enrollment.secret, timestamp=datetime.now(timezone.utc)), "csrf_token": csrf})
+    assert login.status_code == 302
+    with client.session_transaction() as browser_session:
+        csrf = browser_session["admin_csrf_token"]
+    body = {"verification_reference": "synthetic-check", "independent_checks_confirmed": True}
+    assert client.post(f"/admin/advocates/{advocate_id}/verify", json=body).status_code == 403
+    pending = client.get("/admin/advocate-directory?status=PENDING&search=Synthetic")
+    assert pending.status_code == 200
+    assert pending.get_json()["total"] == 1
+    assert pending.get_json()["items"][0]["id"] == advocate_id
+    assert client.get("/admin/advocate-directory?status=BAD").status_code == 400
+    assert client.post(f"/admin/advocates/{advocate_id}/verify", headers={"X-CSRF-Token": csrf}, json={"verification_reference": "", "independent_checks_confirmed": True}).status_code == 400
+    assert client.post(f"/admin/advocates/{advocate_id}/verify", headers={"X-CSRF-Token": csrf}, json={"verification_reference": "synthetic-check", "independent_checks_confirmed": False}).status_code == 400
+    with monkeypatch.context() as patcher:
+        def fail_audit(*_args, **_kwargs):
+            raise RuntimeError("synthetic audit failure")
+        patcher.setattr(admin, "_audit", fail_audit)
+        with pytest.raises(RuntimeError, match="synthetic audit failure"):
+            client.post(f"/admin/advocates/{advocate_id}/verify", headers={"X-CSRF-Token": csrf}, json=body)
+    db = admin_db()
+    try:
+        assert db.get(Advocate, advocate_id).verification_status == "PENDING"
+        assert db.query(AdminAuditEvent).filter_by(action="advocate.verify").count() == 0
+    finally:
+        db.close()
+    result = client.post(f"/admin/advocates/{advocate_id}/verify", headers={"X-CSRF-Token": csrf}, json=body)
+    assert result.status_code == 200
+    history = client.get(f"/admin/advocates/{advocate_id}/verification-history").get_json()
+    assert history["items"][0]["action"] == "advocate.verify"
+    assert history["items"][0]["operator_id"] == "verifier@example.com"
+    assert set(history["items"][0]) == {"action", "operator_id", "created_at"}
+    assert client.get("/admin/advocate-directory?status=VERIFIED&district=Pune").get_json()["total"] == 1
+    assert client.post(f"/admin/advocates/{advocate_id}/verify", headers={"X-CSRF-Token": csrf}, json=body).status_code == 409
+    db = admin_db()
+    try:
+        advocate = db.get(Advocate, advocate_id)
+        assert advocate.verification_status == "VERIFIED"
+        assert advocate.verification_ref == "synthetic-check"
+        assert advocate.verified_at is not None
+        audit = db.query(AdminAuditEvent).filter_by(action="advocate.verify").one()
+        assert audit.operator_id == "verifier@example.com"
+        for index in range(55):
+            db.add(Advocate(name=f"Synthetic Directory {index:02}", email=f"entry{index}@example.com", category="family", district="Pune", active=True))
+        db.commit()
+    finally:
+        db.close()
+    first = client.get("/admin/advocate-directory?search=Synthetic%20Directory").get_json()
+    second = client.get("/admin/advocate-directory?search=Synthetic%20Directory&offset=50").get_json()
+    assert first["total"] == second["total"] == 55
+    assert first["counts"]["total"] == 56
+    assert first["counts"]["verified"] == 1
+    assert len(first["items"]) == 50
+    assert len(second["items"]) == 5
+    assert {item["id"] for item in first["items"]}.isdisjoint(item["id"] for item in second["items"])
+
+
 def test_advocate_directory_exposes_assignment_eligibility(client, admin_db):
     seeded = _seed_operations(admin_db)
     db = admin_db()
@@ -1153,6 +1255,8 @@ def test_advocate_directory_exposes_assignment_eligibility(client, admin_db):
 
     assert response.status_code == 200
     items = {item["id"]: item for item in response.get_json()["items"]}
+    assert all("email" not in item and "contact_masked" not in item for item in items.values())
+    assert {"id", "name", "bar_registration_number", "category", "district", "assignment_eligible"} <= set(items[seeded["advocate_id"]])
     assert items[seeded["advocate_id"]]["verification_status"] == "VERIFIED"
     assert items[seeded["advocate_id"]]["assignment_eligible"] is True
     assert items[pending_advocate_id]["verification_status"] == "PENDING"
