@@ -138,6 +138,11 @@ jobs:
           NYAYSETU_POSTGRES_QUEUE_CI: "1"
         run: python -m pytest -q postgres_tests/test_queue_postgres.py
 
+      - name: Test advocate verification concurrency against disposable PostgreSQL
+        env:
+          NYAYSETU_POSTGRES_ADVOCATE_CI: "1"
+        run: python -m pytest -q postgres_tests/test_advocate_verification_postgres.py
+
   dependency-audit:
     name: Dependency vulnerability audit
     runs-on: ubuntu-latest
