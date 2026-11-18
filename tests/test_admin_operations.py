@@ -1159,7 +1159,7 @@ def test_named_admin_can_verify_pending_advocate_with_audit(client, admin_db, mo
     now = datetime.now(timezone.utc)
     db = admin_db()
     try:
-        advocate = Advocate(name="Synthetic Advocate", email="test@example.com", category="family", district="Pune", active=True)
+        advocate = Advocate(name="Synthetic Advocate", email="test@example.com", phone="919900001234", bar_registration_number="SYNTHETIC/123", category="family", district="Pune", active=True)
         db.add(advocate)
         db.flush()
         advocate_id = advocate.id
@@ -1189,6 +1189,49 @@ def test_named_admin_can_verify_pending_advocate_with_audit(client, admin_db, mo
     assert client.get("/admin/advocate-directory?status=BAD").status_code == 400
     assert client.post(f"/admin/advocates/{advocate_id}/verify", headers={"X-CSRF-Token": csrf}, json={"verification_reference": "", "independent_checks_confirmed": True}).status_code == 400
     assert client.post(f"/admin/advocates/{advocate_id}/verify", headers={"X-CSRF-Token": csrf}, json={"verification_reference": "synthetic-check", "independent_checks_confirmed": False}).status_code == 400
+    for field in ("name", "email", "phone", "bar_registration_number", "category", "district"):
+        db = admin_db()
+        try:
+            advocate = db.get(Advocate, advocate_id)
+            original = getattr(advocate, field)
+            setattr(advocate, field, "  ")
+            db.commit()
+        finally:
+            db.close()
+        rejected = client.post(f"/admin/advocates/{advocate_id}/verify", headers={"X-CSRF-Token": csrf}, json=body)
+        assert rejected.status_code == 409
+        assert rejected.get_json()["error"] == "advocate_details_incomplete"
+        assert field in rejected.get_json()["fields"]
+        directory = client.get("/admin/advocate-directory?search=Synthetic")
+        assert field in directory.get_json()["items"][0]["verification_issues"]
+        db = admin_db()
+        try:
+            advocate = db.get(Advocate, advocate_id)
+            assert advocate.verification_status == "PENDING"
+            assert db.query(AdminAuditEvent).filter_by(action="advocate.verify").count() == 0
+            setattr(advocate, field, original)
+            db.commit()
+        finally:
+            db.close()
+    for field, invalid in (("email", "bad email"), ("phone", "not-a-number")):
+        db = admin_db()
+        try:
+            advocate = db.get(Advocate, advocate_id)
+            original = getattr(advocate, field)
+            setattr(advocate, field, invalid)
+            db.commit()
+        finally:
+            db.close()
+        rejected = client.post(f"/admin/advocates/{advocate_id}/verify", headers={"X-CSRF-Token": csrf}, json=body)
+        assert rejected.status_code == 409
+        assert field in rejected.get_json()["fields"]
+        db = admin_db()
+        try:
+            advocate = db.get(Advocate, advocate_id)
+            setattr(advocate, field, original)
+            db.commit()
+        finally:
+            db.close()
     with monkeypatch.context() as patcher:
         def fail_audit(*_args, **_kwargs):
             raise RuntimeError("synthetic audit failure")

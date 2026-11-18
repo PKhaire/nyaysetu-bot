@@ -58,10 +58,11 @@
       </form>
     </details>
 
-    <details class="work-panel" id="advocate-directory-panel">
+    <details class="work-panel advocate-management" id="advocate-directory-panel">
       <summary>Advocate management (administrator only)</summary>
-      <p class="muted small">Verification records an administrator decision; it does not check credentials automatically. Results can change; refresh to recheck.</p>
-      <p id="advocate-directory-summary" class="muted small">Directory summary not loaded</p>
+      <p class="muted small">Manage advocate records and review verification. Credentials must be checked independently.</p>
+      <div id="advocate-directory-summary" class="advocate-stats" aria-label="All advocate counts" aria-live="polite">Directory summary not loaded</div>
+      <p class="muted small">Counts cover all advocates and may overlap, regardless of filters.</p>
       <form id="advocate-directory-filters" class="advocate-form">
         <label>Search name or registration<input name="search" type="search" maxlength="120"></label>
         <label>Verification status<select name="status"><option value="ALL">All</option><option value="PENDING">Pending</option><option value="VERIFIED">Verified</option></select></label>
@@ -69,12 +70,22 @@
         <label>Category<input name="category" maxlength="120"></label>
         <label>District<input name="district" maxlength="120"></label>
         <label>Language<input name="languages" maxlength="120"></label>
-        <button type="submit" class="button button-secondary">Search advocates</button>
+        <div class="advocate-filter-actions"><button type="submit" class="button button-primary">Apply filters</button><button id="advocate-directory-clear" type="button" class="button button-secondary">Clear filters</button></div>
       </form>
+      <p id="advocate-filter-state" class="muted small" aria-live="polite">No filters applied.</p>
       <div id="advocate-directory-error" class="alert alert-error hidden" role="alert"></div>
+      <div id="advocate-directory-success" class="advocate-success hidden" role="status"></div>
       <p id="advocate-directory-count" aria-live="polite"></p>
-      <div id="advocate-directory-results"></div>
-      <div class="inline-action"><button id="advocate-directory-previous" class="button button-secondary" type="button" disabled>Previous</button><button id="advocate-directory-next" class="button button-secondary" type="button" disabled>Next</button></div>
+      <div id="advocate-directory-results" class="advocate-results"></div>
+      <div class="advocate-pagination"><button id="advocate-directory-previous" class="button button-secondary" type="button" disabled>Previous</button><button id="advocate-directory-next" class="button button-secondary" type="button" disabled>Next</button></div>
+      <dialog id="advocate-detail-dialog" aria-labelledby="advocate-detail-title">
+        <div class="dialog-form">
+          <div class="dialog-heading"><div><p class="eyebrow">Advocate details</p><h2 id="advocate-detail-title"></h2></div><button id="advocate-detail-close" class="icon-button" type="button" aria-label="Close advocate details">×</button></div>
+          <div id="advocate-detail-content"></div>
+          <div id="advocate-detail-error" class="alert alert-error hidden" role="alert"></div>
+          <div class="dialog-actions"><button id="advocate-detail-cancel" class="button button-secondary" type="button">Close</button></div>
+        </div>
+      </dialog>
     </details>
 
     <section class="work-panel" aria-labelledby="queue-heading">

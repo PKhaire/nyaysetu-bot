@@ -194,7 +194,7 @@ before/after values and the operator ID in `admin_audit_events`.
 | `GET /admin/advocates` | Assignment directory; includes pending and inactive records, but omits email and phone. Clients must use `assignment_eligible` and scope checks. This response changed and external consumers require compatibility review. |
 | `POST /admin/advocates` | Register an advocate as pending verification; registration alone does not establish eligibility |
 | `GET /admin/advocate-directory` | Named-MFA administrator management directory, with server-side search, filters and pagination |
-| `POST /admin/advocates/<advocate_id>/verify` | Named-MFA administrator records independent verification and an evidence reference with an audit event |
+| `POST /admin/advocates/<advocate_id>/verify` | Named-MFA administrator records an independent verification decision and non-sensitive evidence reference with an audit event; active pending records require name, email, phone, registration number, category and district, with the same basic email/phone format checks as registration. These checks do not authenticate credentials. |
 | `GET /admin/advocates/<advocate_id>/verification-history` | Named-MFA administrator views up to 25 recent registration and verification events |
 | `POST /admin/advocates/<advocate_id>/contact-reveal` | Purpose-bound, audited reveal of an advocate contact number |
 | `GET /admin/payment-reconciliations?status=OPEN` | Captured-payment review queue |

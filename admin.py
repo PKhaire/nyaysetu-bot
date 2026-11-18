@@ -308,6 +308,19 @@ def _is_verified_advocate(advocate: Advocate) -> bool:
     )
 
 
+def _advocate_verification_issues(advocate: Advocate) -> list[str]:
+    """Check registration fields; this does not authenticate credentials."""
+    required = ("name", "email", "phone", "bar_registration_number", "category", "district")
+    issues = [field for field in required if not str(getattr(advocate, field) or "").strip()]
+    email = str(advocate.email or "").strip()
+    phone = str(advocate.phone or "").strip()
+    if email and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+        issues.append("email")
+    if phone and not re.fullmatch(r"\+?[0-9]{8,16}", phone):
+        issues.append("phone")
+    return issues
+
+
 def _normalized_scope_value(value: str | None) -> str:
     return " ".join(str(value or "").split()).casefold()
 
@@ -2021,6 +2034,7 @@ def advocate_directory():
             "languages": item.languages, "contact_masked": _masked_contact(item.phone),
             "active": bool(item.active), "verification_status": item.verification_status,
             "verification_reference": item.verification_ref,
+            "verification_issues": _advocate_verification_issues(item),
             "verified_at": item.verified_at.isoformat() + "Z" if item.verified_at else None,
         } for item in rows]})
     finally:
@@ -2120,6 +2134,9 @@ def verify_advocate(advocate_id: int):
             return jsonify({"error": "advocate_inactive"}), 409
         if advocate.verification_status != "PENDING":
             return jsonify({"error": "advocate_not_pending"}), 409
+        issues = _advocate_verification_issues(advocate)
+        if issues:
+            return jsonify({"error": "advocate_details_incomplete", "fields": issues}), 409
         advocate.verification_status = "VERIFIED"
         advocate.verification_ref = reference
         advocate.verified_at = utc_now()
