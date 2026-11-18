@@ -43,7 +43,7 @@ def test_postgres_concurrent_verification_commits_exactly_once(monkeypatch):
     try:
         assert db.query(Advocate).count() == 0
         assert db.query(AdminOperator).count() == 0
-        advocate = Advocate(name="Synthetic CI Advocate", email="synthetic@example.com", category="family", district="Pune", active=True)
+        advocate = Advocate(name="Synthetic CI Advocate", email="synthetic@example.com", phone="919900001236", bar_registration_number="SYNTHETIC/789", category="family", district="Pune", active=True)
         db.add(advocate)
         db.flush()
         advocate_id = advocate.id
