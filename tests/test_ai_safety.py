@@ -1,12 +1,66 @@
 from __future__ import annotations
 
 import re
+import subprocess
+import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
 from services import ai_router, ai_safety, openai_service
+
+
+def test_privacy_filter_handles_repeated_url_prefixes_and_redacts_private_url():
+    script = (
+        "from services.ai_safety import scrub_pii; "
+        "text = 'https://' * 16384 + ' normal https://example.test/a?secret=value'; "
+        "result = scrub_pii(text); "
+        "assert 'secret=value' not in result; "
+        "assert '[LINK WITH PRIVATE PARAMETERS REDACTED]' in result"
+    )
+    subprocess.run([sys.executable, "-c", script], check=True, timeout=4)
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("See https://example.test/a?token=private", "See [LINK WITH PRIVATE PARAMETERS REDACTED]"),
+        ("See (HTTPS://example.test/a#private)", "See ([LINK WITH PRIVATE PARAMETERS REDACTED]"),
+        ("https://example.test/a", "https://example.test/a"),
+        ("http://?https://example.test/a?token=private", "http://?[LINK WITH PRIVATE PARAMETERS REDACTED]"),
+        ("https://one.test?a=1 https://two.test#private", "[LINK WITH PRIVATE PARAMETERS REDACTED] [LINK WITH PRIVATE PARAMETERS REDACTED]"),
+    ],
+)
+def test_privacy_filter_preserves_url_redaction_behavior(message, expected):
+    assert ai_safety.scrub_pii(message) == expected
+
+
+def test_privacy_filter_handles_long_nonsecret_and_still_redacts_secret():
+    script = (
+        "from services.ai_safety import scrub_pii; "
+        "text = 'password' + ' ' * 30000 + '!\\npassword: ABCD1234'; "
+        "result = scrub_pii(text); "
+        "assert 'ABCD1234' not in result; "
+        "assert 'password [SECRET REDACTED]' in result"
+    )
+    subprocess.run([sys.executable, "-c", script], check=True, timeout=4)
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "password ABCD1234",
+        "password: ABCD1234",
+        "password is ABCD1234",
+        "password-ABCD1234",
+        "password\tABCD1234",
+    ],
+)
+def test_privacy_filter_redacts_secrets_with_common_separators(message):
+    result = ai_safety.scrub_pii(message)
+    assert "ABCD1234" not in result
+    assert "password [SECRET REDACTED]" in result
 
 
 def test_scrub_pii_removes_common_high_risk_identifiers():

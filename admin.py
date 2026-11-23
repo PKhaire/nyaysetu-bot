@@ -90,6 +90,18 @@ from services.document_release_service import (
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 _OPERATOR_PATTERN = re.compile(r"^[A-Za-z0-9._@+-]{2,120}$")
 _NAMED_ROLES = frozenset({"ADMIN", "OPERATOR", "VIEWER", "ADVOCATE"})
+_DOCUMENT_APPROVAL_VALIDATION_ERRORS = frozenset(
+    {
+        "approval_identity_fields_required",
+        "invalid_approval_decision",
+        "invalid_approval_timestamp",
+        "approval_authentication_date_cannot_be_future",
+        "approval_review_date_must_be_future",
+        "template_aggregate_hash_mismatch",
+        "invalid_golden_artifact_hashes",
+        "invalid_golden_hash",
+    }
+)
 _ADVOCATE_ENDPOINTS = frozenset({"admin.logout"})
 _LOGIN_ATTEMPT_LIMIT = 5
 _LOGIN_ATTEMPT_WINDOW_SECONDS = 15 * 60
@@ -1146,7 +1158,11 @@ def document_template_release():
             )
         except ValueError as exc:
             db.rollback()
-            return jsonify({"error": str(exc)}), 400
+            error = next(
+                (code for code in _DOCUMENT_APPROVAL_VALIDATION_ERRORS if code == str(exc)),
+                "invalid_document_release_approval",
+            )
+            return jsonify({"error": error}), 400
         _audit(
             db,
             action="DOCUMENT_TEMPLATE_RELEASE_RECORDED",
@@ -1907,8 +1923,8 @@ def record_manual_contact(booking_id: int):
         return jsonify({"error": "contact_notes_required"}), 400
     try:
         follow_up_due_at = _parse_optional_timestamp(body.get("follow_up_due_at"))
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+    except (ValueError, OverflowError):
+        return jsonify({"error": "invalid_follow_up_due_at"}), 400
 
     db = SessionLocal()
     try:
@@ -2069,7 +2085,9 @@ def create_advocate():
         )
     ):
         return jsonify({"error": "advocate_required_fields_missing"}), 400
-    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", values["email"]):
+    if len(values["email"]) > 255 or not re.fullmatch(
+        r"[^\s@]+@[^\s@]+\.[^\s@]+", values["email"]
+    ):
         return jsonify({"error": "invalid_advocate_email"}), 400
     if not re.fullmatch(r"\+?[0-9]{8,16}", values["phone"]):
         return jsonify({"error": "invalid_advocate_phone"}), 400

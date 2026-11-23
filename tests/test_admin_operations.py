@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy import create_engine
-from sqlalchemy.orm import Query, sessionmaker
+from sqlalchemy.orm import Query, Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import admin
@@ -43,6 +43,98 @@ from services.admin_identity_service import (
 
 
 ADMIN_MFA_KEY = base64.urlsafe_b64encode(b"a" * 32).decode("ascii")
+
+
+def test_advocate_registration_rejects_oversized_email_without_truncation(client, admin_db):
+    response = client.post(
+        "/admin/advocates",
+        headers=_headers(),
+        json={
+            "name": "Synthetic Advocate",
+            "email": "a" * 245 + "@example.test",
+            "phone": "9876543210",
+            "bar_registration_number": "SYNTHETIC-01",
+            "category": "family",
+            "district": "Pune",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "invalid_advocate_email"
+
+
+@pytest.mark.parametrize("follow_up", ["not-a-date", "0001-01-01T00:00:00+14:00"])
+def test_manual_contact_rejects_invalid_follow_up_without_internal_error(client, admin_db, follow_up):
+    response = client.post(
+        "/admin/fulfillments/1/contact-events",
+        headers=_headers(),
+        json={
+            "audience": "CLIENT",
+            "channel": "WHATSAPP",
+            "outcome": "INFORMATION_SHARED",
+            "notes": "Synthetic test only",
+            "follow_up_due_at": follow_up,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "invalid_follow_up_due_at"}
+
+
+def test_manual_contact_accepts_valid_follow_up(client, admin_db):
+    booking_id = _seed_operations(admin_db)["booking_id"]
+    response = client.post(
+        f"/admin/fulfillments/{booking_id}/contact-events",
+        headers=_headers(),
+        json={
+            "audience": "CLIENT",
+            "channel": "WHATSAPP",
+            "outcome": "INFORMATION_SHARED",
+            "notes": "Synthetic test only",
+            "follow_up_due_at": "2026-11-24T15:00:00+05:30",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.get_json()["event"]["follow_up_due_at"] == "2026-11-24T09:30:00Z"
+
+
+def test_document_release_does_not_disclose_unexpected_database_error(client, admin_db, monkeypatch):
+    before = client.get("/admin/document-template-release", headers=_headers())
+    assert before.status_code == 200
+    data = before.get_json()
+    now = datetime.now(timezone.utc)
+    payload = {
+        **data["manifest"],
+        "reviewer_name": "Synthetic reviewer",
+        "reviewer_enrolment_ref": "SYNTHETIC-001",
+        "authority_statement": "Synthetic test approval only",
+        "authenticated_method": "synthetic test",
+        "authenticated_at": (now - timedelta(minutes=1)).isoformat(),
+        "next_review_at": (now + timedelta(days=1)).isoformat(),
+        "decision": "APPROVED",
+    }
+
+    def fail_database_flush(self, *args, **kwargs):
+        raise ValueError("SYNTHETIC_INTERNAL_DETAIL")
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(Session, "flush", fail_database_flush)
+        response = client.post("/admin/document-template-release", headers=_headers(), json=payload)
+
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "invalid_document_release_approval"}
+    after = client.get("/admin/document-template-release", headers=_headers())
+    assert after.get_json()["approval"] == data["approval"]
+
+
+def test_document_release_keeps_safe_validation_message(client, admin_db):
+    response = client.post("/admin/document-template-release", headers=_headers(), json={})
+
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "approval_identity_fields_required"}
+    current = client.get("/admin/document-template-release", headers=_headers())
+    assert current.get_json()["approval"] is None
 
 
 @pytest.fixture

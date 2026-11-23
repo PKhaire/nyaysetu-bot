@@ -72,10 +72,25 @@ _LONG_NUMBER_RE = re.compile(r"(?<!\d)(?:\d[ -]?){8,18}\d(?!\d)")
 _PHONE_RE = re.compile(r"(?<!\d)(?:\+?91[\s.-]?)?[6-9]\d{9}(?!\d)")
 _SECRET_RE = re.compile(
     r"\b(otp|one[- ]time password|password|passcode|pin|cvv)\b"
-    r"(\s*(?:is|:|-)?\s*)[A-Za-z0-9@#$%^&*!_-]{4,32}",
+    r"(\s*(?:(?:is|:|-)\s*)?)[A-Za-z0-9@#$%^&*!_-]{4,32}",
     re.IGNORECASE,
 )
-_URL_WITH_QUERY_RE = re.compile(r"https?://[^\s?#]+[?#][^\s]+", re.IGNORECASE)
+_URL_SCHEME_RE = re.compile(r"https?://", re.IGNORECASE)
+_URL_PARAMETER_MARKER_RE = re.compile(r"[?#]")
+_NONSPACE_RE = re.compile(r"\S+")
+
+
+def _redact_url_token(match: re.Match[str]) -> str:
+    token = match.group()
+    cursor = 0
+    while scheme := _URL_SCHEME_RE.search(token, cursor):
+        marker = _URL_PARAMETER_MARKER_RE.search(token, scheme.end())
+        if marker is None or marker.end() == len(token):
+            break
+        if marker.start() > scheme.end():
+            return token[:scheme.start()] + "[LINK WITH PRIVATE PARAMETERS REDACTED]"
+        cursor = marker.end()
+    return token
 
 
 def scrub_pii(text: Any) -> str:
@@ -87,7 +102,7 @@ def scrub_pii(text: Any) -> str:
     """
 
     cleaned = str(text or "")
-    cleaned = _URL_WITH_QUERY_RE.sub("[LINK WITH PRIVATE PARAMETERS REDACTED]", cleaned)
+    cleaned = _NONSPACE_RE.sub(_redact_url_token, cleaned)
     cleaned = _EMAIL_RE.sub("[EMAIL REDACTED]", cleaned)
     cleaned = _UPI_RE.sub("[UPI ID REDACTED]", cleaned)
     cleaned = _PAN_RE.sub("[PAN REDACTED]", cleaned)

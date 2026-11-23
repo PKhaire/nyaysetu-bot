@@ -2732,7 +2732,7 @@ def verify():
         and supplied_token
         and hmac.compare_digest(supplied_token, WHATSAPP_VERIFY_TOKEN)
     ):
-        return request.args.get("hub.challenge"), 200
+        return request.args.get("hub.challenge"), 200, {"Content-Type": "text/plain; charset=utf-8"}
     return "Invalid token", 403
 
 
