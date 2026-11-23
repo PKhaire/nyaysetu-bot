@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import re
+from itertools import product
 from datetime import date, timedelta
 from datetime import datetime, timezone
 
@@ -43,6 +44,47 @@ from services.admin_identity_service import (
 
 
 ADMIN_MFA_KEY = base64.urlsafe_b64encode(b"a" * 32).decode("ascii")
+
+
+@pytest.mark.parametrize(
+    ("email", "expected_status"),
+    [
+        ("synthetic@example.test", 201),
+        ("synthetic+tag@sub.example.test", 201),
+        ("synthetic@a.b.", 201),
+        ("synthetic@.a.b", 201),
+        ("synthetic@example", 400),
+        ("synthetic@.example", 400),
+        ("synthetic@example.", 400),
+        ("synthetic@@example.test", 400),
+        ("synthetic name@example.test", 400),
+        ("synthetic\u2003name@example.test", 400),
+    ],
+)
+def test_advocate_registration_email_shape(client, admin_db, email, expected_status):
+    response = client.post(
+        "/admin/advocates",
+        headers=_headers(),
+        json={
+            "name": "Synthetic Advocate", "email": email, "phone": "9876543210",
+            "bar_registration_number": "SYNTHETIC-01", "category": "family", "district": "Pune",
+        },
+    )
+    assert response.status_code == expected_status
+    if expected_status == 400:
+        assert response.get_json()["error"] == "invalid_advocate_email"
+
+
+def test_advocate_email_validator_matches_previous_bounded_pattern():
+    # Exhaustive short inputs plus representative Unicode whitespace and boundaries.
+    alphabet = "a.@ !\u2003"
+    samples = ("".join(chars) for length in range(6) for chars in product(alphabet, repeat=length))
+    for value in samples:
+        expected = len(value) <= 255 and bool(re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value))
+        assert admin._valid_advocate_registration_email(value) == expected
+    for value in ["x" * 250 + "@a.b", "x" * 252 + "@a.b"]:
+        expected = len(value) <= 255 and bool(re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value))
+        assert admin._valid_advocate_registration_email(value) == expected
 
 
 def test_advocate_registration_rejects_oversized_email_without_truncation(client, admin_db):

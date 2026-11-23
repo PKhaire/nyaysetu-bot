@@ -2057,6 +2057,14 @@ def advocate_directory():
         db.close()
 
 
+def _valid_advocate_registration_email(value: str) -> bool:
+    """Preserve the existing email shape check without regex backtracking."""
+    if len(value) > 255 or any(character.isspace() for character in value):
+        return False
+    local, separator, domain = value.partition("@")
+    return bool(separator and local and "@" not in domain and "." in domain[1:-1])
+
+
 @admin_bp.post("/advocates")
 def create_advocate():
     body = _json_body()
@@ -2085,9 +2093,7 @@ def create_advocate():
         )
     ):
         return jsonify({"error": "advocate_required_fields_missing"}), 400
-    if len(values["email"]) > 255 or not re.fullmatch(
-        r"[^\s@]+@[^\s@]+\.[^\s@]+", values["email"]
-    ):
+    if not _valid_advocate_registration_email(values["email"]):
         return jsonify({"error": "invalid_advocate_email"}), 400
     if not re.fullmatch(r"\+?[0-9]{8,16}", values["phone"]):
         return jsonify({"error": "invalid_advocate_phone"}), 400
