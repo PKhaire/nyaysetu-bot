@@ -8,6 +8,7 @@ import logging
 import time as time_module
 import hmac
 import hashlib
+import html
 import re
 import unicodedata
 import uuid
@@ -2732,7 +2733,13 @@ def verify():
         and supplied_token
         and hmac.compare_digest(supplied_token, WHATSAPP_VERIFY_TOKEN)
     ):
-        return request.args.get("hub.challenge"), 200
+        challenge = request.args.get("hub.challenge")
+        if challenge is None:
+            return "Invalid challenge", 400
+        safe_challenge = html.escape(challenge)
+        if safe_challenge != challenge:
+            return "Invalid challenge", 400
+        return safe_challenge, 200, {"Content-Type": "text/plain; charset=utf-8"}
     return "Invalid token", 403
 
 
